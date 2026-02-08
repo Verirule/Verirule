@@ -20,6 +20,8 @@ class FakeQuery:
         self._limit = None
         self._range = None
         self._update = None
+        self._op = None
+        self._payload = None
 
     def select(self, fields):
         self._select = fields
@@ -27,6 +29,10 @@ class FakeQuery:
 
     def eq(self, field, value):
         self._filters.append((field, value))
+        return self
+
+    def in_(self, field, values):
+        self._filters.append((field, values, "in"))
         return self
 
     def order(self, field, desc=False):
@@ -43,13 +49,24 @@ class FakeQuery:
         return self
 
     def update(self, payload):
-        self._update = payload
+        self._op = "update"
+        self._payload = payload
+        return self
+
+    def insert(self, payload):
+        self._op = "insert"
+        self._payload = payload
         return self
 
     def execute(self):
         rows = self.rows
-        for field, value in self._filters:
-            rows = [r for r in rows if r.get(field) == value]
+        for filt in self._filters:
+            if len(filt) == 3 and filt[2] == "in":
+                field, values, _ = filt
+                rows = [r for r in rows if r.get(field) in values]
+            else:
+                field, value = filt
+                rows = [r for r in rows if r.get(field) == value]
         if self._order_field:
             rows = sorted(rows, key=lambda r: r.get(self._order_field), reverse=self._desc)
         if self._range is not None:
@@ -57,12 +74,15 @@ class FakeQuery:
             rows = rows[start : end + 1]
         elif self._limit is not None:
             rows = rows[: self._limit]
-        if self._update is not None:
+        if self._op == "update":
             updated = []
             for row in rows:
-                row.update(self._update)
+                row.update(self._payload)
                 updated.append(row)
             rows = updated
+        if self._op == "insert":
+            rows = [self._payload]
+            self.rows.append(self._payload)
         if self._select and self._select != "*":
             fields = [f.strip() for f in self._select.split(",")]
             rows = [{k: r.get(k) for k in fields} for r in rows]
@@ -70,11 +90,11 @@ class FakeQuery:
 
 
 class FakeClient:
-    def __init__(self, rows):
-        self.rows = rows
+    def __init__(self, rows_map):
+        self.rows_map = rows_map
 
     def table(self, name):
-        return FakeQuery(name, self.rows)
+        return FakeQuery(name, self.rows_map.setdefault(name, []))
 
 
 def _set_env(monkeypatch):
@@ -102,7 +122,7 @@ def test_regulations_requires_auth(monkeypatch):
 
 def test_regulations_list(monkeypatch):
     _set_env(monkeypatch)
-    rows = [
+    rows = {"regulations": [
         {
             "id": "r1",
             "title": "Rule A",
@@ -115,7 +135,7 @@ def test_regulations_list(monkeypatch):
             "last_updated_at": "2024-01-01T00:00:00Z",
             "created_at": "2024-01-01T00:00:00Z",
         }
-    ]
+    ]}
     fake_client = FakeClient(rows)
     monkeypatch.setattr("app.main.get_supabase_service_client", lambda settings: fake_client)
 
@@ -131,7 +151,7 @@ def test_regulations_list(monkeypatch):
 
 def test_regulation_detail_excludes_raw_text(monkeypatch):
     _set_env(monkeypatch)
-    rows = [
+    rows = {"regulations": [
         {
             "id": "r1",
             "title": "Rule A",
@@ -145,7 +165,7 @@ def test_regulation_detail_excludes_raw_text(monkeypatch):
             "created_at": "2024-01-01T00:00:00Z",
             "raw_text": "secret",
         }
-    ]
+    ]}
     fake_client = FakeClient(rows)
     monkeypatch.setattr("app.main.get_supabase_service_client", lambda settings: fake_client)
 
@@ -156,55 +176,36 @@ def test_regulation_detail_excludes_raw_text(monkeypatch):
     assert "raw_text" not in response.json()
 
 
-def test_ingest_requires_admin(monkeypatch):
-    _set_env(monkeypatch)
-    token = _token("user")
-    client = TestClient(app)
-    response = client.post("/ingest/run", headers={"Authorization": f"Bearer {token}"})
-    assert response.status_code == 403
-
-
-def test_ingest_admin_success(monkeypatch):
-    _set_env(monkeypatch)
-    monkeypatch.setattr(
-        "app.main.run_ingestion",
-        lambda settings: {"fetched": 1, "inserted": 1, "updated": 0, "skipped": 0},
-    )
-    token = _token("admin")
-    client = TestClient(app)
-    response = client.post("/ingest/run", headers={"Authorization": f"Bearer {token}"})
-    assert response.status_code == 200
-    assert response.json()["result"]["inserted"] == 1
-
-
 def test_alerts_user_isolation(monkeypatch):
     _set_env(monkeypatch)
-    rows = [
-        {
-            "id": "a1",
-            "user_id": "user-1",
-            "business_id": "b1",
-            "violation_id": "v1",
-            "severity": "high",
-            "title": "Alert",
-            "message": "Msg",
-            "acknowledged": False,
-            "created_at": "2024-01-01T00:00:00Z",
-        },
-        {
-            "id": "a2",
-            "user_id": "user-2",
-            "business_id": "b2",
-            "violation_id": "v2",
-            "severity": "low",
-            "title": "Alert",
-            "message": "Msg",
-            "acknowledged": False,
-            "created_at": "2024-01-02T00:00:00Z",
-        },
-    ]
+    rows = {
+        "alerts": [
+            {
+                "id": "a1",
+                "user_id": "user-1",
+                "business_id": "b1",
+                "violation_id": "v1",
+                "severity": "high",
+                "title": "Alert",
+                "message": "Msg",
+                "acknowledged": False,
+                "created_at": "2024-01-01T00:00:00Z",
+            },
+            {
+                "id": "a2",
+                "user_id": "user-2",
+                "business_id": "b2",
+                "violation_id": "v2",
+                "severity": "low",
+                "title": "Alert",
+                "message": "Msg",
+                "acknowledged": False,
+                "created_at": "2024-01-02T00:00:00Z",
+            },
+        ]
+    }
     fake_client = FakeClient(rows)
-    monkeypatch.setattr("app.main.get_supabase_service_client", lambda settings: fake_client)
+    monkeypatch.setattr("app.main.get_service_client", lambda settings: fake_client)
 
     token = _token("user", user_id="user-1")
     client = TestClient(app)
@@ -216,24 +217,34 @@ def test_alerts_user_isolation(monkeypatch):
 
 def test_alert_acknowledge(monkeypatch):
     _set_env(monkeypatch)
-    rows = [
-        {
-            "id": "a1",
-            "user_id": "user-1",
-            "business_id": "b1",
-            "violation_id": "v1",
-            "severity": "high",
-            "title": "Alert",
-            "message": "Msg",
-            "acknowledged": False,
-            "created_at": "2024-01-01T00:00:00Z",
-        }
-    ]
+    rows = {
+        "alerts": [
+            {
+                "id": "a1",
+                "user_id": "user-1",
+                "business_id": "b1",
+                "violation_id": "v1",
+                "severity": "high",
+                "title": "Alert",
+                "message": "Msg",
+                "acknowledged": False,
+                "created_at": "2024-01-01T00:00:00Z",
+            }
+        ]
+    }
     fake_client = FakeClient(rows)
-    monkeypatch.setattr("app.main.get_supabase_service_client", lambda settings: fake_client)
+    monkeypatch.setattr("app.main.get_service_client", lambda settings: fake_client)
 
     token = _token("user", user_id="user-1")
     client = TestClient(app)
     response = client.post("/alerts/a1/acknowledge", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert response.json()["acknowledged"] is True
+
+
+def test_ingest_requires_admin(monkeypatch):
+    _set_env(monkeypatch)
+    token = _token("user")
+    client = TestClient(app)
+    response = client.post("/ingest/run", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 403

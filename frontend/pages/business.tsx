@@ -11,12 +11,19 @@ type BusinessProfile = {
   jurisdiction: string;
 };
 
+type Subscription = {
+  plan: "free" | "pro";
+  status: "active" | "canceled";
+  started_at: string | null;
+};
+
 export default function BusinessPage() {
   const [profile, setProfile] = useState<BusinessProfile>({
     business_name: "",
     industry: "",
     jurisdiction: "",
   });
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
 
@@ -28,6 +35,8 @@ export default function BusinessPage() {
 
     const load = async () => {
       try {
+        const plan = await api.get<Subscription>("/subscription");
+        setSubscription(plan);
         const result = await api.get<{ data: BusinessProfile }>("/business/profile");
         if (result.data) {
           setProfile(result.data);
@@ -60,13 +69,16 @@ export default function BusinessPage() {
     }
   };
 
+  const planMessage =
+    subscription?.plan === "pro"
+      ? "Pro plan active."
+      : "Free plan includes 1 business profile.";
+
   return (
     <Layout>
       <main className="mx-auto max-w-xl px-4 py-8 sm:py-10">
         <h1 className="text-2xl font-semibold text-brand-900 sm:text-3xl">Business</h1>
-        <p className="mt-2 text-sm text-brand-700">
-          Keep your business profile up to date for accurate compliance monitoring.
-        </p>
+        <p className="mt-2 text-sm text-brand-700">{planMessage}</p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <label className="block text-sm text-brand-700">

@@ -1,8 +1,4 @@
-﻿from __future__ import annotations
-
-import uuid
-
-from app.alerts.service import generate_alert_for_violation
+﻿from app.alerts.service import generate_alert_for_violation
 
 
 class FakeResponse:
@@ -45,14 +41,10 @@ class FakeQuery:
     def execute(self):
         table = self.client.tables.setdefault(self.table_name, [])
         if self._op == "insert":
-            payloads = self._payload if isinstance(self._payload, list) else [self._payload]
-            inserted = []
-            for payload in payloads:
-                row = dict(payload)
-                row.setdefault("id", str(uuid.uuid4()))
-                table.append(row)
-                inserted.append(row)
-            return FakeResponse(inserted)
+            row = dict(self._payload)
+            row.setdefault("id", "a1")
+            table.append(row)
+            return FakeResponse([row])
 
         if self._op == "update":
             updated = []

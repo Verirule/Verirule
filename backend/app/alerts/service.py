@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable
 
 from supabase import Client
 
+from ..billing.limits import alert_limit_for_user
 from ..config import Settings
 from ..supabase_client import get_supabase_service_client
 
@@ -68,6 +69,13 @@ def _existing_alert(client: Client, user_id: str, violation_id: str) -> bool:
     return bool(result.data)
 
 
+def _count_alerts(client: Client, user_id: str) -> int:
+    result = (
+        client.table("alerts").select("id").eq("user_id", user_id).execute()
+    )
+    return len(result.data or [])
+
+
 def generate_alert_for_violation(
     settings: Settings,
     violation: Dict[str, Any],
@@ -88,6 +96,11 @@ def generate_alert_for_violation(
         return None
 
     if _existing_alert(client, user_id, violation_id):
+        return None
+
+    max_alerts = alert_limit_for_user(client, user_id)
+    if _count_alerts(client, user_id) >= max_alerts:
+        logger.info("Alert limit reached for user_id=%s", user_id)
         return None
 
     payload = {
@@ -138,14 +151,11 @@ def generate_alerts_for_violations(
     """Generate alerts for a list of violations. Returns count created."""
     created = 0
     for violation in violations:
-        if created >= settings.ALERTS_MAX_PER_RUN:
-            break
-        regulation_title = regulation_titles.get(violation.get("regulation_id"), "Regulation")
         result = generate_alert_for_violation(
             settings,
             violation,
             business_name,
-            regulation_title,
+            regulation_titles.get(violation.get("regulation_id"), "Regulation"),
             user_id,
             client=client,
         )

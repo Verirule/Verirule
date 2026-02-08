@@ -39,12 +39,20 @@ type BusinessProfile = {
   jurisdiction: string;
 };
 
+type Subscription = {
+  plan: "free" | "pro";
+  status: "active" | "canceled";
+  started_at: string | null;
+};
+
 export default function DashboardPage() {
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [compliance, setCompliance] = useState<ComplianceStatus[]>([]);
   const [violations, setViolations] = useState<Violation[]>([]);
   const [regulations, setRegulations] = useState<Regulation[]>([]);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
+  const [upgrading, setUpgrading] = useState(false);
 
   useEffect(() => {
     if (!isTokenValid()) {
@@ -54,24 +62,29 @@ export default function DashboardPage() {
 
     const load = async () => {
       try {
+        const plan = await api.get<Subscription>("/subscription");
+        setSubscription(plan);
+
         const business = await api.get<{ data: BusinessProfile }>("/business/profile");
         setProfile(business.data);
 
-        const summary = await api.get<{ data: ComplianceStatus[] }>(
-          /compliance/status?business_id=
-        );
-        setCompliance(summary.data);
+        if (business.data?.id) {
+          const summary = await api.get<{ data: ComplianceStatus[] }>(
+            /compliance/status?business_id=
+          );
+          setCompliance(summary.data);
 
-        const violationsResult = await api.get<{ data: Violation[] }>(
-          /violations?business_id=
-        );
-        const sortedViolations = [...violationsResult.data].sort((a, b) => {
-          const severityRank = { high: 0, medium: 1, low: 2 } as const;
-          const diff = severityRank[a.severity] - severityRank[b.severity];
-          if (diff !== 0) return diff;
-          return new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime();
-        });
-        setViolations(sortedViolations);
+          const violationsResult = await api.get<{ data: Violation[] }>(
+            /violations?business_id=
+          );
+          const sortedViolations = [...violationsResult.data].sort((a, b) => {
+            const severityRank = { high: 0, medium: 1, low: 2 } as const;
+            const diff = severityRank[a.severity] - severityRank[b.severity];
+            if (diff !== 0) return diff;
+            return new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime();
+          });
+          setViolations(sortedViolations);
+        }
 
         const recentRegs = await api.get<{ data: Regulation[] }>(
           "/regulations?limit=5&offset=0"
@@ -99,6 +112,16 @@ export default function DashboardPage() {
     );
   }, [compliance]);
 
+  const upgrade = async () => {
+    setUpgrading(true);
+    try {
+      const result = await api.post<Subscription>("/subscription/upgrade");
+      setSubscription(result);
+    } finally {
+      setUpgrading(false);
+    }
+  };
+
   return (
     <Layout>
       <main className="mx-auto max-w-6xl px-4 py-8 sm:py-10">
@@ -113,6 +136,25 @@ export default function DashboardPage() {
           </div>
 
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-md border border-brand-100 p-4">
+              <p className="text-xs text-brand-700">Plan</p>
+              <p className="text-lg font-semibold text-brand-900">
+                {subscription?.plan ? subscription.plan.toUpperCase() : "FREE"}
+              </p>
+              <button
+                type="button"
+                onClick={upgrade}
+                disabled={upgrading || subscription?.plan === "pro"}
+                className="mt-3 w-full rounded-md bg-brand-900 px-3 py-2 text-sm text-white disabled:opacity-50"
+              >
+                {subscription?.plan === "pro" ? "Pro active" : "Upgrade to Pro"}
+              </button>
+              {subscription?.plan !== "pro" && (
+                <p className="mt-2 text-xs text-brand-700">
+                  Free plan includes 1 business and limited ingestion frequency.
+                </p>
+              )}
+            </div>
             <div className="rounded-md border border-brand-100 p-4">
               <p className="text-xs text-brand-700">Compliant</p>
               <p className="text-2xl font-semibold text-emerald-700">
