@@ -24,7 +24,7 @@ Structure:
 2. Create a new Render web service and connect the repo.
 3. Set the root directory to ackend.
 4. Set the start command:
-   - uvicorn app.main:app --host 0.0.0.0 --port 10000
+   - python -m uvicorn app.main:app --host 0.0.0.0 --port 10000
 5. Add environment variables:
    - SECRET_KEY
    - DATABASE_URL
