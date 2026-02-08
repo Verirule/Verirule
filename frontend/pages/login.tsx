@@ -1,6 +1,7 @@
 ﻿import { FormEvent, useState } from "react";
 import { useRouter } from "next/router";
 
+import Navbar from "../components/Navbar";
 import { login } from "../utils/auth";
 
 export default function LoginPage() {
@@ -25,34 +26,41 @@ export default function LoginPage() {
   };
 
   return (
-    <main style={{ maxWidth: 420, margin: "64px auto", padding: 16 }}>
-      <h1>Login</h1>
-      <form onSubmit={onSubmit}>
-        <label style={{ display: "block", marginBottom: 8 }}>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-        </label>
-        <label style={{ display: "block", marginBottom: 8 }}>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-        </label>
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        <button type="submit" disabled={loading}>
-          {loading ? "Signing in..." : "Sign in"}
-        </button>
-      </form>
-    </main>
+    <div>
+      <Navbar />
+      <main className="mx-auto max-w-md px-4 py-12">
+        <h1 className="text-2xl font-semibold text-brand-900">Login</h1>
+        <form onSubmit={onSubmit} className="mt-6 space-y-4">
+          <label className="block text-sm text-brand-700">
+            Email
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="mt-1 w-full rounded-md border border-brand-100 px-3 py-2"
+            />
+          </label>
+          <label className="block text-sm text-brand-700">
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="mt-1 w-full rounded-md border border-brand-100 px-3 py-2"
+            />
+          </label>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-md bg-brand-900 px-4 py-2 text-white"
+          >
+            {loading ? "Signing in..." : "Sign in"}
+          </button>
+        </form>
+      </main>
+    </div>
   );
 }

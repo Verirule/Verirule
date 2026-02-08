@@ -8,6 +8,10 @@ function getApiBaseUrl() {
   return baseUrl;
 }
 
+function canUseStorage() {
+  return typeof window !== "undefined" && typeof localStorage !== "undefined";
+}
+
 export async function login(email, password) {
   const response = await fetch(${getApiBaseUrl()}/login, {
     method: "POST",
@@ -22,7 +26,7 @@ export async function login(email, password) {
   }
 
   const data = await response.json();
-  if (data.access_token) {
+  if (data.access_token && canUseStorage()) {
     localStorage.setItem(TOKEN_KEY, data.access_token);
   }
   return data;
@@ -36,10 +40,13 @@ export async function logout() {
       headers: { Authorization: Bearer  },
     }).catch(() => undefined);
   }
-  localStorage.removeItem(TOKEN_KEY);
+  if (canUseStorage()) {
+    localStorage.removeItem(TOKEN_KEY);
+  }
 }
 
 export function getToken() {
+  if (!canUseStorage()) return null;
   return localStorage.getItem(TOKEN_KEY);
 }
 
@@ -50,12 +57,16 @@ export function isTokenValid() {
   try {
     const payload = JSON.parse(atob(token.split(".")[1] || ""));
     if (payload.exp && Date.now() >= payload.exp * 1000) {
-      localStorage.removeItem(TOKEN_KEY);
+      if (canUseStorage()) {
+        localStorage.removeItem(TOKEN_KEY);
+      }
       return false;
     }
     return true;
   } catch {
-    localStorage.removeItem(TOKEN_KEY);
+    if (canUseStorage()) {
+      localStorage.removeItem(TOKEN_KEY);
+    }
     return false;
   }
 }
