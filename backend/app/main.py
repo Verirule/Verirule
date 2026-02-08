@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
 
 from .config import Settings, get_settings
-from .ingestion.job import run_ingestion_job
+from .ingestion.pipeline import run_ingestion
 from .jwt import validate_jwt
 from .schemas import AuthPayload
 from .supabase_client import get_supabase_client, get_supabase_service_client
@@ -122,5 +122,5 @@ def run_ingest(
     settings: Settings = Depends(get_settings),
     claims: dict = Depends(require_admin),
 ):
-    result = run_ingestion_job(settings)
+    result = run_ingestion(settings)
     return {"status": "ok", "result": result}

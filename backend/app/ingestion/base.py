@@ -1,6 +1,9 @@
-﻿from dataclasses import dataclass
+﻿from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable, Protocol
+from typing import List
 
 
 @dataclass(frozen=True)
@@ -15,6 +18,27 @@ class RegulationItem:
     raw_text: str
 
 
-class BaseRegulationSource(Protocol):
-    def fetch(self) -> Iterable[RegulationItem]:
-        ...
+class BaseRegulationSource(ABC):
+    """Abstract base class for regulation sources."""
+
+    source_name: str
+    jurisdiction: str
+    industry: str
+
+    @abstractmethod
+    def fetch(self) -> List[dict]:
+        """Return normalized regulation items."""
+        raise NotImplementedError
+
+    @staticmethod
+    def normalize(item: RegulationItem) -> dict:
+        return {
+            "title": item.title,
+            "summary": item.summary,
+            "source": item.source,
+            "source_url": item.source_url,
+            "jurisdiction": item.jurisdiction,
+            "industry": item.industry,
+            "published_at": item.published_at,
+            "raw_text": item.raw_text,
+        }

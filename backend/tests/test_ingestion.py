@@ -3,8 +3,8 @@
 import uuid
 from datetime import datetime, timezone
 
-from app.ingestion.base import RegulationItem
-from app.ingestion.service import upsert_regulations
+from app.ingestion.pipeline import run_ingestion
+from app.ingestion.utils import hash_raw_text
 
 
 class FakeResponse:
@@ -97,33 +97,58 @@ class FakeClient:
         return FakeQuery(self, name)
 
 
-def _item(raw_text: str) -> RegulationItem:
-    return RegulationItem(
-        title="Rule A",
-        summary="Summary",
-        source="rss",
-        source_url="https://example.com/rule-a",
-        jurisdiction="",
-        industry="",
-        published_at=datetime.now(tz=timezone.utc),
-        raw_text=raw_text,
-    )
+class FakeSource:
+    def __init__(self, raw_text: str):
+        self.raw_text = raw_text
+
+    def fetch(self):
+        return [
+            {
+                "title": "Rule A",
+                "summary": "Summary",
+                "source": "rss",
+                "source_url": "https://example.com/rule-a",
+                "jurisdiction": "",
+                "industry": "",
+                "published_at": datetime.now(tz=timezone.utc),
+                "raw_text": self.raw_text,
+            }
+        ]
 
 
-def test_ingestion_creates_and_versions():
+def _settings(monkeypatch):
+    from app.config import Settings
+
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@z/db")
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_API_KEY", "test-key")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-key")
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", "jwt-secret")
+    monkeypatch.setenv("ALLOWED_HOSTS", "http://localhost")
+    monkeypatch.setenv("INGESTION_FEED_URL", "https://example.com/feed.xml")
+    return Settings()
+
+
+def test_ingestion_creates_and_versions(monkeypatch):
+    settings = _settings(monkeypatch)
     client = FakeClient()
-    result = upsert_regulations(client, [_item("alpha")])
-    assert result == {"created": 1, "updated": 0, "versioned": 1}
+    source = FakeSource("alpha")
+
+    result = run_ingestion(settings, source=source, client=client)
+    assert result == {"fetched": 1, "inserted": 1, "updated": 0, "skipped": 0}
     assert len(client.tables["regulations"]) == 1
     assert len(client.tables["regulation_versions"]) == 1
 
 
-def test_change_detection_creates_new_version():
+def test_change_detection_creates_new_version(monkeypatch):
+    settings = _settings(monkeypatch)
     client = FakeClient()
-    upsert_regulations(client, [_item("alpha")])
-    result_same = upsert_regulations(client, [_item("alpha")])
-    assert result_same == {"created": 0, "updated": 0, "versioned": 0}
 
-    result_changed = upsert_regulations(client, [_item("bravo")])
-    assert result_changed == {"created": 0, "updated": 1, "versioned": 1}
+    run_ingestion(settings, source=FakeSource("alpha"), client=client)
+    result_same = run_ingestion(settings, source=FakeSource("alpha"), client=client)
+    assert result_same == {"fetched": 1, "inserted": 0, "updated": 0, "skipped": 1}
+
+    result_changed = run_ingestion(settings, source=FakeSource("bravo"), client=client)
+    assert result_changed == {"fetched": 1, "inserted": 0, "updated": 1, "skipped": 0}
     assert len(client.tables["regulation_versions"]) == 2
