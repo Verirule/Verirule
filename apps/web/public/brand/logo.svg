@@ -1,5 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
-  <path d="M128 18c34 22 70 26 94 30v72c0 64-44 108-94 118C78 228 34 184 34 120V48c24-4 60-8 94-30Z" stroke="currentColor" stroke-width="14" stroke-linejoin="round"/>
-  <path d="M58 132h34l16-26 22 52 18-34h50" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="178" cy="124" r="8" fill="currentColor"/>
+  <!-- Outer "radar ring" for monitoring -->
+  <path d="M128 24c57.4 0 104 46.6 104 104s-46.6 104-104 104S24 185.4 24 128 70.6 24 128 24Z"
+        stroke="currentColor" stroke-width="14" stroke-linejoin="round"/>
+  <!-- Inner "shield arc" for compliance -->
+  <path d="M128 56c27 18 52 20 66 23v47c0 40-27 68-66 75-39-7-66-35-66-75V79c14-3 39-5 66-23Z"
+        stroke="currentColor" stroke-width="14" stroke-linejoin="round" opacity="0.9"/>
+  <!-- Pulse line -->
+  <path d="M62 140h32l16-28 22 52 18-34h44"
+        stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Signal dot -->
+  <circle cx="204" cy="92" r="8" fill="currentColor"/>
 </svg>

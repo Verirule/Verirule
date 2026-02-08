@@ -1,24 +1,22 @@
 # Verirule
 
-Vertical AI SaaS for compliance monitoring: track regulatory changes and send automated alerts to businesses.
+Verirule is an AI compliance monitoring platform that tracks regulatory change and alerts teams before requirements drift.
 
-## Monorepo structure
+## What it does
 
-- `apps/api` — FastAPI backend (Python)
-- `apps/web` — Next.js frontend (TypeScript/Tailwind)
-- `packages/shared` — shared types/utilities (optional)
-- `supabase` — Supabase project config (local dev scaffolding)
-- `docs` — documentation
-- `scripts` — helper scripts
+- Monitors policy and regulatory updates
+- Surfaces risk and change impact in plain language
+- Sends auditable alerts for review and action
 
-## Security
+## Tech stack
 
-- **Never commit secrets**.
-- Use `.env` files locally and commit only `.env.example` templates.
+- `apps/web`: Next.js + TypeScript + Tailwind CSS
+- `apps/api`: FastAPI (Python)
+- Supabase for auth and data services
 
-## Getting started (placeholder)
+## Socials
 
-Scaffolding only (Task 1). Next tasks will:
-- Bootstrap FastAPI + Next.js apps
-- Add Supabase config + auth
-- Add regulatory change monitoring pipeline
+- Discord: https://discord.gg/
+- X: https://x.com/verirule
+
+License: GNU AGPLv3 (see LICENSE)
