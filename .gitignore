@@ -1,50 +1,71 @@
-﻿# Python
-venv/
-backend/venv/
+# ==========
+# OS files
+# ==========
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ==========
+# Environment / secrets
+# ==========
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# ==========
+# Python
+# ==========
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-*.so
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
-# Node.js
-node_modules/
-frontend/node_modules/
-.next/
-frontend/.next/
+.coverage
+htmlcov/
 dist/
 build/
-coverage/
-*.log
+*.egg-info/
+pip-wheel-metadata/
+.venv/
+venv/
+ENV/
+env/
+
+# ==========
+# Node / Next.js
+# ==========
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+.next/
+out/
+dist/
+.turbo/
+.vercel/
 
-# Environment variables
-.env
-.env.local
-.env.*
-*.env
-!.env.example
-!**/.env.example
-
-# Supabase
-supabase/.env
-supabase/config.toml
-
-# OS / Editor
-.DS_Store
-Thumbs.db
-.vscode/
+# ==========
+# Editors
+# ==========
+.vscode/*
+!.vscode/extensions.json
 !.vscode/settings.json
-.idea/
-*.swp
 
-# Misc
-*.cache
-*.tmp
-*.bak
+# ==========
+# Supabase local
+# ==========
+supabase/.temp/
+supabase/.env
+supabase/.env.*
+!supabase/.env.example
+
+# ==========
+# Local DB / logs
+# ==========
+*.sqlite
+*.sqlite3
+*.log
