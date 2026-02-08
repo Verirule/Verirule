@@ -1,0 +1,8 @@
+﻿fastapi
+uvicorn
+python-dotenv
+passlib[bcrypt]
+pytest
+httpx
+supabase
+PyJWT
