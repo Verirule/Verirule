@@ -53,8 +53,8 @@ dist/
 # ==========
 .vscode/*
 !.vscode/extensions.json
-!.vscode/settings.json
 
+!.vscode/tasks.json
 # ==========
 # Supabase local
 # ==========
@@ -69,3 +69,4 @@ supabase/.env.*
 *.sqlite
 *.sqlite3
 *.log
+

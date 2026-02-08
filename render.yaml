@@ -1,9 +1,0 @@
-﻿services:
-  - type: web
-    name: verirule-backend
-    env: python
-    plan: starter
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 8000
-    autoDeploy: true

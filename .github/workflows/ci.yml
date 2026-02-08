@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check web project
+        id: web_check
+        shell: bash
+        run: |
+          if [ -f "apps/web/package.json" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "apps/web/package.json not found. Skipping web CI."
+          fi
+
+      - name: Setup Node.js (LTS)
+        if: steps.web_check.outputs.exists == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install web dependencies
+        if: steps.web_check.outputs.exists == 'true'
+        working-directory: apps/web
+        shell: bash
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci
+          else
+            echo "No apps/web/package-lock.json; running npm install for compatibility."
+            npm install
+          fi
+
+      - name: Lint and build web
+        if: steps.web_check.outputs.exists == 'true'
+        working-directory: apps/web
+        shell: bash
+        run: |
+          npm run lint --if-present
+          npm run build --if-present
+
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check API requirements
+        id: api_check
+        shell: bash
+        run: |
+          if [ -f "apps/api/requirements.txt" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "apps/api/requirements.txt not found. Skipping api CI."
+          fi
+
+      - name: Setup Python 3.11
+        if: steps.api_check.outputs.exists == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install API dependencies
+        if: steps.api_check.outputs.exists == 'true'
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt
+          pip install ruff pytest
+
+      - name: Run API lint and tests
+        if: steps.api_check.outputs.exists == 'true'
+        working-directory: apps/api
+        shell: bash
+        run: |
+          ruff check .
+          pytest -q
