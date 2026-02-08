@@ -1,4 +1,11 @@
-﻿from fastapi import Depends, FastAPI, HTTPException, Query, status
+﻿from __future__ import annotations
+
+import logging
+import time
+import uuid
+from typing import Callable
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
 
@@ -10,13 +17,22 @@ from .billing.limits import (
 )
 from .config import Settings, get_settings
 from .ingestion.pipeline import run_ingestion
-from .jwt import require_admin, validate_jwt
+from .jwt import get_current_user, require_admin, validate_jwt_token
 from .schemas import AuthPayload
 from .supabase_client import get_supabase_client, get_supabase_service_client
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+logger = logging.getLogger("verirule")
 
 app = FastAPI(title="Verirule API")
+
+EXEMPT_PATHS = {
+    "/health",
+    "/login",
+    "/register",
+}
+
+_rate_state: dict[str, list[float]] = {}
 
 
 def configure_cors(app: FastAPI, settings: Settings) -> None:
@@ -25,7 +41,7 @@ def configure_cors(app: FastAPI, settings: Settings) -> None:
         allow_origins=settings.ALLOWED_HOSTS,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-Id"],
     )
 
 
@@ -35,8 +51,66 @@ def _configure_security():
     configure_cors(app, settings)
 
 
+@app.middleware("http")
+async def request_context(request: Request, call_next: Callable):
+    request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
+    request.state.request_id = request_id
+
+    settings = get_settings()
+    path = request.url.path
+
+    if path not in EXEMPT_PATHS:
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return _error_response(status.HTTP_401_UNAUTHORIZED, "Missing token", request_id)
+        token = auth_header.replace("Bearer ", "", 1).strip()
+        if not token:
+            return _error_response(status.HTTP_401_UNAUTHORIZED, "Missing token", request_id)
+        try:
+            user = validate_jwt_token(token, settings)
+            request.state.user = user
+        except HTTPException as exc:
+            return _error_response(exc.status_code, exc.detail, request_id)
+
+        _apply_rate_limit(request, settings, user_id=user.get("user_id"))
+
+    try:
+        response = await call_next(request)
+    except HTTPException as exc:
+        logger.warning("http_error", extra={"request_id": request_id, "status": exc.status_code})
+        return _error_response(exc.status_code, exc.detail, request_id)
+    except Exception as exc:
+        logger.exception("unhandled_error", extra={"request_id": request_id})
+        return _error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error", request_id)
+
+    response.headers["X-Request-Id"] = request_id
+    return response
+
+
+def _apply_rate_limit(request: Request, settings: Settings, user_id: str | None) -> None:
+    key = user_id or request.client.host
+    now = time.time()
+    window = settings.RATE_LIMIT_WINDOW_SECONDS
+    max_requests = settings.RATE_LIMIT_MAX_REQUESTS
+
+    timestamps = _rate_state.get(key, [])
+    timestamps = [t for t in timestamps if now - t < window]
+    if len(timestamps) >= max_requests:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded")
+    timestamps.append(now)
+    _rate_state[key] = timestamps
+
+
+def _error_response(code: int, message: str, request_id: str) -> Response:
+    return Response(
+        content=f"{{\"error\":\"{message}\",\"request_id\":\"{request_id}\"}}",
+        status_code=code,
+        media_type="application/json",
+    )
+
+
 @app.get("/health")
-def health_check(settings: Settings = Depends(get_settings)):
+def health_check():
     return {"status": "ok"}
 
 
@@ -84,10 +158,10 @@ def logout(settings: Settings = Depends(get_settings)):
 @app.get("/subscription")
 def get_subscription_endpoint(
     settings: Settings = Depends(get_settings),
-    claims: dict = Depends(validate_jwt),
+    user: dict = Depends(get_current_user),
 ):
     client = get_service_client(settings)
-    user_id = claims.get("user_id")
+    user_id = user.get("user_id")
     subscription = get_subscription(client, user_id)
     if not subscription:
         return {"plan": "free", "status": "active", "started_at": None}
@@ -97,10 +171,10 @@ def get_subscription_endpoint(
 @app.post("/subscription/upgrade")
 def upgrade_subscription(
     settings: Settings = Depends(get_settings),
-    claims: dict = Depends(validate_jwt),
+    user: dict = Depends(get_current_user),
 ):
     client = get_service_client(settings)
-    user_id = claims.get("user_id")
+    user_id = user.get("user_id")
     existing = get_subscription(client, user_id)
     payload = {
         "user_id": user_id,
@@ -119,10 +193,10 @@ def upgrade_subscription(
 @app.get("/business/profile")
 def get_business_profile(
     settings: Settings = Depends(get_settings),
-    claims: dict = Depends(validate_jwt),
+    user: dict = Depends(get_current_user),
 ):
     client = get_service_client(settings)
-    user_id = claims.get("user_id")
+    user_id = user.get("user_id")
     result = (
         client.table("business_profiles")
         .select("id, business_name, industry, jurisdiction")
@@ -137,10 +211,10 @@ def get_business_profile(
 def upsert_business_profile(
     payload: dict,
     settings: Settings = Depends(get_settings),
-    claims: dict = Depends(validate_jwt),
+    user: dict = Depends(get_current_user),
 ):
     client = get_service_client(settings)
-    user_id = claims.get("user_id")
+    user_id = user.get("user_id")
     existing = (
         client.table("business_profiles")
         .select("id")
@@ -189,10 +263,10 @@ def upsert_business_profile(
 def get_compliance_status(
     business_id: str,
     settings: Settings = Depends(get_settings),
-    claims: dict = Depends(validate_jwt),
+    user: dict = Depends(get_current_user),
 ):
     client = get_service_client(settings)
-    user_id = claims.get("user_id")
+    user_id = user.get("user_id")
     owner = (
         client.table("business_profiles")
         .select("id")
@@ -239,10 +313,10 @@ def get_compliance_status(
 def list_violations(
     business_id: str,
     settings: Settings = Depends(get_settings),
-    claims: dict = Depends(validate_jwt),
+    user: dict = Depends(get_current_user),
 ):
     client = get_service_client(settings)
-    user_id = claims.get("user_id")
+    user_id = user.get("user_id")
     owner = (
         client.table("business_profiles")
         .select("id")
@@ -267,7 +341,7 @@ def list_violations(
 @app.get("/regulations")
 def list_regulations(
     settings: Settings = Depends(get_settings),
-    claims: dict = Depends(validate_jwt),
+    user: dict = Depends(get_current_user),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     industry: str | None = None,
@@ -289,7 +363,7 @@ def list_regulations(
 def get_regulation(
     regulation_id: str,
     settings: Settings = Depends(get_settings),
-    claims: dict = Depends(validate_jwt),
+    user: dict = Depends(get_current_user),
     include_raw_text: bool = False,
 ):
     client = get_supabase_service_client(settings)
@@ -307,10 +381,10 @@ def get_regulation(
 @app.post("/ingest/run")
 def run_ingest(
     settings: Settings = Depends(get_settings),
-    claims: dict = Depends(require_admin),
+    user: dict = Depends(require_admin),
 ):
     client = get_service_client(settings)
-    user_id = claims.get("user_id")
+    user_id = user.get("user_id")
     try:
         enforce_ingestion_limit(client, user_id)
     except RuntimeError as exc:
@@ -323,12 +397,12 @@ def run_ingest(
 @app.get("/alerts")
 def list_alerts(
     settings: Settings = Depends(get_settings),
-    claims: dict = Depends(validate_jwt),
+    user: dict = Depends(get_current_user),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
     client = get_service_client(settings)
-    user_id = claims.get("user_id")
+    user_id = user.get("user_id")
     result = (
         client.table("alerts")
         .select("id, business_id, violation_id, severity, title, message, acknowledged, created_at")
@@ -345,10 +419,10 @@ def list_alerts(
 def acknowledge_alert(
     alert_id: str,
     settings: Settings = Depends(get_settings),
-    claims: dict = Depends(validate_jwt),
+    user: dict = Depends(get_current_user),
 ):
     client = get_service_client(settings)
-    user_id = claims.get("user_id")
+    user_id = user.get("user_id")
     existing = (
         client.table("alerts")
         .select("id")

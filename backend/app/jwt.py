@@ -18,19 +18,9 @@ def _extract_role(payload: Dict) -> str | None:
     return None
 
 
-def validate_jwt(request: Request, settings: Settings = Depends(get_settings)) -> Dict:
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-
-    token = auth_header.replace("Bearer ", "", 1).strip()
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-
+def validate_jwt_token(token: str, settings: Settings) -> Dict:
     try:
-        payload = jwt.decode(
-            token, settings.SUPABASE_JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
-        )
+        payload = jwt.decode(token, settings.SUPABASE_JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
     except jwt.InvalidTokenError:
@@ -43,7 +33,26 @@ def validate_jwt(request: Request, settings: Settings = Depends(get_settings)) -
     }
 
 
-def require_admin(claims: Dict = Depends(validate_jwt)) -> Dict:
-    if claims.get("role") != "admin":
+def validate_jwt(request: Request, settings: Settings = Depends(get_settings)) -> Dict:
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
+
+    token = auth_header.replace("Bearer ", "", 1).strip()
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
+
+    return validate_jwt_token(token, settings)
+
+
+def get_current_user(request: Request) -> Dict:
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+    return user
+
+
+def require_admin(user: Dict = Depends(get_current_user)) -> Dict:
+    if user.get("role") != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin required")
-    return claims
+    return user

@@ -31,10 +31,6 @@ class FakeQuery:
         self._filters.append((field, value))
         return self
 
-    def in_(self, field, values):
-        self._filters.append((field, values, "in"))
-        return self
-
     def order(self, field, desc=False):
         self._order_field = field
         self._desc = desc
@@ -60,13 +56,8 @@ class FakeQuery:
 
     def execute(self):
         rows = self.rows
-        for filt in self._filters:
-            if len(filt) == 3 and filt[2] == "in":
-                field, values, _ = filt
-                rows = [r for r in rows if r.get(field) in values]
-            else:
-                field, value = filt
-                rows = [r for r in rows if r.get(field) == value]
+        for field, value in self._filters:
+            rows = [r for r in rows if r.get(field) == value]
         if self._order_field:
             rows = sorted(rows, key=lambda r: r.get(self._order_field), reverse=self._desc)
         if self._range is not None:
@@ -106,11 +97,20 @@ def _set_env(monkeypatch):
     monkeypatch.setenv("SUPABASE_JWT_SECRET", "jwt-secret")
     monkeypatch.setenv("ALLOWED_HOSTS", "http://localhost,https://example.com")
     monkeypatch.setenv("INGESTION_FEED_URL", "https://example.com/feed.xml")
+    monkeypatch.setenv("RATE_LIMIT_WINDOW_SECONDS", "60")
+    monkeypatch.setenv("RATE_LIMIT_MAX_REQUESTS", "1000")
 
 
 def _token(role: str, user_id: str = "user-1"):
     payload = {"sub": user_id, "role": role}
     return jwt.encode(payload, "jwt-secret", algorithm="HS256")
+
+
+def test_health_no_auth(monkeypatch):
+    _set_env(monkeypatch)
+    client = TestClient(app)
+    response = client.get("/health")
+    assert response.status_code == 200
 
 
 def test_regulations_requires_auth(monkeypatch):
@@ -122,20 +122,22 @@ def test_regulations_requires_auth(monkeypatch):
 
 def test_regulations_list(monkeypatch):
     _set_env(monkeypatch)
-    rows = {"regulations": [
-        {
-            "id": "r1",
-            "title": "Rule A",
-            "summary": "S",
-            "source": "rss",
-            "source_url": "https://example.com/a",
-            "jurisdiction": "us",
-            "industry": "finance",
-            "published_at": None,
-            "last_updated_at": "2024-01-01T00:00:00Z",
-            "created_at": "2024-01-01T00:00:00Z",
-        }
-    ]}
+    rows = {
+        "regulations": [
+            {
+                "id": "r1",
+                "title": "Rule A",
+                "summary": "S",
+                "source": "rss",
+                "source_url": "https://example.com/a",
+                "jurisdiction": "us",
+                "industry": "finance",
+                "published_at": None,
+                "last_updated_at": "2024-01-01T00:00:00Z",
+                "created_at": "2024-01-01T00:00:00Z",
+            }
+        ]
+    }
     fake_client = FakeClient(rows)
     monkeypatch.setattr("app.main.get_supabase_service_client", lambda settings: fake_client)
 
@@ -151,21 +153,23 @@ def test_regulations_list(monkeypatch):
 
 def test_regulation_detail_excludes_raw_text(monkeypatch):
     _set_env(monkeypatch)
-    rows = {"regulations": [
-        {
-            "id": "r1",
-            "title": "Rule A",
-            "summary": "S",
-            "source": "rss",
-            "source_url": "https://example.com/a",
-            "jurisdiction": "us",
-            "industry": "finance",
-            "published_at": None,
-            "last_updated_at": "2024-01-01T00:00:00Z",
-            "created_at": "2024-01-01T00:00:00Z",
-            "raw_text": "secret",
-        }
-    ]}
+    rows = {
+        "regulations": [
+            {
+                "id": "r1",
+                "title": "Rule A",
+                "summary": "S",
+                "source": "rss",
+                "source_url": "https://example.com/a",
+                "jurisdiction": "us",
+                "industry": "finance",
+                "published_at": None,
+                "last_updated_at": "2024-01-01T00:00:00Z",
+                "created_at": "2024-01-01T00:00:00Z",
+                "raw_text": "secret",
+            }
+        ]
+    }
     fake_client = FakeClient(rows)
     monkeypatch.setattr("app.main.get_supabase_service_client", lambda settings: fake_client)
 

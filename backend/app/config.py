@@ -43,6 +43,8 @@ class Settings:
     SMTP_FROM: str = _get_env("SMTP_FROM", "")
     DASHBOARD_URL: str = _get_env("DASHBOARD_URL", "")
     ALERTS_MAX_PER_RUN: int = int(_get_env("ALERTS_MAX_PER_RUN", "100") or 100)
+    RATE_LIMIT_WINDOW_SECONDS: int = int(_get_env("RATE_LIMIT_WINDOW_SECONDS", "60") or 60)
+    RATE_LIMIT_MAX_REQUESTS: int = int(_get_env("RATE_LIMIT_MAX_REQUESTS", "120") or 120)
 
 
 def get_settings() -> Settings:
