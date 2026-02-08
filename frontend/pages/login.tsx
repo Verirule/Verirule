@@ -1,7 +1,7 @@
 ﻿import { FormEvent, useState } from "react";
 import { useRouter } from "next/router";
 
-import Navbar from "../components/Navbar";
+import Layout from "../components/Layout";
 import { login } from "../utils/auth";
 
 export default function LoginPage() {
@@ -26,10 +26,9 @@ export default function LoginPage() {
   };
 
   return (
-    <div>
-      <Navbar />
+    <Layout>
       <main className="mx-auto max-w-md px-4 py-12">
-        <h1 className="text-2xl font-semibold text-brand-900">Login</h1>
+        <h1 className="text-2xl font-semibold text-brand-900 sm:text-3xl">Login</h1>
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <label className="block text-sm text-brand-700">
             Email
@@ -61,6 +60,6 @@ export default function LoginPage() {
           </button>
         </form>
       </main>
-    </div>
+    </Layout>
   );
 }

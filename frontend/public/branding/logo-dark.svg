@@ -1,4 +1,13 @@
-﻿<svg xmlns="http://www.w3.org/2000/svg" width="180" height="48" viewBox="0 0 180 48" fill="none">
-  <rect width="180" height="48" rx="8" fill="#FFFFFF"/>
-  <text x="16" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="20" fill="#0F172A">Verirule</text>
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="220" height="48" viewBox="0 0 220 48" fill="none">
+  <defs>
+    <linearGradient id="vr" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E2E8F0" />
+      <stop offset="1" stop-color="#CBD5F5" />
+    </linearGradient>
+  </defs>
+  <g>
+    <rect x="4" y="4" width="40" height="40" rx="10" fill="url(#vr)"/>
+    <path d="M16 24L22.5 30.5L34 18" stroke="#0F172A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="56" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="600" fill="#E2E8F0">Verirule</text>
 </svg>
