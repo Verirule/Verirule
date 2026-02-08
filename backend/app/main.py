@@ -1,10 +1,10 @@
-﻿from fastapi import Depends, FastAPI, HTTPException, status
+﻿from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
 
 from .config import Settings, get_settings
 from .ingestion.pipeline import run_ingestion
-from .jwt import validate_jwt
+from .jwt import require_admin, validate_jwt
 from .schemas import AuthPayload
 from .supabase_client import get_supabase_client, get_supabase_service_client
 
@@ -40,12 +40,6 @@ def get_password_hash(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
-
-
-def require_admin(claims: dict = Depends(validate_jwt)) -> dict:
-    if claims.get("role") != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin required")
-    return claims
 
 
 @app.post("/register")
@@ -85,16 +79,20 @@ def logout(settings: Settings = Depends(get_settings)):
 def list_regulations(
     settings: Settings = Depends(get_settings),
     claims: dict = Depends(validate_jwt),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    industry: str | None = None,
+    jurisdiction: str | None = None,
 ):
     client = get_supabase_service_client(settings)
-    result = (
-        client.table("regulations")
-        .select(
-            "id, title, summary, source, source_url, jurisdiction, industry, published_at, last_updated_at, created_at"
-        )
-        .order("last_updated_at", desc=True)
-        .execute()
+    query = client.table("regulations").select(
+        "id, title, summary, source, source_url, jurisdiction, industry, published_at, last_updated_at, created_at"
     )
+    if industry:
+        query = query.eq("industry", industry)
+    if jurisdiction:
+        query = query.eq("jurisdiction", jurisdiction)
+    result = query.order("last_updated_at", desc=True).range(offset, offset + limit - 1).execute()
     return {"data": result.data}
 
 
@@ -103,15 +101,15 @@ def get_regulation(
     regulation_id: str,
     settings: Settings = Depends(get_settings),
     claims: dict = Depends(validate_jwt),
+    include_raw_text: bool = False,
 ):
     client = get_supabase_service_client(settings)
-    result = (
-        client.table("regulations")
-        .select("*")
-        .eq("id", regulation_id)
-        .limit(1)
-        .execute()
+    fields = (
+        "*"
+        if include_raw_text
+        else "id, title, summary, source, source_url, jurisdiction, industry, published_at, last_updated_at, created_at"
     )
+    result = client.table("regulations").select(fields).eq("id", regulation_id).limit(1).execute()
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return result.data[0]

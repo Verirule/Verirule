@@ -41,3 +41,9 @@ def validate_jwt(request: Request, settings: Settings = Depends(get_settings)) -
         "role": _extract_role(payload),
         "claims": payload,
     }
+
+
+def require_admin(claims: Dict = Depends(validate_jwt)) -> Dict:
+    if claims.get("role") != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin required")
+    return claims

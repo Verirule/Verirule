@@ -18,6 +18,7 @@ class FakeQuery:
         self._order_field = None
         self._desc = False
         self._limit = None
+        self._range = None
 
     def select(self, fields):
         self._select = fields
@@ -36,13 +37,20 @@ class FakeQuery:
         self._limit = count
         return self
 
+    def range(self, start, end):
+        self._range = (start, end)
+        return self
+
     def execute(self):
         rows = self.rows
         for field, value in self._filters:
             rows = [r for r in rows if r.get(field) == value]
         if self._order_field:
             rows = sorted(rows, key=lambda r: r.get(self._order_field), reverse=self._desc)
-        if self._limit is not None:
+        if self._range is not None:
+            start, end = self._range
+            rows = rows[start : end + 1]
+        elif self._limit is not None:
             rows = rows[: self._limit]
         if self._select and self._select != "*":
             fields = [f.strip() for f in self._select.split(",")]
@@ -90,8 +98,8 @@ def test_regulations_list(monkeypatch):
             "summary": "S",
             "source": "rss",
             "source_url": "https://example.com/a",
-            "jurisdiction": "",
-            "industry": "",
+            "jurisdiction": "us",
+            "industry": "finance",
             "published_at": None,
             "last_updated_at": "2024-01-01T00:00:00Z",
             "created_at": "2024-01-01T00:00:00Z",
@@ -102,9 +110,39 @@ def test_regulations_list(monkeypatch):
 
     token = _token("user")
     client = TestClient(app)
-    response = client.get("/regulations", headers={"Authorization": f"Bearer {token}"})
+    response = client.get(
+        "/regulations?industry=finance&jurisdiction=us",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert response.status_code == 200
     assert response.json()["data"][0]["id"] == "r1"
+
+
+def test_regulation_detail_excludes_raw_text(monkeypatch):
+    _set_env(monkeypatch)
+    rows = [
+        {
+            "id": "r1",
+            "title": "Rule A",
+            "summary": "S",
+            "source": "rss",
+            "source_url": "https://example.com/a",
+            "jurisdiction": "us",
+            "industry": "finance",
+            "published_at": None,
+            "last_updated_at": "2024-01-01T00:00:00Z",
+            "created_at": "2024-01-01T00:00:00Z",
+            "raw_text": "secret",
+        }
+    ]
+    fake_client = FakeClient(rows)
+    monkeypatch.setattr("app.main.get_supabase_service_client", lambda settings: fake_client)
+
+    token = _token("user")
+    client = TestClient(app)
+    response = client.get("/regulations/r1", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert "raw_text" not in response.json()
 
 
 def test_ingest_requires_admin(monkeypatch):
@@ -113,3 +151,13 @@ def test_ingest_requires_admin(monkeypatch):
     client = TestClient(app)
     response = client.post("/ingest/run", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
+
+
+def test_ingest_admin_success(monkeypatch):
+    _set_env(monkeypatch)
+    monkeypatch.setattr("app.main.run_ingestion", lambda settings: {"fetched": 1, "inserted": 1, "updated": 0, "skipped": 0})
+    token = _token("admin")
+    client = TestClient(app)
+    response = client.post("/ingest/run", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json()["result"]["inserted"] == 1
