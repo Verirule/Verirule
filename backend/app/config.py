@@ -35,6 +35,14 @@ class Settings:
     ALLOWED_HOSTS: List[str] = _split_csv(_require("ALLOWED_HOSTS"))
     JWT_ALGORITHM: str = _get_env("JWT_ALGORITHM", "HS256")
     INGESTION_FEED_URL: str = _require("INGESTION_FEED_URL")
+    EMAIL_PROVIDER: str = _get_env("EMAIL_PROVIDER", "")
+    SMTP_HOST: str = _get_env("SMTP_HOST", "")
+    SMTP_PORT: int = int(_get_env("SMTP_PORT", "0") or 0)
+    SMTP_USER: str = _get_env("SMTP_USER", "")
+    SMTP_PASSWORD: str = _get_env("SMTP_PASSWORD", "")
+    SMTP_FROM: str = _get_env("SMTP_FROM", "")
+    DASHBOARD_URL: str = _get_env("DASHBOARD_URL", "")
+    ALERTS_MAX_PER_RUN: int = int(_get_env("ALERTS_MAX_PER_RUN", "100") or 100)
 
 
 def get_settings() -> Settings:

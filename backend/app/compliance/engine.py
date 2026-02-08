@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterable
 
 from supabase import Client
 
+from ..alerts.service import generate_alert_for_violation
 from ..config import Settings
 from ..supabase_client import get_supabase_service_client
 
@@ -86,7 +87,7 @@ def _get_business_profile(client: Client, business_id: str) -> Dict[str, Any]:
 def _get_applicable_regulations(
     client: Client, industry: str | None, jurisdiction: str | None
 ) -> Iterable[Dict[str, Any]]:
-    query = client.table("regulations").select("id, industry, jurisdiction")
+    query = client.table("regulations").select("id, title, industry, jurisdiction")
     if industry:
         query = query.eq("industry", industry)
     if jurisdiction:
@@ -138,7 +139,7 @@ def _insert_violation(
     rule_id: str,
     severity: str,
     message: str,
-) -> None:
+) -> Dict[str, Any] | None:
     existing = (
         client.table("violations")
         .select("id")
@@ -150,8 +151,8 @@ def _insert_violation(
         .execute()
     )
     if existing.data:
-        return
-    client.table("violations").insert(
+        return None
+    result = client.table("violations").insert(
         {
             "business_id": business_id,
             "regulation_id": regulation_id,
@@ -160,6 +161,7 @@ def _insert_violation(
             "message": message,
         }
     ).execute()
+    return result.data[0] if result.data else None
 
 
 def evaluate_business_compliance(
@@ -184,6 +186,7 @@ def evaluate_business_compliance(
         )
     )
     regulation_ids = [r["id"] for r in regulations]
+    regulation_titles = {r["id"]: r.get("title", "Regulation") for r in regulations}
     rules = list(_get_rules(client, regulation_ids))
 
     evaluated = 0
@@ -199,7 +202,7 @@ def evaluate_business_compliance(
             continue
         if result is False:
             _upsert_status(client, profile["id"], rule["regulation_id"], "non_compliant")
-            _insert_violation(
+            violation = _insert_violation(
                 client,
                 profile["id"],
                 rule["regulation_id"],
@@ -207,7 +210,16 @@ def evaluate_business_compliance(
                 rule.get("severity", "medium"),
                 rule.get("rule_description", "Rule violation"),
             )
-            violations += 1
+            if violation:
+                generate_alert_for_violation(
+                    settings,
+                    violation,
+                    profile.get("business_name", "Business"),
+                    regulation_titles.get(rule["regulation_id"], "Regulation"),
+                    profile.get("user_id"),
+                    client=client,
+                )
+                violations += 1
             continue
 
         _upsert_status(client, profile["id"], rule["regulation_id"], "unknown")
