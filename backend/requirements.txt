@@ -3,6 +3,7 @@ uvicorn
 python-dotenv
 passlib[bcrypt]
 pytest
+pytest-asyncio
 httpx
 supabase
 PyJWT
