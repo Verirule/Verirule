@@ -41,6 +41,12 @@ export default function Navbar() {
               <Link className="text-brand-700 hover:text-brand-900" href="/dashboard">
                 Dashboard
               </Link>
+              <Link className="text-brand-700 hover:text-brand-900" href="/alerts">
+                Alerts
+              </Link>
+              <Link className="text-brand-700 hover:text-brand-900" href="/business">
+                Business
+              </Link>
               <button
                 type="button"
                 onClick={handleLogout}
@@ -68,8 +74,8 @@ export default function Navbar() {
           onClick={() => setOpen((prev) => !prev)}
         >
           <span className="block h-0.5 w-5 bg-brand-900" />
-          <span className="block h-0.5 w-5 bg-brand-900 mt-1" />
-          <span className="block h-0.5 w-5 bg-brand-900 mt-1" />
+          <span className="mt-1 block h-0.5 w-5 bg-brand-900" />
+          <span className="mt-1 block h-0.5 w-5 bg-brand-900" />
         </button>
       </div>
 
@@ -80,6 +86,12 @@ export default function Navbar() {
               <>
                 <Link className="text-brand-900" href="/dashboard" onClick={() => setOpen(false)}>
                   Dashboard
+                </Link>
+                <Link className="text-brand-900" href="/alerts" onClick={() => setOpen(false)}>
+                  Alerts
+                </Link>
+                <Link className="text-brand-900" href="/business" onClick={() => setOpen(false)}>
+                  Business
                 </Link>
                 <button
                   type="button"
@@ -94,7 +106,11 @@ export default function Navbar() {
                 <Link className="text-brand-900" href="/login" onClick={() => setOpen(false)}>
                   Login
                 </Link>
-                <Link className="rounded-md bg-brand-900 px-3 py-2 text-center text-white" href="/login" onClick={() => setOpen(false)}>
+                <Link
+                  className="rounded-md bg-brand-900 px-3 py-2 text-center text-white"
+                  href="/login"
+                  onClick={() => setOpen(false)}
+                >
                   Get Started
                 </Link>
               </>
