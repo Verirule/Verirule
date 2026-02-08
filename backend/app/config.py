@@ -30,8 +30,11 @@ class Settings:
     DATABASE_URL: str = _require("DATABASE_URL")
     SUPABASE_URL: str = _require("SUPABASE_URL")
     SUPABASE_API_KEY: str = _require("SUPABASE_API_KEY")
+    SUPABASE_SERVICE_ROLE_KEY: str = _require("SUPABASE_SERVICE_ROLE_KEY")
+    SUPABASE_JWT_SECRET: str = _require("SUPABASE_JWT_SECRET")
     ALLOWED_HOSTS: List[str] = _split_csv(_require("ALLOWED_HOSTS"))
     JWT_ALGORITHM: str = _get_env("JWT_ALGORITHM", "HS256")
+    INGESTION_FEED_URL: str = _require("INGESTION_FEED_URL")
 
 
 def get_settings() -> Settings:

@@ -9,7 +9,10 @@ def _set_required_env(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@z/db")
     monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setenv("SUPABASE_API_KEY", "test-key")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-key")
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", "jwt-secret")
     monkeypatch.setenv("ALLOWED_HOSTS", "http://localhost,https://example.com")
+    monkeypatch.setenv("INGESTION_FEED_URL", "https://example.com/feed.xml")
 
 
 def test_health_check(monkeypatch):

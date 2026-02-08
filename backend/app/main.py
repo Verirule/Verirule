@@ -3,8 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
 
 from .config import Settings, get_settings
+from .ingestion.job import run_ingestion_job
+from .jwt import validate_jwt
 from .schemas import AuthPayload
-from .supabase_client import get_supabase_client
+from .supabase_client import get_supabase_client, get_supabase_service_client
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -40,11 +42,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
+def require_admin(claims: dict = Depends(validate_jwt)) -> dict:
+    if claims.get("role") != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin required")
+    return claims
+
+
 @app.post("/register")
 def register(payload: AuthPayload, settings: Settings = Depends(get_settings)):
     supabase = get_supabase_client(settings)
 
-    # Hash before sending to Supabase (placeholder pattern; Supabase also stores its own hash)
     _ = get_password_hash(payload.password)
 
     response = supabase.auth.sign_up({"email": payload.email, "password": payload.password})
@@ -72,3 +79,48 @@ def logout(settings: Settings = Depends(get_settings)):
     supabase = get_supabase_client(settings)
     supabase.auth.sign_out()
     return {"status": "ok"}
+
+
+@app.get("/regulations")
+def list_regulations(
+    settings: Settings = Depends(get_settings),
+    claims: dict = Depends(validate_jwt),
+):
+    client = get_supabase_service_client(settings)
+    result = (
+        client.table("regulations")
+        .select(
+            "id, title, summary, source, source_url, jurisdiction, industry, published_at, last_updated_at, created_at"
+        )
+        .order("last_updated_at", desc=True)
+        .execute()
+    )
+    return {"data": result.data}
+
+
+@app.get("/regulations/{regulation_id}")
+def get_regulation(
+    regulation_id: str,
+    settings: Settings = Depends(get_settings),
+    claims: dict = Depends(validate_jwt),
+):
+    client = get_supabase_service_client(settings)
+    result = (
+        client.table("regulations")
+        .select("*")
+        .eq("id", regulation_id)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return result.data[0]
+
+
+@app.post("/ingest/run")
+def run_ingest(
+    settings: Settings = Depends(get_settings),
+    claims: dict = Depends(require_admin),
+):
+    result = run_ingestion_job(settings)
+    return {"status": "ok", "result": result}
