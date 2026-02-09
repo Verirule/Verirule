@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     API_HOST: str = "127.0.0.1"
     API_PORT: int = 8000
     API_CORS_ORIGINS: str = "http://localhost:3000"
+    REQUIRE_ALERT_EVIDENCE_FOR_RESOLVE: bool = True
+    ALERT_RESOLVE_MIN_EVIDENCE: int = 1
     SUPABASE_URL: str
     SUPABASE_ANON_KEY: str
     SUPABASE_ISSUER: str | None = None

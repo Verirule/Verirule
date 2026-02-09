@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.v1.schemas.monitoring import (
     AlertOut,
@@ -11,7 +11,9 @@ from app.api.v1.schemas.monitoring import (
     MonitorRunOut,
 )
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
+from app.core.settings import get_settings
 from app.core.supabase_rest import (
+    count_alert_task_evidence,
     rpc_append_audit,
     rpc_create_monitor_run,
     rpc_set_alert_status,
@@ -46,6 +48,18 @@ async def alerts(
 async def update_alert(
     alert_id: UUID, payload: AlertUpdateIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
 ) -> dict[str, bool]:
+    settings = get_settings()
+    if payload.status == "resolved" and settings.REQUIRE_ALERT_EVIDENCE_FOR_RESOLVE:
+        evidence_count = await count_alert_task_evidence(auth.access_token, str(alert_id))
+        if evidence_count < settings.ALERT_RESOLVE_MIN_EVIDENCE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Resolving alerts requires at least {settings.ALERT_RESOLVE_MIN_EVIDENCE} "
+                    "evidence item(s) across linked tasks."
+                ),
+            )
+
     await rpc_set_alert_status(
         auth.access_token,
         {"p_alert_id": str(alert_id), "p_status": payload.status},

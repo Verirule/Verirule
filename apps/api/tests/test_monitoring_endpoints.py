@@ -1,5 +1,8 @@
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
+from app.api.v1.endpoints import monitoring as monitoring_endpoint
 from app.core import supabase_rest
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.main import app
@@ -205,6 +208,12 @@ def test_update_alert_calls_rpc(monkeypatch) -> None:
         async def get(self, *args, **kwargs):  # pragma: no cover
             raise AssertionError("GET should not be called in patch alert test")
 
+    monkeypatch.setattr(
+        monitoring_endpoint,
+        "get_settings",
+        lambda: SimpleNamespace(REQUIRE_ALERT_EVIDENCE_FOR_RESOLVE=False, ALERT_RESOLVE_MIN_EVIDENCE=1),
+    )
+
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123", claims={"sub": USER_ID}
     )
@@ -218,6 +227,33 @@ def test_update_alert_calls_rpc(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"ok": True}
+
+
+def test_update_alert_requires_evidence_when_enabled(monkeypatch) -> None:
+    async def fake_count(access_token: str, alert_id: str) -> int:
+        assert access_token == "token-123"
+        assert alert_id == ALERT_ID
+        return 0
+
+    monkeypatch.setattr(
+        monitoring_endpoint,
+        "get_settings",
+        lambda: SimpleNamespace(REQUIRE_ALERT_EVIDENCE_FOR_RESOLVE=True, ALERT_RESOLVE_MIN_EVIDENCE=1),
+    )
+    monkeypatch.setattr(monitoring_endpoint, "count_alert_task_evidence", fake_count)
+
+    app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
+        access_token="token-123", claims={"sub": USER_ID}
+    )
+
+    try:
+        client = TestClient(app)
+        response = client.patch(f"/api/v1/alerts/{ALERT_ID}", json={"status": "resolved"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert "evidence item" in response.json()["detail"]
 
 
 def test_audit_returns_list_when_supabase_ok(monkeypatch) -> None:
