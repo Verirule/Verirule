@@ -34,6 +34,9 @@ export function Nav() {
               {item.label}
             </Link>
           ))}
+          <Link href="/dashboard" className="text-muted-foreground transition-colors hover:text-foreground">
+            Dashboard
+          </Link>
           <Link href="/auth/login" className="text-muted-foreground transition-colors hover:text-foreground">
             Login
           </Link>
@@ -72,6 +75,13 @@ export function Nav() {
                 {item.label}
               </Link>
             ))}
+            <Link
+              href="/dashboard"
+              className="rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setIsOpen(false)}
+            >
+              Dashboard
+            </Link>
             <Link
               href="/auth/login"
               className="rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
