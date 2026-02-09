@@ -35,9 +35,11 @@ export async function GET() {
 
     const body = (await upstreamResponse.json().catch(() => ({}))) as unknown;
     return NextResponse.json(body, { status: 200 });
-  } catch {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : undefined;
+    console.error("api/me proxy failed", { message });
     return NextResponse.json(
-      { message: "Failed to fetch claims from API" },
+      { message: "Upstream API error" },
       { status: 502 },
     );
   }
