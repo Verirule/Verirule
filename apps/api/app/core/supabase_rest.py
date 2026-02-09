@@ -147,3 +147,186 @@ async def rpc_toggle_source(access_token: str, payload: dict[str, Any]) -> None:
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to toggle source in Supabase.",
         ) from exc
+
+
+def _validated_list_payload(payload: Any, error_message: str) -> list[dict[str, Any]]:
+    if not isinstance(payload, list):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=error_message,
+        )
+
+    for item in payload:
+        if not isinstance(item, dict):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=error_message,
+            )
+
+    return payload
+
+
+async def select_monitor_runs(access_token: str, org_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/monitor_runs"
+    params = {
+        "select": "id,org_id,source_id,status,started_at,finished_at,error,created_at",
+        "org_id": f"eq.{org_id}",
+        "order": "created_at.desc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch monitor runs from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid monitor runs response from Supabase.")
+
+
+async def select_findings(access_token: str, org_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/findings"
+    params = {
+        "select": "id,org_id,source_id,run_id,title,summary,severity,detected_at,fingerprint,raw_url,raw_hash",
+        "org_id": f"eq.{org_id}",
+        "order": "detected_at.desc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch findings from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid findings response from Supabase.")
+
+
+async def select_alerts(access_token: str, org_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/alerts"
+    params = {
+        "select": "id,org_id,finding_id,status,owner_user_id,created_at,resolved_at",
+        "org_id": f"eq.{org_id}",
+        "order": "created_at.desc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch alerts from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid alerts response from Supabase.")
+
+
+async def select_audit_log(access_token: str, org_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/audit_log"
+    params = {
+        "select": "id,org_id,actor_user_id,action,entity_type,entity_id,metadata,created_at",
+        "org_id": f"eq.{org_id}",
+        "order": "created_at.desc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch audit log from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid audit log response from Supabase.")
+
+
+async def rpc_create_monitor_run(access_token: str, payload: dict[str, Any]) -> str:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/create_monitor_run"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create monitor run in Supabase.",
+        ) from exc
+
+    response_payload = response.json()
+    if not isinstance(response_payload, str):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid create monitor run response from Supabase.",
+        )
+
+    return response_payload
+
+
+async def rpc_upsert_finding(access_token: str, payload: dict[str, Any]) -> str:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/upsert_finding"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to upsert finding in Supabase.",
+        ) from exc
+
+    response_payload = response.json()
+    if not isinstance(response_payload, str):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid upsert finding response from Supabase.",
+        )
+
+    return response_payload
+
+
+async def rpc_set_alert_status(access_token: str, payload: dict[str, Any]) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/set_alert_status"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update alert in Supabase.",
+        ) from exc
+
+
+async def rpc_append_audit(access_token: str, payload: dict[str, Any]) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/append_audit"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to write audit event in Supabase.",
+        ) from exc
