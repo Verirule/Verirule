@@ -1,4 +1,8 @@
+import os
+
 from fastapi.testclient import TestClient
+
+os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 
 from app.main import app
 

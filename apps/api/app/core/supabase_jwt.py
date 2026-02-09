@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from typing import Any
 
 import jwt
 from fastapi import Header, HTTPException, status
@@ -27,12 +27,9 @@ def _extract_bearer_token(authorization: str | None) -> str:
     return token.strip()
 
 
-def verify_supabase_jwt(authorization: str | None = Header(default=None)) -> dict[str, object]:
-    token = _extract_bearer_token(authorization)
+def verify_bearer_token(auth_header: str) -> dict[str, Any]:
+    token = _extract_bearer_token(auth_header)
     settings = get_settings()
-
-    if not settings.SUPABASE_URL or not settings.SUPABASE_ISSUER or not settings.SUPABASE_JWKS_URL:
-        raise _unauthorized()
 
     try:
         signing_key = PyJWKClient(settings.SUPABASE_JWKS_URL).get_signing_key_from_jwt(token).key
@@ -41,11 +38,16 @@ def verify_supabase_jwt(authorization: str | None = Header(default=None)) -> dic
             signing_key,
             algorithms=["RS256", "ES256"],
             issuer=settings.SUPABASE_ISSUER,
+            options={"verify_aud": False},
         )
-        if not isinstance(decoded, Mapping):
+        if not isinstance(decoded, dict):
             raise _unauthorized()
-        return dict(decoded)
+        return decoded
     except HTTPException:
         raise
     except (InvalidTokenError, PyJWKClientError, ValueError):
         raise _unauthorized() from None
+
+
+def verify_supabase_jwt(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    return verify_bearer_token(authorization or "")
