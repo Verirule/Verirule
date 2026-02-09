@@ -1,10 +1,7 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-
-import { apiFetch } from "../../lib/api";
 
 type ClaimsResponse = Record<string, unknown>;
 
@@ -16,17 +13,27 @@ export default function ProtectedPage() {
 
   useEffect(() => {
     const loadClaims = async () => {
-      const supabase = createClient();
-      const { data, error: sessionError } = await supabase.auth.getSession();
-
-      if (sessionError || !data.session?.access_token) {
-        router.push("/auth/login");
-        return;
-      }
-
       try {
-        const response = await apiFetch("/api/v1/me", data.session.access_token);
-        setClaims(response as ClaimsResponse);
+        const response = await fetch("/api/me", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        const body = (await response.json().catch(() => ({}))) as {
+          message?: string;
+        } & ClaimsResponse;
+
+        if (response.status === 401) {
+          router.push("/auth/login");
+          return;
+        }
+
+        if (!response.ok) {
+          setError(body.message ?? "Failed to fetch claims from backend");
+          return;
+        }
+
+        setClaims(body as ClaimsResponse);
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -44,8 +51,9 @@ export default function ProtectedPage() {
   return (
     <div className="flex-1 w-full flex flex-col gap-8">
       <div className="bg-accent text-sm p-3 px-5 rounded-md text-foreground">
-        Authenticated dashboard. Claims below are returned from the FastAPI endpoint
-        <code className="ml-1">GET /api/v1/me</code>.
+        Authenticated dashboard. Claims below are returned by the server-side
+        proxy endpoint
+        <code className="ml-1">GET /api/me</code>.
       </div>
       <div className="flex flex-col gap-2">
         <h2 className="font-bold text-2xl">Backend claims</h2>
