@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type OrgRecord = {
@@ -194,7 +195,10 @@ export default function DashboardAlertsPage() {
       }
 
       if (!response.ok) {
-        setError("Unable to update alert right now.");
+        const body = (await response.json().catch(() => ({}))) as { message?: unknown };
+        setError(
+          typeof body.message === "string" ? body.message : "Unable to update alert right now.",
+        );
         return;
       }
 
@@ -305,6 +309,11 @@ export default function DashboardAlertsPage() {
                           onClick={() => updateAlert(alert.id, "resolved")}
                         >
                           {updatingAlertId === alert.id ? "Saving..." : "Resolve"}
+                        </Button>
+                        <Button asChild type="button" variant="ghost" size="sm">
+                          <Link href={`/dashboard/alerts/${alert.id}?org_id=${encodeURIComponent(alert.org_id)}`}>
+                            Details
+                          </Link>
                         </Button>
                       </div>
                     </div>

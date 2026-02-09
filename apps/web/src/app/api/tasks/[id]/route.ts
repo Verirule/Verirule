@@ -26,7 +26,7 @@ function upstreamHeaders(accessToken: string): HeadersInit {
 
 function logProxyError(error: unknown): void {
   const message = error instanceof Error ? error.message : undefined;
-  console.error("api/alerts/[id] proxy failed", { message });
+  console.error("api/tasks/[id] proxy failed", { message });
 }
 
 export async function PATCH(
@@ -44,42 +44,47 @@ export async function PATCH(
   }
 
   const { id } = await context.params;
-  const alertId = id?.trim() ?? "";
-  if (!alertId) {
-    return NextResponse.json({ message: "Invalid alert id" }, { status: 400 });
+  const taskId = id?.trim() ?? "";
+  if (!taskId) {
+    return NextResponse.json({ message: "Invalid task id" }, { status: 400 });
   }
 
-  const payload = (await request.json().catch(() => null)) as { status?: unknown } | null;
+  const payload = (await request.json().catch(() => null)) as {
+    status?: unknown;
+    assignee_user_id?: unknown;
+  } | null;
   const status =
-    payload?.status === "acknowledged" || payload?.status === "resolved" ? payload.status : null;
+    payload?.status === "open" ||
+    payload?.status === "in_progress" ||
+    payload?.status === "resolved" ||
+    payload?.status === "blocked"
+      ? payload.status
+      : undefined;
+  const assigneeUserId =
+    typeof payload?.assignee_user_id === "string" ? payload.assignee_user_id.trim() : undefined;
 
-  if (!status) {
-    return NextResponse.json({ message: "Invalid alert payload" }, { status: 400 });
+  if (!status && !assigneeUserId) {
+    return NextResponse.json({ message: "Invalid task update payload" }, { status: 400 });
   }
 
   try {
-    const upstreamResponse = await fetch(`${apiBaseUrl}/api/v1/alerts/${encodeURIComponent(alertId)}`, {
+    const upstreamResponse = await fetch(`${apiBaseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`, {
       method: "PATCH",
       headers: upstreamHeaders(accessToken),
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({
+        status,
+        assignee_user_id: assigneeUserId,
+      }),
       cache: "no-store",
     });
 
     if (!upstreamResponse.ok) {
-      console.error("api/alerts/[id] proxy failed", {
+      console.error("api/tasks/[id] proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
-      const upstreamBody = (await upstreamResponse.json().catch(() => ({}))) as {
-        detail?: unknown;
-      };
-      if (upstreamResponse.status >= 400 && upstreamResponse.status < 500) {
-        const detail =
-          typeof upstreamBody.detail === "string"
-            ? upstreamBody.detail
-            : "Request rejected by API";
-        return NextResponse.json({ message: detail }, { status: upstreamResponse.status });
-      }
-      return NextResponse.json({ message: "Upstream API error" }, { status: 502 });
+      const body = (await upstreamResponse.json().catch(() => ({}))) as { detail?: unknown };
+      const detail = typeof body.detail === "string" ? body.detail : "Upstream API error";
+      return NextResponse.json({ message: detail }, { status: upstreamResponse.status });
     }
 
     const body = (await upstreamResponse.json().catch(() => ({}))) as unknown;
