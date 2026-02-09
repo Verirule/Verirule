@@ -1,3 +1,4 @@
+import { DashboardAuthGate } from "@/src/components/dashboard/DashboardAuthGate";
 import { DashboardShell } from "@/src/components/dashboard/DashboardShell";
 import { Suspense } from "react";
 
@@ -9,7 +10,7 @@ export default function DashboardLayout({
   return (
     <DashboardShell>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading dashboard...</p>}>
-        {children}
+        <DashboardAuthGate>{children}</DashboardAuthGate>
       </Suspense>
     </DashboardShell>
   );
