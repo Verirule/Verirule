@@ -24,8 +24,22 @@ type SourceRecord = {
   created_at: string;
 };
 
+type MonitorRunStatus = "queued" | "running" | "succeeded" | "failed";
+
+type MonitorRunRecord = {
+  id: string;
+  org_id: string;
+  source_id: string;
+  status: MonitorRunStatus;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string | null;
+  created_at: string;
+};
+
 type OrgsResponse = { orgs: OrgRecord[] };
 type SourcesResponse = { sources: SourceRecord[] };
+type RunsResponse = { runs: MonitorRunRecord[] };
 
 function formatCreatedAt(value: string): string {
   const parsed = new Date(value);
@@ -43,6 +57,7 @@ export default function DashboardSourcesPage() {
   const [orgs, setOrgs] = useState<OrgRecord[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState("");
   const [sources, setSources] = useState<SourceRecord[]>([]);
+  const [runs, setRuns] = useState<MonitorRunRecord[]>([]);
 
   const [name, setName] = useState("");
   const [type, setType] = useState<SourceType>("rss");
@@ -56,6 +71,15 @@ export default function DashboardSourcesPage() {
 
   const trimmedName = useMemo(() => name.trim(), [name]);
   const trimmedUrl = useMemo(() => normalizeUrl(url), [url]);
+  const latestRunBySource = useMemo(() => {
+    const map = new Map<string, MonitorRunRecord>();
+    for (const run of runs) {
+      if (!map.has(run.source_id)) {
+        map.set(run.source_id, run);
+      }
+    }
+    return map;
+  }, [runs]);
 
   const loadOrgs = async () => {
     setIsLoadingOrgs(true);
@@ -94,9 +118,10 @@ export default function DashboardSourcesPage() {
     }
   };
 
-  const loadSources = async (orgId: string) => {
+  const loadSourcesAndRuns = async (orgId: string) => {
     if (!orgId) {
       setSources([]);
+      setRuns([]);
       return;
     }
 
@@ -104,28 +129,45 @@ export default function DashboardSourcesPage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/sources?org_id=${encodeURIComponent(orgId)}`, {
-        method: "GET",
-        cache: "no-store",
-      });
-      const body = (await response.json().catch(() => ({}))) as Partial<SourcesResponse>;
+      const [sourcesResponse, runsResponse] = await Promise.all([
+        fetch(`/api/sources?org_id=${encodeURIComponent(orgId)}`, {
+          method: "GET",
+          cache: "no-store",
+        }),
+        fetch(`/api/monitor-runs?org_id=${encodeURIComponent(orgId)}`, {
+          method: "GET",
+          cache: "no-store",
+        }),
+      ]);
+      const sourcesBody = (await sourcesResponse.json().catch(() => ({}))) as Partial<SourcesResponse>;
+      const runsBody = (await runsResponse.json().catch(() => ({}))) as Partial<RunsResponse>;
 
-      if (response.status === 401) {
+      if (sourcesResponse.status === 401 || runsResponse.status === 401) {
         window.location.href = "/auth/login";
         return;
       }
 
-      if (!response.ok || !Array.isArray(body.sources)) {
+      if (!sourcesResponse.ok || !Array.isArray(sourcesBody.sources)) {
         setError("Unable to load sources right now.");
         setSources([]);
+        setRuns([]);
         return;
       }
 
-      const sourceRows = body.sources;
+      if (!runsResponse.ok || !Array.isArray(runsBody.runs)) {
+        setError("Unable to load monitor runs right now.");
+        setRuns([]);
+        setSources(sourcesBody.sources);
+        return;
+      }
+
+      const sourceRows = sourcesBody.sources;
       setSources(sourceRows);
+      setRuns(runsBody.runs);
     } catch {
       setError("Unable to load sources right now.");
       setSources([]);
+      setRuns([]);
     } finally {
       setIsLoadingSources(false);
     }
@@ -138,9 +180,10 @@ export default function DashboardSourcesPage() {
   useEffect(() => {
     if (!selectedOrgId) {
       setSources([]);
+      setRuns([]);
       return;
     }
-    void loadSources(selectedOrgId);
+    void loadSourcesAndRuns(selectedOrgId);
   }, [selectedOrgId]);
 
   const createSource = async (event: FormEvent<HTMLFormElement>) => {
@@ -186,7 +229,7 @@ export default function DashboardSourcesPage() {
       setName("");
       setType("rss");
       setUrl("");
-      await loadSources(selectedOrgId);
+      await loadSourcesAndRuns(selectedOrgId);
     } catch {
       setError("Unable to create source right now.");
     } finally {
@@ -301,6 +344,9 @@ export default function DashboardSourcesPage() {
                       </a>
                       <div className="text-xs text-muted-foreground">
                         Added {formatCreatedAt(source.created_at)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Last run: {latestRunBySource.get(source.id)?.status ?? "never"}
                       </div>
                     </div>
                     <Button

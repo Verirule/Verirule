@@ -3,7 +3,7 @@
 import { LogoutButton } from "@/components/logout-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Bell, LayoutDashboard, Menu, RadioTower, Settings, X } from "lucide-react";
+import { Bell, ClipboardList, LayoutDashboard, Menu, RadioTower, Settings, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -13,6 +13,7 @@ const navigationLinks = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/sources", label: "Sources", icon: RadioTower },
   { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
+  { href: "/dashboard/audit", label: "Audit", icon: ClipboardList },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
