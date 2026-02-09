@@ -59,10 +59,20 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
   * {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background-color: hsl(var(--background));
+    background-image: radial-gradient(
+        1200px 600px at 10% -10%,
+        hsl(var(--secondary) / 0.45),
+        transparent 60%
+      ),
+      radial-gradient(800px 500px at 100% 0%, hsl(var(--accent) / 0.4), transparent 55%);
   }
 }
