@@ -20,6 +20,8 @@
 - Multi-tenancy via `orgs` + `org_members`.
 - RLS enforced at DB level.
 - API will use JWT user id for reads.
+- Org creation uses `create_org` RPC so org + owner membership are created atomically.
+- This ensures the initial membership row exists under RLS constraints.
 
 ## Monitoring Pipeline
 - `sources -> fetch -> normalize -> diff -> store -> notify`
