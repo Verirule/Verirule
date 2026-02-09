@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 import jwt
@@ -6,6 +7,12 @@ from jwt import PyJWKClient
 from jwt.exceptions import InvalidTokenError, PyJWKClientError
 
 from app.core.settings import get_settings
+
+
+@dataclass(frozen=True)
+class VerifiedSupabaseAuth:
+    access_token: str
+    claims: dict[str, Any]
 
 
 def _unauthorized() -> HTTPException:
@@ -27,8 +34,7 @@ def _extract_bearer_token(authorization: str | None) -> str:
     return token.strip()
 
 
-def verify_bearer_token(auth_header: str) -> dict[str, Any]:
-    token = _extract_bearer_token(auth_header)
+def _decode_supabase_token(token: str) -> dict[str, Any]:
     settings = get_settings()
 
     try:
@@ -49,5 +55,15 @@ def verify_bearer_token(auth_header: str) -> dict[str, Any]:
         raise _unauthorized() from None
 
 
+def verify_bearer_token(auth_header: str) -> dict[str, Any]:
+    token = _extract_bearer_token(auth_header)
+    return _decode_supabase_token(token)
+
+
 def verify_supabase_jwt(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     return verify_bearer_token(authorization or "")
+
+
+def verify_supabase_auth(authorization: str | None = Header(default=None)) -> VerifiedSupabaseAuth:
+    token = _extract_bearer_token(authorization)
+    return VerifiedSupabaseAuth(access_token=token, claims=_decode_supabase_token(token))

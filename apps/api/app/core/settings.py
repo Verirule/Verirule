@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     API_PORT: int = 8000
     API_CORS_ORIGINS: str = "http://localhost:3000"
     SUPABASE_URL: str
+    SUPABASE_ANON_KEY: str
     SUPABASE_ISSUER: str | None = None
     SUPABASE_JWKS_URL: str | None = None
 
@@ -19,6 +20,8 @@ class Settings(BaseSettings):
     def apply_supabase_defaults(self) -> "Settings":
         if not self.SUPABASE_URL.strip():
             raise ValueError("SUPABASE_URL must be configured")
+        if not self.SUPABASE_ANON_KEY.strip():
+            raise ValueError("SUPABASE_ANON_KEY must be configured")
 
         if not self.SUPABASE_ISSUER:
             self.SUPABASE_ISSUER = f"{self.SUPABASE_URL.rstrip('/')}/auth/v1"

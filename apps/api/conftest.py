@@ -1,5 +1,10 @@
+import os
 import sys
 from pathlib import Path
+
+# Default env for app settings in tests.
+os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
+os.environ.setdefault("SUPABASE_ANON_KEY", "test-anon-key")
 
 # Ensure "apps/api" is on sys.path so imports like "from app.main import app" work in CI.
 API_ROOT = Path(__file__).resolve().parent
