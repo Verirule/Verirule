@@ -16,6 +16,11 @@
 - Data access is scoped to org context for all queries and write operations.
 - Membership roles control capabilities (admin, analyst, viewer, etc.).
 
+## DB Multi-Tenancy Foundation
+- Multi-tenancy is implemented with `orgs` + `org_members`.
+- Row Level Security (RLS) is enforced at the database level for tenant isolation.
+- API reads use JWT user identity (`auth.uid()`) to scope access through membership.
+
 ## Monitoring Pipeline
 - `sources -> fetch -> normalize -> diff -> store -> notify`
 - Fetchers collect raw updates from configured sources.
