@@ -10,16 +10,15 @@
     "build:web": "npm --workspace apps/web run build",
     "lint:web": "npm --workspace apps/web run lint",
     "test:web": "npm --workspace apps/web run test --if-present",
-
     "dev:api": "powershell -ExecutionPolicy Bypass -File scripts/dev-api.ps1",
     "test:api": "powershell -ExecutionPolicy Bypass -File scripts/test-api.ps1",
     "lint:api": "powershell -ExecutionPolicy Bypass -File scripts/lint-api.ps1",
-
     "dev": "npm-run-all -p dev:web dev:api",
     "lint": "npm-run-all -p lint:web lint:api",
     "test": "npm-run-all -p test:web test:api"
   },
   "devDependencies": {
-    "npm-run-all": "^4.1.5"
+    "npm-run-all": "^4.1.5",
+    "supabase": "^2.76.4"
   }
 }
