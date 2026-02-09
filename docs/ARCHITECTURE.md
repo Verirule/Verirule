@@ -17,9 +17,9 @@
 - Membership roles control capabilities (admin, analyst, viewer, etc.).
 
 ## DB Multi-Tenancy Foundation
-- Multi-tenancy is implemented with `orgs` + `org_members`.
-- Row Level Security (RLS) is enforced at the database level for tenant isolation.
-- API reads use JWT user identity (`auth.uid()`) to scope access through membership.
+- Multi-tenancy is implemented via `orgs` + `org_members`.
+- RLS is enforced at the database level for tenant isolation.
+- API will use JWT user id for reads (`auth.uid()`).
 
 ## Monitoring Pipeline
 - `sources -> fetch -> normalize -> diff -> store -> notify`
