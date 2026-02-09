@@ -15,7 +15,10 @@ export function Footer() {
             X
           </a>
         </div>
-        <p>Licensed under MIT. Copyright 2026 Verirule.</p>
+        <div className="text-right">
+          <p>License: GNU AGPLv3</p>
+          <p>Copyright 2026 Verirule.</p>
+        </div>
       </div>
     </footer>
   );
