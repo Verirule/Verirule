@@ -5,6 +5,10 @@
 - Commit only `.env.example` templates.
 - Never hardcode API keys, service-role credentials, or signing secrets in source.
 
+## Web Environment Guardrail
+- Never set `POSTGRES_URL`, `DATABASE_URL`, or any DB credentials in the web (`apps/web`) environment.
+- Only use public Supabase URL + publishable/anon keys in web.
+
 ## Authentication and Token Verification
 - Frontend may hold Supabase session state, but backend must never trust session cookies directly.
 - Backend verifies Supabase JWTs with Supabase JWKS (issuer, audience, signature, expiry checks).

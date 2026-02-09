@@ -21,6 +21,9 @@ export function getPublicSupabaseEnv() {
   if (url && url.includes('"')) {
     problems.push("Supabase URL contains quotes. Remove quotes in Vercel env vars.");
   }
+  if (process.env.POSTGRES_URL || process.env.DATABASE_URL) {
+    problems.push("DB credentials must not be set in web env vars");
+  }
 
   return { url, key, problems };
 }
