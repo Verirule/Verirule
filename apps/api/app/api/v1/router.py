@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, health, monitoring, orgs, sources, tasks
+from app.api.v1.endpoints import auth, health, integrations, monitoring, orgs, sources, tasks
 
 router = APIRouter()
 router.include_router(health.router)
@@ -9,3 +9,4 @@ router.include_router(orgs.router)
 router.include_router(sources.router)
 router.include_router(monitoring.router)
 router.include_router(tasks.router)
+router.include_router(integrations.router)

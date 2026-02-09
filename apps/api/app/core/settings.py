@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     API_CORS_ORIGINS: str = "http://localhost:3000"
     REQUIRE_ALERT_EVIDENCE_FOR_RESOLVE: bool = True
     ALERT_RESOLVE_MIN_EVIDENCE: int = 1
+    SLACK_ALERT_NOTIFICATIONS_ENABLED: bool = True
+    INTEGRATIONS_ENCRYPTION_KEY: str | None = None
     SUPABASE_URL: str
     SUPABASE_ANON_KEY: str
     SUPABASE_ISSUER: str | None = None

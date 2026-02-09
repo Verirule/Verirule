@@ -531,3 +531,102 @@ async def rpc_add_task_evidence(access_token: str, payload: dict[str, Any]) -> s
         )
 
     return response_payload
+
+
+async def select_integrations(access_token: str, org_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/integrations"
+    params = {
+        "select": "id,org_id,type,status,config,created_at,updated_at",
+        "org_id": f"eq.{org_id}",
+        "order": "type.asc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch integrations from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid integrations response from Supabase.")
+
+
+async def select_integration(access_token: str, org_id: str, integration_type: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/integrations"
+    params = {
+        "select": "id,org_id,type,status,config,created_at,updated_at",
+        "org_id": f"eq.{org_id}",
+        "type": f"eq.{integration_type}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch integration from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid integration response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def rpc_upsert_integration(access_token: str, payload: dict[str, Any]) -> str:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/upsert_integration"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to upsert integration in Supabase.",
+        ) from exc
+
+    response_payload = response.json()
+    if not isinstance(response_payload, str):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid upsert integration response from Supabase.",
+        )
+
+    return response_payload
+
+
+async def rpc_upsert_alert_for_finding(access_token: str, payload: dict[str, Any]) -> dict[str, Any]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/upsert_alert_for_finding"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to upsert alert in Supabase.",
+        ) from exc
+
+    response_payload = response.json()
+    if not isinstance(response_payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid upsert alert response from Supabase.",
+        )
+    if not isinstance(response_payload.get("id"), str) or not isinstance(response_payload.get("created"), bool):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid upsert alert response from Supabase.",
+        )
+
+    return response_payload

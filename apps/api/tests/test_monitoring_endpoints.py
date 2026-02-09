@@ -427,6 +427,7 @@ def test_monitor_run_creates_run_and_upserts_findings(monkeypatch) -> None:
             self.kwargs = kwargs
             self.create_run_called = False
             self.upsert_called = False
+            self.upsert_alert_called = False
             self.audit_called = False
 
         async def __aenter__(self):
@@ -459,6 +460,11 @@ def test_monitor_run_creates_run_and_upserts_findings(monkeypatch) -> None:
                 }
                 return FakeResponse(FINDING_ID)
 
+            if url.endswith("/rpc/upsert_alert_for_finding"):
+                self.upsert_alert_called = True
+                assert json == {"p_org_id": ORG_ID, "p_finding_id": FINDING_ID}
+                return FakeResponse({"id": ALERT_ID, "created": True})
+
             if url.endswith("/rpc/append_audit"):
                 self.audit_called = True
                 assert json == {
@@ -474,6 +480,16 @@ def test_monitor_run_creates_run_and_upserts_findings(monkeypatch) -> None:
 
         async def get(self, *args, **kwargs):  # pragma: no cover
             raise AssertionError("GET should not be called in monitor run test")
+
+    monkeypatch.setattr(
+        monitoring_endpoint,
+        "get_settings",
+        lambda: SimpleNamespace(
+            REQUIRE_ALERT_EVIDENCE_FOR_RESOLVE=True,
+            ALERT_RESOLVE_MIN_EVIDENCE=1,
+            SLACK_ALERT_NOTIFICATIONS_ENABLED=False,
+        ),
+    )
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123", claims={"sub": USER_ID}
@@ -503,4 +519,4 @@ def test_monitor_run_creates_run_and_upserts_findings(monkeypatch) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {"id": RUN_ID, "findings": [FINDING_ID]}
+    assert response.json() == {"id": RUN_ID, "findings": [FINDING_ID], "alerts": [ALERT_ID]}
