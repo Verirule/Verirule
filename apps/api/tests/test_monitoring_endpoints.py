@@ -410,7 +410,7 @@ def test_monitor_runs_returns_list_when_supabase_ok(monkeypatch) -> None:
     }
 
 
-def test_monitor_run_creates_run_and_upserts_findings(monkeypatch) -> None:
+def test_monitor_run_queues_only(monkeypatch) -> None:
     class FakeResponse:
         def __init__(self, payload=None):
             self._payload = payload
@@ -426,8 +426,6 @@ def test_monitor_run_creates_run_and_upserts_findings(monkeypatch) -> None:
             self.args = args
             self.kwargs = kwargs
             self.create_run_called = False
-            self.upsert_called = False
-            self.upsert_alert_called = False
             self.audit_called = False
 
         async def __aenter__(self):
@@ -445,26 +443,6 @@ def test_monitor_run_creates_run_and_upserts_findings(monkeypatch) -> None:
                 assert json == {"p_org_id": ORG_ID, "p_source_id": SOURCE_ID}
                 return FakeResponse(RUN_ID)
 
-            if url.endswith("/rpc/upsert_finding"):
-                self.upsert_called = True
-                assert json == {
-                    "p_org_id": ORG_ID,
-                    "p_source_id": SOURCE_ID,
-                    "p_run_id": RUN_ID,
-                    "p_title": "TLS cert changed",
-                    "p_summary": "Certificate rotated outside maintenance window.",
-                    "p_severity": "high",
-                    "p_fingerprint": "sha256:abc",
-                    "p_raw_url": "https://example.com",
-                    "p_raw_hash": "abc123",
-                }
-                return FakeResponse(FINDING_ID)
-
-            if url.endswith("/rpc/upsert_alert_for_finding"):
-                self.upsert_alert_called = True
-                assert json == {"p_org_id": ORG_ID, "p_finding_id": FINDING_ID}
-                return FakeResponse({"id": ALERT_ID, "created": True})
-
             if url.endswith("/rpc/append_audit"):
                 self.audit_called = True
                 assert json == {
@@ -472,7 +450,7 @@ def test_monitor_run_creates_run_and_upserts_findings(monkeypatch) -> None:
                     "p_action": "monitor_run_queued",
                     "p_entity_type": "monitor_run",
                     "p_entity_id": RUN_ID,
-                    "p_metadata": {"source_id": SOURCE_ID, "findings_count": 1},
+                    "p_metadata": {"source_id": SOURCE_ID},
                 }
                 return FakeResponse()
 
@@ -487,7 +465,6 @@ def test_monitor_run_creates_run_and_upserts_findings(monkeypatch) -> None:
         lambda: SimpleNamespace(
             REQUIRE_ALERT_EVIDENCE_FOR_RESOLVE=True,
             ALERT_RESOLVE_MIN_EVIDENCE=1,
-            SLACK_ALERT_NOTIFICATIONS_ENABLED=False,
         ),
     )
 
@@ -503,20 +480,10 @@ def test_monitor_run_creates_run_and_upserts_findings(monkeypatch) -> None:
             json={
                 "org_id": ORG_ID,
                 "source_id": SOURCE_ID,
-                "findings": [
-                    {
-                        "title": "TLS cert changed",
-                        "summary": "Certificate rotated outside maintenance window.",
-                        "severity": "high",
-                        "fingerprint": "sha256:abc",
-                        "raw_url": "https://example.com",
-                        "raw_hash": "abc123",
-                    }
-                ],
             },
         )
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {"id": RUN_ID, "findings": [FINDING_ID], "alerts": [ALERT_ID]}
+    assert response.json() == {"id": RUN_ID, "status": "queued"}

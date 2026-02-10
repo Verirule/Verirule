@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class MonitorRunOut(BaseModel):
@@ -55,16 +55,11 @@ class AuditOut(BaseModel):
     created_at: datetime
 
 
-class MonitorRunFindingIn(BaseModel):
-    title: str = Field(min_length=1, max_length=300)
-    summary: str = Field(min_length=1, max_length=4000)
-    severity: Literal["low", "medium", "high", "critical"]
-    fingerprint: str = Field(min_length=1, max_length=300)
-    raw_url: str | None = Field(default=None, max_length=2048)
-    raw_hash: str | None = Field(default=None, max_length=256)
-
-
 class MonitorRunCreateIn(BaseModel):
     org_id: UUID
     source_id: UUID
-    findings: list[MonitorRunFindingIn] = Field(default_factory=list)
+
+
+class MonitorRunQueuedOut(BaseModel):
+    id: UUID
+    status: Literal["queued"]

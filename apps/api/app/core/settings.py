@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(case_sensitive=True, extra="ignore")
 
     VERIRULE_ENV: str = "development"
+    VERIRULE_MODE: str = "api"
     API_HOST: str = "127.0.0.1"
     API_PORT: int = 8000
     API_CORS_ORIGINS: str = "http://localhost:3000"
@@ -19,6 +20,11 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str
     SUPABASE_ISSUER: str | None = None
     SUPABASE_JWKS_URL: str | None = None
+    WORKER_SUPABASE_ACCESS_TOKEN: str | None = None
+    WORKER_POLL_INTERVAL_SECONDS: int = 5
+    WORKER_BATCH_LIMIT: int = 5
+    WORKER_FETCH_TIMEOUT_SECONDS: float = 10.0
+    WORKER_FETCH_MAX_BYTES: int = 1_000_000
 
     @model_validator(mode="after")
     def apply_supabase_defaults(self) -> "Settings":
