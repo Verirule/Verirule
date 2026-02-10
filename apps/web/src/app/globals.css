@@ -7,6 +7,8 @@
     --vr-bg: 255 255 255;
     --vr-fg: 15 23 42;
     --vr-card: 248 250 252;
+    --vr-user-accent: #38BDF8;
+    --vr-user-accent-foreground: #082F49;
     --background: 0 0% 100%;
     --foreground: 0 0% 3.9%;
     --card: 0 0% 100%;
@@ -37,6 +39,8 @@
     --vr-bg: 15 23 42;
     --vr-fg: 248 250 252;
     --vr-card: 17 24 39;
+    --vr-user-accent: #38BDF8;
+    --vr-user-accent-foreground: #082F49;
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
     --card: 0 0% 3.9%;

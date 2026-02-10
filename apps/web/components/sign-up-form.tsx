@@ -2,20 +2,19 @@
 
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  validateEmailAddress,
+  validatePasswordConfirmation,
+  validatePasswordValue,
+} from "@/lib/auth-validation";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OAuthButtons } from "@/src/components/auth/OAuthButtons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export function SignUpForm({
   className,
@@ -24,30 +23,38 @@ export function SignUpForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [repeatPasswordTouched, setRepeatPasswordTouched] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const submitDisabled = loading;
+
+  const trimmedEmail = useMemo(() => email.trim(), [email]);
+  const rawEmailError = useMemo(() => validateEmailAddress(trimmedEmail), [trimmedEmail]);
+  const rawPasswordError = useMemo(() => validatePasswordValue(password), [password]);
+  const rawRepeatPasswordError = useMemo(
+    () => validatePasswordConfirmation(password, repeatPassword),
+    [password, repeatPassword],
+  );
+
+  const emailError = emailTouched || submitAttempted ? rawEmailError : null;
+  const passwordError = passwordTouched || submitAttempted ? rawPasswordError : null;
+  const repeatPasswordError = repeatPasswordTouched || submitAttempted ? rawRepeatPasswordError : null;
+  const submitDisabled = loading || Boolean(rawEmailError || rawPasswordError || rawRepeatPasswordError);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setMessage(null);
-    const trimmedEmail = email.trim();
+    setSubmitAttempted(true);
+    setEmailTouched(true);
+    setPasswordTouched(true);
+    setRepeatPasswordTouched(true);
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setError("Enter a valid email address.");
-      return;
-    }
-
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-
-    if (password !== repeatPassword) {
-      setError("Passwords do not match");
+    if (rawEmailError || rawPasswordError || rawRepeatPasswordError) {
       return;
     }
 
@@ -74,16 +81,18 @@ export function SignUpForm({
       }
 
       setMessage("Check your email to confirm your account. Once confirmed, you can log in.");
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+    } catch (signUpError: unknown) {
+      setError(signUpError instanceof Error ? signUpError.message : "Unable to create your account.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleResendConfirmation = async () => {
-    if (!email.trim()) {
-      setError("Enter your email address first.");
+    const resendEmailError = validateEmailAddress(trimmedEmail);
+    if (resendEmailError) {
+      setError(resendEmailError);
+      setEmailTouched(true);
       return;
     }
 
@@ -94,7 +103,7 @@ export function SignUpForm({
     try {
       const { error: resendError } = await supabase.auth.resend({
         type: "signup",
-        email,
+        email: trimmedEmail,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
@@ -118,7 +127,7 @@ export function SignUpForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">Sign up</CardTitle>
-          <CardDescription>Create a new account</CardDescription>
+          <CardDescription>Create your account with email or continue with a provider.</CardDescription>
         </CardHeader>
         <CardContent>
           <OAuthButtons mode="signup" />
@@ -128,44 +137,61 @@ export function SignUpForm({
             <span className="h-px flex-1 bg-border/70" />
           </div>
           <form onSubmit={handleSignUp} noValidate>
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-5">
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
                   placeholder="m@example.com"
+                  autoComplete="email"
                   required
                   value={email}
+                  onBlur={() => setEmailTouched(true)}
                   onChange={(e) => setEmail(e.target.value)}
+                  aria-invalid={Boolean(emailError)}
+                  className={emailError ? "border-red-500 focus-visible:ring-red-500" : undefined}
                 />
+                {emailError ? <p className="text-xs text-red-500">{emailError}</p> : null}
               </div>
+
               <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
-                </div>
+                <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
                   type="password"
+                  autoComplete="new-password"
                   required
                   minLength={8}
                   value={password}
+                  onBlur={() => setPasswordTouched(true)}
                   onChange={(e) => setPassword(e.target.value)}
+                  aria-invalid={Boolean(passwordError)}
+                  className={passwordError ? "border-red-500 focus-visible:ring-red-500" : undefined}
                 />
-                <p className="text-xs text-muted-foreground">Use at least 8 characters.</p>
+                {passwordError ? (
+                  <p className="text-xs text-red-500">{passwordError}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Use at least 8 characters.</p>
+                )}
               </div>
+
               <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="repeat-password">Repeat Password</Label>
-                </div>
+                <Label htmlFor="repeat-password">Repeat Password</Label>
                 <Input
                   id="repeat-password"
                   type="password"
+                  autoComplete="new-password"
                   required
                   value={repeatPassword}
+                  onBlur={() => setRepeatPasswordTouched(true)}
                   onChange={(e) => setRepeatPassword(e.target.value)}
+                  aria-invalid={Boolean(repeatPasswordError)}
+                  className={repeatPasswordError ? "border-red-500 focus-visible:ring-red-500" : undefined}
                 />
+                {repeatPasswordError ? <p className="text-xs text-red-500">{repeatPasswordError}</p> : null}
               </div>
+
               {error ? (
                 <div
                   role="alert"
@@ -174,6 +200,7 @@ export function SignUpForm({
                   {error}
                 </div>
               ) : null}
+
               {message ? (
                 <div
                   aria-live="polite"
@@ -182,15 +209,19 @@ export function SignUpForm({
                   {message}
                 </div>
               ) : null}
-              <Button
-                type="submit"
-                className="relative z-20 w-full pointer-events-auto"
-                disabled={submitDisabled}
-              >
+
+              <Button type="submit" className="relative z-20 w-full pointer-events-auto" disabled={submitDisabled}>
                 {loading ? "Creating account..." : "Sign up"}
               </Button>
-              {message && email.trim() ? (
-                <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={handleResendConfirmation}>
+
+              {message && trimmedEmail ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={loading}
+                  onClick={handleResendConfirmation}
+                >
                   {loading ? "Resending..." : "Resend confirmation email"}
                 </Button>
               ) : null}

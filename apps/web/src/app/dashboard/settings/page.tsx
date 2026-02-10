@@ -1,25 +1,63 @@
 import Link from "next/link";
 
+import { AccentThemePicker } from "@/src/components/theme/AccentThemePicker";
+
 export default function DashboardSettingsPage() {
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
         <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Workspace settings and team preferences.
+          Manage workspace controls, personal preferences, and legal references.
         </p>
       </section>
+
+      <AccentThemePicker />
+
       <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold tracking-tight">Integrations</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Configure outgoing connectors such as Slack for alert routing.
+          Configure outgoing connectors such as Slack and Jira for routing and escalation workflows.
         </p>
         <Link
           href="/dashboard/settings/integrations"
-          className="mt-4 inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-medium"
+          className="mt-4 inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-medium transition-colors hover:bg-accent"
         >
           Open Integrations
         </Link>
+      </section>
+
+      <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
+        <h2 className="text-lg font-semibold tracking-tight">Legal</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Review Verirule legal terms and policies.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link
+            href="/privacy"
+            className="inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-medium transition-colors hover:bg-accent"
+          >
+            Privacy
+          </Link>
+          <Link
+            href="/policy"
+            className="inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-medium transition-colors hover:bg-accent"
+          >
+            Policy
+          </Link>
+          <Link
+            href="/terms"
+            className="inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-medium transition-colors hover:bg-accent"
+          >
+            Terms
+          </Link>
+          <Link
+            href="/service"
+            className="inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-medium transition-colors hover:bg-accent"
+          >
+            Service
+          </Link>
+        </div>
       </section>
     </div>
   );

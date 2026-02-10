@@ -29,6 +29,15 @@ export function Footer() {
             <Link href="/privacy" className="transition-colors hover:text-sky-300">
               Privacy
             </Link>
+            <Link href="/policy" className="transition-colors hover:text-sky-300">
+              Policy
+            </Link>
+            <Link href="/terms" className="transition-colors hover:text-sky-300">
+              Terms
+            </Link>
+            <Link href="/service" className="transition-colors hover:text-sky-300">
+              Service
+            </Link>
             <Link
               href="https://www.gnu.org/licenses/agpl-3.0.en.html"
               target="_blank"

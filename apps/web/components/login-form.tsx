@@ -2,20 +2,15 @@
 
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { validateEmailAddress, validatePasswordValue } from "@/lib/auth-validation";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OAuthButtons } from "@/src/components/auth/OAuthButtons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export function LoginForm({
   className,
@@ -23,23 +18,28 @@ export function LoginForm({
 }: React.ComponentPropsWithoutRef<"div">) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const submitDisabled = loading;
+
+  const trimmedEmail = useMemo(() => email.trim(), [email]);
+  const rawEmailError = useMemo(() => validateEmailAddress(trimmedEmail), [trimmedEmail]);
+  const rawPasswordError = useMemo(() => validatePasswordValue(password), [password]);
+  const emailError = emailTouched || submitAttempted ? rawEmailError : null;
+  const passwordError = passwordTouched || submitAttempted ? rawPasswordError : null;
+  const submitDisabled = loading || Boolean(rawEmailError || rawPasswordError);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    const trimmedEmail = email.trim();
+    setSubmitAttempted(true);
+    setEmailTouched(true);
+    setPasswordTouched(true);
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setError("Enter a valid email address.");
-      return;
-    }
-
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+    if (rawEmailError || rawPasswordError) {
       return;
     }
 
@@ -47,14 +47,18 @@ export function LoginForm({
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error: loginError } = await supabase.auth.signInWithPassword({
         email: trimmedEmail,
         password,
       });
-      if (error) throw error;
+
+      if (loginError) {
+        throw loginError;
+      }
+
       router.push("/dashboard");
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+    } catch (signInError: unknown) {
+      setError(signInError instanceof Error ? signInError.message : "Unable to sign in with email and password.");
     } finally {
       setLoading(false);
     }
@@ -65,9 +69,7 @@ export function LoginForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">Login</CardTitle>
-          <CardDescription>
-            Enter your email below to login to your account
-          </CardDescription>
+          <CardDescription>Sign in with email or continue with an existing provider account.</CardDescription>
         </CardHeader>
         <CardContent>
           <OAuthButtons mode="login" />
@@ -77,18 +79,24 @@ export function LoginForm({
             <span className="h-px flex-1 bg-border/70" />
           </div>
           <form onSubmit={handleLogin} noValidate>
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-5">
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
                   placeholder="m@example.com"
+                  autoComplete="email"
                   required
                   value={email}
+                  onBlur={() => setEmailTouched(true)}
                   onChange={(e) => setEmail(e.target.value)}
+                  aria-invalid={Boolean(emailError)}
+                  className={emailError ? "border-red-500 focus-visible:ring-red-500" : undefined}
                 />
+                {emailError ? <p className="text-xs text-red-500">{emailError}</p> : null}
               </div>
+
               <div className="grid gap-2">
                 <div className="flex items-center">
                   <Label htmlFor="password">Password</Label>
@@ -102,26 +110,30 @@ export function LoginForm({
                 <Input
                   id="password"
                   type="password"
+                  autoComplete="current-password"
                   required
                   value={password}
+                  onBlur={() => setPasswordTouched(true)}
                   onChange={(e) => setPassword(e.target.value)}
+                  aria-invalid={Boolean(passwordError)}
+                  className={passwordError ? "border-red-500 focus-visible:ring-red-500" : undefined}
                 />
+                {passwordError ? <p className="text-xs text-red-500">{passwordError}</p> : null}
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button
-                type="submit"
-                className="relative z-20 w-full pointer-events-auto"
-                disabled={submitDisabled}
-              >
+
+              {error ? (
+                <p role="alert" className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {error}
+                </p>
+              ) : null}
+
+              <Button type="submit" className="relative z-20 w-full pointer-events-auto" disabled={submitDisabled}>
                 {loading ? "Logging in..." : "Login"}
               </Button>
             </div>
             <div className="mt-4 text-center text-sm">
               Don&apos;t have an account?{" "}
-              <Link
-                href="/auth/sign-up"
-                className="underline underline-offset-4"
-              >
+              <Link href="/auth/sign-up" className="underline underline-offset-4">
                 Sign up
               </Link>
             </div>

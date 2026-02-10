@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { AccentThemeManager } from "@/src/components/theme/AccentThemeManager";
 import { ThemeProvider } from "@/src/components/theme/ThemeProvider";
 import "./globals.css";
 
@@ -30,6 +31,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} antialiased`}>
         <ThemeProvider>{children}</ThemeProvider>
+        <AccentThemeManager />
       </body>
     </html>
   );

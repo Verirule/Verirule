@@ -15,6 +15,7 @@ type OAuthButtonsProps = {
 };
 
 const allProviders: OAuthProvider[] = ["google", "apple", "github", "azure"];
+const requiredProviders: OAuthProvider[] = ["google", "apple", "github", "azure"];
 
 const providerLabels: Record<OAuthProvider, string> = {
   google: "Google",
@@ -33,9 +34,9 @@ const providerIcons: Record<OAuthProvider, ComponentType<SVGProps<SVGSVGElement>
 };
 
 export function OAuthButtons({ mode }: OAuthButtonsProps) {
-  void mode;
   const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const missingProviders = requiredProviders.filter((provider) => !providers.includes(provider));
 
   const handleOAuth = async (provider: OAuthProvider) => {
     const supabase = createClient();
@@ -60,14 +61,23 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
     }
   };
 
-  const actionText = "Continue with";
+  const actionText = mode === "signup" ? "Continue with" : "Continue with";
 
   if (providers.length === 0) {
     return null;
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" aria-live="polite">
+      {missingProviders.length > 0 ? (
+        <div
+          role="alert"
+          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          OAuth configuration incomplete. Missing providers:{" "}
+          {missingProviders.map((provider) => providerLabels[provider]).join(", ")}.
+        </div>
+      ) : null}
       {providers.map((provider) => {
         const ProviderIcon = providerIcons[provider];
         return (
