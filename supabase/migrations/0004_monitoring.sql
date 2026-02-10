@@ -26,6 +26,37 @@ using (
   )
 );
 
+-- snapshots: source content observed during a run
+create table if not exists public.snapshots (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.orgs(id) on delete cascade,
+  source_id uuid not null references public.sources(id) on delete cascade,
+  run_id uuid not null references public.monitor_runs(id) on delete cascade,
+  fetched_url text not null,
+  content_hash text not null,
+  content_type text,
+  content_len bigint not null,
+  fetched_at timestamptz not null default now()
+);
+
+create index if not exists snapshots_org_id_idx on public.snapshots(org_id);
+create index if not exists snapshots_source_id_idx on public.snapshots(source_id);
+create index if not exists snapshots_run_id_idx on public.snapshots(run_id);
+create index if not exists snapshots_source_fetched_at_idx on public.snapshots(source_id, fetched_at desc);
+
+alter table public.snapshots enable row level security;
+
+drop policy if exists "snapshots_select_member" on public.snapshots;
+create policy "snapshots_select_member"
+on public.snapshots for select
+using (
+  exists (
+    select 1 from public.org_members m
+    where m.org_id = snapshots.org_id
+      and m.user_id = auth.uid()
+  )
+);
+
 -- findings: normalized "changes"
 create table if not exists public.findings (
   id uuid primary key default gen_random_uuid(),
@@ -134,6 +165,132 @@ $$;
 
 revoke all on function public.append_audit(uuid,text,text,uuid,jsonb) from public;
 grant execute on function public.append_audit(uuid,text,text,uuid,jsonb) to authenticated;
+
+-- RPC: update monitor run state from worker
+create or replace function public.set_monitor_run_state(
+  p_run_id uuid,
+  p_status text,
+  p_error text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_org_id uuid;
+begin
+  if p_status not in ('running', 'succeeded', 'failed') then
+    raise exception 'invalid monitor run status';
+  end if;
+
+  v_user_id := auth.uid();
+  if v_user_id is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select r.org_id into v_org_id
+  from public.monitor_runs r
+  where r.id = p_run_id;
+
+  if v_org_id is null then
+    raise exception 'monitor run not found';
+  end if;
+
+  if not exists (
+    select 1 from public.org_members m
+    where m.org_id = v_org_id and m.user_id = v_user_id
+  ) then
+    raise exception 'not a member of org';
+  end if;
+
+  update public.monitor_runs
+  set
+    status = p_status,
+    started_at = case
+      when p_status = 'running' and started_at is null then now()
+      else started_at
+    end,
+    finished_at = case
+      when p_status in ('succeeded', 'failed') then now()
+      else null
+    end,
+    error = case
+      when p_status = 'failed' then p_error
+      else null
+    end
+  where id = p_run_id;
+end;
+$$;
+
+revoke all on function public.set_monitor_run_state(uuid,text,text) from public;
+grant execute on function public.set_monitor_run_state(uuid,text,text) to authenticated;
+
+-- RPC: insert snapshot from worker
+create or replace function public.insert_snapshot(
+  p_org_id uuid,
+  p_source_id uuid,
+  p_run_id uuid,
+  p_fetched_url text,
+  p_content_hash text,
+  p_content_type text,
+  p_content_len bigint
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_snapshot_id uuid;
+begin
+  v_user_id := auth.uid();
+  if v_user_id is null then
+    raise exception 'not authenticated';
+  end if;
+
+  if not exists (
+    select 1 from public.org_members m
+    where m.org_id = p_org_id and m.user_id = v_user_id
+  ) then
+    raise exception 'not a member of org';
+  end if;
+
+  if not exists (
+    select 1 from public.monitor_runs r
+    where r.id = p_run_id and r.org_id = p_org_id and r.source_id = p_source_id
+  ) then
+    raise exception 'run not found in org/source';
+  end if;
+
+  insert into public.snapshots (
+    org_id,
+    source_id,
+    run_id,
+    fetched_url,
+    content_hash,
+    content_type,
+    content_len
+  )
+  values (
+    p_org_id,
+    p_source_id,
+    p_run_id,
+    p_fetched_url,
+    p_content_hash,
+    p_content_type,
+    p_content_len
+  )
+  returning id into v_snapshot_id;
+
+  return v_snapshot_id;
+end;
+$$;
+
+revoke all on function public.insert_snapshot(uuid,uuid,uuid,text,text,text,bigint) from public;
+grant execute on function public.insert_snapshot(uuid,uuid,uuid,text,text,text,bigint) to authenticated;
 
 -- RPC: queue a monitor run
 create or replace function public.create_monitor_run(p_org_id uuid, p_source_id uuid)
