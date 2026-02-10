@@ -445,7 +445,7 @@ async def select_tasks(access_token: str, org_id: str) -> list[dict[str, Any]]:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/tasks"
     params = {
-        "select": "id,org_id,title,status,assignee_user_id,alert_id,finding_id,due_at,created_by_user_id,created_at",
+        "select": "id,org_id,title,description,status,assignee_user_id,alert_id,finding_id,due_at,created_at,updated_at",
         "org_id": f"eq.{org_id}",
         "order": "created_at.desc",
     }
@@ -461,6 +461,28 @@ async def select_tasks(access_token: str, org_id: str) -> list[dict[str, Any]]:
         ) from exc
 
     return _validated_list_payload(response.json(), "Invalid tasks response from Supabase.")
+
+
+async def select_tasks_for_alert(access_token: str, alert_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/tasks"
+    params = {
+        "select": "id",
+        "alert_id": f"eq.{alert_id}",
+        "order": "created_at.desc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch alert tasks from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid alert tasks response from Supabase.")
 
 
 async def select_task_comments(access_token: str, task_id: str) -> list[dict[str, Any]]:
@@ -489,7 +511,7 @@ async def select_task_evidence(access_token: str, task_id: str) -> list[dict[str
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/task_evidence"
     params = {
-        "select": "id,task_id,type,ref,created_by_user_id,created_at",
+        "select": "id,task_id,type,ref,created_at",
         "task_id": f"eq.{task_id}",
         "order": "created_at.asc",
     }
@@ -505,39 +527,6 @@ async def select_task_evidence(access_token: str, task_id: str) -> list[dict[str
         ) from exc
 
     return _validated_list_payload(response.json(), "Invalid task evidence response from Supabase.")
-
-
-async def count_alert_task_evidence(access_token: str, alert_id: str) -> int:
-    settings = get_settings()
-    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/tasks"
-    params = {
-        "select": "id,task_evidence(id)",
-        "alert_id": f"eq.{alert_id}",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
-            response.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to evaluate alert evidence in Supabase.",
-        ) from exc
-
-    rows = _validated_list_payload(response.json(), "Invalid alert evidence response from Supabase.")
-    evidence_total = 0
-    for row in rows:
-        nested = row.get("task_evidence")
-        if nested is None:
-            continue
-        if not isinstance(nested, list):
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Invalid alert evidence response from Supabase.",
-            )
-        evidence_total += len(nested)
-    return evidence_total
 
 
 async def rpc_create_task(access_token: str, payload: dict[str, Any]) -> str:
@@ -562,21 +551,6 @@ async def rpc_create_task(access_token: str, payload: dict[str, Any]) -> str:
         )
 
     return response_payload
-
-
-async def rpc_assign_task(access_token: str, payload: dict[str, Any]) -> None:
-    settings = get_settings()
-    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/assign_task"
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
-            response.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to assign task in Supabase.",
-        ) from exc
 
 
 async def rpc_set_task_status(access_token: str, payload: dict[str, Any]) -> None:

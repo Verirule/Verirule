@@ -230,17 +230,23 @@ def test_update_alert_calls_rpc(monkeypatch) -> None:
 
 
 def test_update_alert_requires_evidence_when_enabled(monkeypatch) -> None:
-    async def fake_count(access_token: str, alert_id: str) -> int:
+    async def fake_select_tasks_for_alert(access_token: str, alert_id: str) -> list[dict[str, str]]:
         assert access_token == "token-123"
         assert alert_id == ALERT_ID
-        return 0
+        return [{"id": "99999999-9999-9999-9999-999999999999"}]
+
+    async def fake_select_task_evidence(access_token: str, task_id: str) -> list[dict[str, str]]:
+        assert access_token == "token-123"
+        assert task_id == "99999999-9999-9999-9999-999999999999"
+        return []
 
     monkeypatch.setattr(
         monitoring_endpoint,
         "get_settings",
         lambda: SimpleNamespace(REQUIRE_ALERT_EVIDENCE_FOR_RESOLVE=True, ALERT_RESOLVE_MIN_EVIDENCE=1),
     )
-    monkeypatch.setattr(monitoring_endpoint, "count_alert_task_evidence", fake_count)
+    monkeypatch.setattr(monitoring_endpoint, "select_tasks_for_alert", fake_select_tasks_for_alert)
+    monkeypatch.setattr(monitoring_endpoint, "select_task_evidence", fake_select_task_evidence)
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123", claims={"sub": USER_ID}
@@ -253,7 +259,7 @@ def test_update_alert_requires_evidence_when_enabled(monkeypatch) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 400
-    assert "evidence item" in response.json()["detail"]
+    assert response.json()["detail"] == "Add evidence to a remediation task before resolving this alert."
 
 
 def test_audit_returns_list_when_supabase_ok(monkeypatch) -> None:

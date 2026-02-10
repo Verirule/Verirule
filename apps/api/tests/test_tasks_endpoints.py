@@ -1,5 +1,8 @@
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
+from app.api.v1.endpoints import monitoring as monitoring_endpoint
 from app.core import supabase_rest
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.main import app
@@ -8,9 +11,6 @@ ORG_ID = "11111111-1111-1111-1111-111111111111"
 TASK_ID = "22222222-2222-2222-2222-222222222222"
 ALERT_ID = "33333333-3333-3333-3333-333333333333"
 FINDING_ID = "44444444-4444-4444-4444-444444444444"
-ASSIGNEE_ID = "55555555-5555-5555-5555-555555555555"
-COMMENT_ID = "66666666-6666-6666-6666-666666666666"
-EVIDENCE_ID = "77777777-7777-7777-7777-777777777777"
 
 
 def test_tasks_requires_token() -> None:
@@ -44,7 +44,7 @@ def test_tasks_list_returns_rows_when_supabase_ok(monkeypatch) -> None:
         async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
             assert url == "https://example.supabase.co/rest/v1/tasks"
             assert params == {
-                "select": "id,org_id,title,status,assignee_user_id,alert_id,finding_id,due_at,created_by_user_id,created_at",
+                "select": "id,org_id,title,description,status,assignee_user_id,alert_id,finding_id,due_at,created_at,updated_at",
                 "org_id": f"eq.{ORG_ID}",
                 "order": "created_at.desc",
             }
@@ -56,13 +56,14 @@ def test_tasks_list_returns_rows_when_supabase_ok(monkeypatch) -> None:
                         "id": TASK_ID,
                         "org_id": ORG_ID,
                         "title": "Investigate cert rotation",
+                        "description": "Track remediation and evidence",
                         "status": "open",
                         "assignee_user_id": None,
                         "alert_id": ALERT_ID,
                         "finding_id": FINDING_ID,
                         "due_at": None,
-                        "created_by_user_id": ASSIGNEE_ID,
                         "created_at": "2026-02-09T00:00:00Z",
+                        "updated_at": "2026-02-09T00:00:00Z",
                     }
                 ]
             )
@@ -89,13 +90,14 @@ def test_tasks_list_returns_rows_when_supabase_ok(monkeypatch) -> None:
                 "id": TASK_ID,
                 "org_id": ORG_ID,
                 "title": "Investigate cert rotation",
+                "description": "Track remediation and evidence",
                 "status": "open",
                 "assignee_user_id": None,
                 "alert_id": ALERT_ID,
                 "finding_id": FINDING_ID,
                 "due_at": None,
-                "created_by_user_id": ASSIGNEE_ID,
                 "created_at": "2026-02-09T00:00:00Z",
+                "updated_at": "2026-02-09T00:00:00Z",
             }
         ]
     }
@@ -123,11 +125,12 @@ def test_create_task_returns_id_when_supabase_ok(monkeypatch) -> None:
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
-        async def post(self, url: str, json: dict[str, str], headers: dict[str, str]) -> FakeResponse:
+        async def post(self, url: str, json: dict[str, str | None], headers: dict[str, str]) -> FakeResponse:
             assert url == "https://example.supabase.co/rest/v1/rpc/create_task"
             assert json == {
                 "p_org_id": ORG_ID,
                 "p_title": "Investigate cert rotation",
+                "p_description": "Track remediation and evidence",
                 "p_alert_id": ALERT_ID,
                 "p_finding_id": FINDING_ID,
                 "p_due_at": "2026-03-01T00:00:00+00:00",
@@ -152,6 +155,7 @@ def test_create_task_returns_id_when_supabase_ok(monkeypatch) -> None:
             json={
                 "org_id": ORG_ID,
                 "title": "Investigate cert rotation",
+                "description": "Track remediation and evidence",
                 "alert_id": ALERT_ID,
                 "finding_id": FINDING_ID,
                 "due_at": "2026-03-01T00:00:00Z",
@@ -164,183 +168,36 @@ def test_create_task_returns_id_when_supabase_ok(monkeypatch) -> None:
     assert response.json() == {"id": TASK_ID}
 
 
-def test_update_task_calls_assign_and_status_rpcs(monkeypatch) -> None:
-    class FakeResponse:
-        def raise_for_status(self) -> None:
-            return None
+def test_alert_resolution_requires_evidence_when_none_exists(monkeypatch) -> None:
+    async def fake_select_tasks_for_alert(access_token: str, alert_id: str) -> list[dict[str, str]]:
+        assert access_token == "token-123"
+        assert alert_id == ALERT_ID
+        return [{"id": TASK_ID}]
 
-        def json(self):  # pragma: no cover
-            return None
+    async def fake_select_task_evidence(access_token: str, task_id: str) -> list[dict[str, str]]:
+        assert access_token == "token-123"
+        assert task_id == TASK_ID
+        return []
 
-    class FakeAsyncClient:
-        def __init__(self, *args, **kwargs) -> None:
-            self.args = args
-            self.kwargs = kwargs
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def post(self, url: str, json: dict[str, str], headers: dict[str, str]) -> FakeResponse:
-            assert headers["Authorization"] == "Bearer token-123"
-            assert headers["apikey"] == "test-anon-key"
-            if url.endswith("/rpc/assign_task"):
-                assert json == {"p_task_id": TASK_ID, "p_user_id": ASSIGNEE_ID}
-                return FakeResponse()
-            if url.endswith("/rpc/set_task_status"):
-                assert json == {"p_task_id": TASK_ID, "p_status": "in_progress"}
-                return FakeResponse()
-            raise AssertionError(f"Unexpected URL called: {url}")
-
-        async def get(self, *args, **kwargs):  # pragma: no cover
-            raise AssertionError("GET should not be called in task update test")
+    monkeypatch.setattr(
+        monitoring_endpoint,
+        "get_settings",
+        lambda: SimpleNamespace(REQUIRE_ALERT_EVIDENCE_FOR_RESOLVE=True, ALERT_RESOLVE_MIN_EVIDENCE=1),
+    )
+    monkeypatch.setattr(monitoring_endpoint, "select_tasks_for_alert", fake_select_tasks_for_alert)
+    monkeypatch.setattr(monitoring_endpoint, "select_task_evidence", fake_select_task_evidence)
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
-        access_token="token-123",
-        claims={"sub": "user-1"},
+        access_token="token-123", claims={"sub": "user-1"}
     )
-    monkeypatch.setattr(supabase_rest.httpx, "AsyncClient", FakeAsyncClient)
 
     try:
         client = TestClient(app)
-        response = client.patch(
-            f"/api/v1/tasks/{TASK_ID}",
-            json={"assignee_user_id": ASSIGNEE_ID, "status": "in_progress"},
-        )
+        response = client.patch(f"/api/v1/alerts/{ALERT_ID}", json={"status": "resolved"})
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
-    assert response.json() == {"ok": True}
-
-
-def test_task_comments_and_evidence_endpoints(monkeypatch) -> None:
-    class FakeResponse:
-        def __init__(self, payload=None):
-            self._payload = payload
-
-        def raise_for_status(self) -> None:
-            return None
-
-        def json(self):
-            return self._payload
-
-    class FakeAsyncClient:
-        def __init__(self, *args, **kwargs) -> None:
-            self.args = args
-            self.kwargs = kwargs
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
-            assert headers["Authorization"] == "Bearer token-123"
-            assert headers["apikey"] == "test-anon-key"
-            if url.endswith("/rest/v1/task_comments"):
-                assert params == {
-                    "select": "id,task_id,author_user_id,body,created_at",
-                    "task_id": f"eq.{TASK_ID}",
-                    "order": "created_at.asc",
-                }
-                return FakeResponse(
-                    [
-                        {
-                            "id": COMMENT_ID,
-                            "task_id": TASK_ID,
-                            "author_user_id": ASSIGNEE_ID,
-                            "body": "Started investigating logs.",
-                            "created_at": "2026-02-09T00:00:00Z",
-                        }
-                    ]
-                )
-
-            if url.endswith("/rest/v1/task_evidence"):
-                assert params == {
-                    "select": "id,task_id,type,ref,created_by_user_id,created_at",
-                    "task_id": f"eq.{TASK_ID}",
-                    "order": "created_at.asc",
-                }
-                return FakeResponse(
-                    [
-                        {
-                            "id": EVIDENCE_ID,
-                            "task_id": TASK_ID,
-                            "type": "link",
-                            "ref": "https://example.com/cert-diff",
-                            "created_by_user_id": ASSIGNEE_ID,
-                            "created_at": "2026-02-09T00:00:00Z",
-                        }
-                    ]
-                )
-
-            raise AssertionError(f"Unexpected URL called: {url}")
-
-        async def post(self, url: str, json: dict[str, str], headers: dict[str, str]) -> FakeResponse:
-            assert headers["Authorization"] == "Bearer token-123"
-            assert headers["apikey"] == "test-anon-key"
-            if url.endswith("/rpc/add_task_comment"):
-                assert json == {"p_task_id": TASK_ID, "p_body": "Need packet capture evidence."}
-                return FakeResponse(COMMENT_ID)
-            if url.endswith("/rpc/add_task_evidence"):
-                assert json == {"p_task_id": TASK_ID, "p_type": "log", "p_ref": "sha256:log-entry"}
-                return FakeResponse(EVIDENCE_ID)
-            raise AssertionError(f"Unexpected URL called: {url}")
-
-    app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
-        access_token="token-123",
-        claims={"sub": "user-1"},
-    )
-    monkeypatch.setattr(supabase_rest.httpx, "AsyncClient", FakeAsyncClient)
-
-    try:
-        client = TestClient(app)
-        comments_response = client.get(f"/api/v1/tasks/{TASK_ID}/comments")
-        evidence_response = client.get(f"/api/v1/tasks/{TASK_ID}/evidence")
-        add_comment_response = client.post(
-            f"/api/v1/tasks/{TASK_ID}/comments",
-            json={"body": "Need packet capture evidence."},
-        )
-        add_evidence_response = client.post(
-            f"/api/v1/tasks/{TASK_ID}/evidence",
-            json={"type": "log", "ref": "sha256:log-entry"},
-        )
-    finally:
-        app.dependency_overrides.clear()
-
-    assert comments_response.status_code == 200
-    assert comments_response.json() == {
-        "comments": [
-            {
-                "id": COMMENT_ID,
-                "task_id": TASK_ID,
-                "author_user_id": ASSIGNEE_ID,
-                "body": "Started investigating logs.",
-                "created_at": "2026-02-09T00:00:00Z",
-            }
-        ]
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "Add evidence to a remediation task before resolving this alert."
     }
-
-    assert evidence_response.status_code == 200
-    assert evidence_response.json() == {
-        "evidence": [
-            {
-                "id": EVIDENCE_ID,
-                "task_id": TASK_ID,
-                "type": "link",
-                "ref": "https://example.com/cert-diff",
-                "created_by_user_id": ASSIGNEE_ID,
-                "created_at": "2026-02-09T00:00:00Z",
-            }
-        ]
-    }
-
-    assert add_comment_response.status_code == 200
-    assert add_comment_response.json() == {"id": COMMENT_ID}
-
-    assert add_evidence_response.status_code == 200
-    assert add_evidence_response.json() == {"id": EVIDENCE_ID}

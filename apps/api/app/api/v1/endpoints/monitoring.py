@@ -14,7 +14,6 @@ from app.api.v1.schemas.monitoring import (
 from app.core.settings import get_settings
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.core.supabase_rest import (
-    count_alert_task_evidence,
     rpc_append_audit,
     rpc_create_monitor_run,
     rpc_set_alert_status,
@@ -22,6 +21,8 @@ from app.core.supabase_rest import (
     select_audit_log,
     select_findings,
     select_monitor_runs,
+    select_task_evidence,
+    select_tasks_for_alert,
 )
 
 router = APIRouter()
@@ -50,14 +51,18 @@ async def update_alert(
 ) -> dict[str, bool]:
     settings = get_settings()
     if payload.status == "resolved" and settings.REQUIRE_ALERT_EVIDENCE_FOR_RESOLVE:
-        evidence_count = await count_alert_task_evidence(auth.access_token, str(alert_id))
+        evidence_count = 0
+        linked_tasks = await select_tasks_for_alert(auth.access_token, str(alert_id))
+        for task in linked_tasks:
+            task_id = task.get("id")
+            if not isinstance(task_id, str):
+                continue
+            evidence_count += len(await select_task_evidence(auth.access_token, task_id))
+
         if evidence_count < settings.ALERT_RESOLVE_MIN_EVIDENCE:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Resolving alerts requires at least {settings.ALERT_RESOLVE_MIN_EVIDENCE} "
-                    "evidence item(s) across linked tasks."
-                ),
+                detail="Add evidence to a remediation task before resolving this alert.",
             )
 
     await rpc_set_alert_status(

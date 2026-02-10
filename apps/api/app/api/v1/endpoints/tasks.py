@@ -3,19 +3,18 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from app.api.v1.schemas.tasks import (
-    TaskCommentCreateIn,
+    TaskCommentIn,
     TaskCommentOut,
     TaskCreateIn,
-    TaskEvidenceCreateIn,
+    TaskEvidenceIn,
     TaskEvidenceOut,
     TaskOut,
-    TaskPatchIn,
+    TaskStatusIn,
 )
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.core.supabase_rest import (
     rpc_add_task_comment,
     rpc_add_task_evidence,
-    rpc_assign_task,
     rpc_create_task,
     rpc_set_task_status,
     select_task_comments,
@@ -44,31 +43,13 @@ async def create_task(
         {
             "p_org_id": str(payload.org_id),
             "p_title": payload.title,
+            "p_description": payload.description,
             "p_alert_id": str(payload.alert_id) if payload.alert_id else None,
             "p_finding_id": str(payload.finding_id) if payload.finding_id else None,
             "p_due_at": payload.due_at.isoformat() if payload.due_at else None,
         },
     )
     return {"id": UUID(task_id)}
-
-
-@router.patch("/tasks/{task_id}")
-async def update_task(
-    task_id: UUID, payload: TaskPatchIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
-) -> dict[str, bool]:
-    if payload.assignee_user_id is not None:
-        await rpc_assign_task(
-            auth.access_token,
-            {"p_task_id": str(task_id), "p_user_id": str(payload.assignee_user_id)},
-        )
-
-    if payload.status is not None:
-        await rpc_set_task_status(
-            auth.access_token,
-            {"p_task_id": str(task_id), "p_status": payload.status},
-        )
-
-    return {"ok": True}
 
 
 @router.get("/tasks/{task_id}/comments")
@@ -81,7 +62,7 @@ async def task_comments(
 
 @router.post("/tasks/{task_id}/comments")
 async def create_task_comment(
-    task_id: UUID, payload: TaskCommentCreateIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+    task_id: UUID, payload: TaskCommentIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
 ) -> dict[str, UUID]:
     comment_id = await rpc_add_task_comment(
         auth.access_token,
@@ -100,10 +81,21 @@ async def task_evidence(
 
 @router.post("/tasks/{task_id}/evidence")
 async def create_task_evidence(
-    task_id: UUID, payload: TaskEvidenceCreateIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+    task_id: UUID, payload: TaskEvidenceIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
 ) -> dict[str, UUID]:
     evidence_id = await rpc_add_task_evidence(
         auth.access_token,
         {"p_task_id": str(task_id), "p_type": payload.type, "p_ref": payload.ref},
     )
     return {"id": UUID(evidence_id)}
+
+
+@router.patch("/tasks/{task_id}/status")
+async def update_task_status(
+    task_id: UUID, payload: TaskStatusIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+) -> dict[str, bool]:
+    await rpc_set_task_status(
+        auth.access_token,
+        {"p_task_id": str(task_id), "p_status": payload.status},
+    )
+    return {"ok": True}
