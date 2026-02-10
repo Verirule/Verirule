@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 
 export async function GET() {
+  await connection();
+
   const apiBaseUrl = process.env.VERIRULE_API_URL?.replace(/\/$/, "");
 
   if (!apiBaseUrl) {
