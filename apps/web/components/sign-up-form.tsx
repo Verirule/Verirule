@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { OAuthButtons } from "@/src/components/auth/OAuthButtons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -27,6 +28,9 @@ export function SignUpForm({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const passwordOk = password.length >= 8;
+  const submitDisabled = loading || !emailOk || !passwordOk;
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,6 +112,12 @@ export function SignUpForm({
           <CardDescription>Create a new account</CardDescription>
         </CardHeader>
         <CardContent>
+          <OAuthButtons mode="signup" />
+          <div className="my-4 flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border/70" />
+            <span>or</span>
+            <span className="h-px flex-1 bg-border/70" />
+          </div>
           <form onSubmit={handleSignUp}>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
@@ -129,9 +139,11 @@ export function SignUpForm({
                   id="password"
                   type="password"
                   required
+                  minLength={8}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">Use at least 8 characters.</p>
               </div>
               <div className="grid gap-2">
                 <div className="flex items-center">
@@ -161,7 +173,7 @@ export function SignUpForm({
                   {message}
                 </div>
               ) : null}
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full" disabled={submitDisabled}>
                 {loading ? "Creating account..." : "Sign up"}
               </Button>
               {message && email.trim() ? (
