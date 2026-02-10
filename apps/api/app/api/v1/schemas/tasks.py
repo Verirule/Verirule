@@ -58,3 +58,23 @@ class TaskEvidenceOut(BaseModel):
 class TaskEvidenceIn(BaseModel):
     type: TaskEvidenceType
     ref: str = Field(min_length=1, max_length=4096)
+
+
+class TaskEvidenceUploadUrlIn(BaseModel):
+    filename: str = Field(min_length=1, max_length=180)
+    content_type: str | None = Field(default=None, min_length=1, max_length=120)
+
+
+class TaskEvidenceUploadUrlOut(BaseModel):
+    path: str
+    uploadUrl: str
+    expiresIn: int
+
+
+class TaskEvidenceFileIn(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
+
+
+class TaskEvidenceDownloadUrlOut(BaseModel):
+    downloadUrl: str
+    expiresIn: int

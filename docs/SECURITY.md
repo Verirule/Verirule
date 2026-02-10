@@ -11,6 +11,18 @@
 - Only use public Supabase URL + publishable/anon keys in web.
 - Never set `SUPABASE_SERVICE_ROLE_KEY` in Vercel or any `NEXT_PUBLIC_*` variable.
 
+## Storage
+- Create a Supabase Storage bucket named `evidence` and keep it private.
+- Bucket public access must remain `OFF`.
+- File evidence paths must follow: `org/<org_id>/tasks/<task_id>/<uuid>-<filename>`.
+- Signed upload/download URLs must be short-lived and generated only by the API.
+- `SUPABASE_SERVICE_ROLE_KEY` for storage signing must live only in Fly secrets for the API.
+
+Checklist:
+- Supabase dashboard -> `Storage` -> `Create bucket`
+- Name: `evidence`
+- Public bucket: `OFF`
+
 ## Authentication and Token Verification
 - Frontend may hold Supabase session state, but backend must never trust session cookies directly.
 - Backend verifies Supabase JWTs with Supabase JWKS (issuer, audience, signature, expiry checks).

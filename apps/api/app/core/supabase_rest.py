@@ -463,6 +463,29 @@ async def select_tasks(access_token: str, org_id: str) -> list[dict[str, Any]]:
     return _validated_list_payload(response.json(), "Invalid tasks response from Supabase.")
 
 
+async def select_task_by_id(access_token: str, task_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/tasks"
+    params = {
+        "select": "id,org_id",
+        "id": f"eq.{task_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch task from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid task response from Supabase.")
+    return rows[0] if rows else None
+
+
 async def select_tasks_for_alert(access_token: str, alert_id: str) -> list[dict[str, Any]]:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/tasks"
@@ -527,6 +550,32 @@ async def select_task_evidence(access_token: str, task_id: str) -> list[dict[str
         ) from exc
 
     return _validated_list_payload(response.json(), "Invalid task evidence response from Supabase.")
+
+
+async def select_task_evidence_by_id(
+    access_token: str, task_id: str, evidence_id: str
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/task_evidence"
+    params = {
+        "select": "id,task_id,type,ref",
+        "id": f"eq.{evidence_id}",
+        "task_id": f"eq.{task_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch evidence from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid evidence response from Supabase.")
+    return rows[0] if rows else None
 
 
 async def rpc_create_task(access_token: str, payload: dict[str, Any]) -> str:
