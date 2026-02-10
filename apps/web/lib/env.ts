@@ -1,1 +1,1 @@
-export { getPublicSupabaseEnv } from "@/src/lib/env";
+export { getPublicSupabaseEnv, getSiteUrl } from "@/src/lib/env";

@@ -1,3 +1,5 @@
+import type { NextRequest } from "next/server";
+
 export function getPublicSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key =
@@ -26,4 +28,26 @@ export function getPublicSupabaseEnv() {
   }
 
   return { url, key, problems };
+}
+
+export function getSiteUrl(req?: NextRequest) {
+  const fromEnv = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (fromEnv) {
+    return fromEnv.replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  if (req) {
+    const protoHeader = req.headers.get("x-forwarded-proto");
+    const proto = protoHeader?.split(",")[0]?.trim() || "https";
+    const host = req.headers.get("host");
+    if (host) {
+      return `${proto}://${host}`;
+    }
+  }
+
+  return "";
 }

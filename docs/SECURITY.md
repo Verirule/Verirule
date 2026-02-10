@@ -34,3 +34,8 @@
 - `Referrer-Policy`
 - `Strict-Transport-Security`
 - `Permissions-Policy`
+
+## Domain and OAuth Redirects
+- Custom domains are configured via Vercel.
+- No domain is hardcoded in source; site origin is resolved dynamically.
+- OAuth callback redirects are validated against allowed same-origin targets only.

@@ -3,12 +3,14 @@ import { Geist } from "next/font/google";
 import { ThemeProvider } from "@/src/components/theme/ThemeProvider";
 import "./globals.css";
 
-const defaultUrl = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
-  : "http://localhost:3000";
+const metadataBase = process.env.NEXT_PUBLIC_SITE_URL
+  ? new URL(process.env.NEXT_PUBLIC_SITE_URL)
+  : process.env.VERCEL_URL
+    ? new URL(`https://${process.env.VERCEL_URL}`)
+    : undefined;
 
 export const metadata: Metadata = {
-  metadataBase: new URL(defaultUrl),
+  metadataBase,
   title: "Verirule",
   description: "Vertical AI SaaS for compliance monitoring",
 };

@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { getSiteUrl } from "@/lib/env";
 import { createClient } from "@/lib/supabase/client";
 import type { ComponentType, SVGProps } from "react";
 import { useState } from "react";
@@ -51,7 +52,7 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${getSiteUrl()}/auth/callback`,
         },
       });
 
