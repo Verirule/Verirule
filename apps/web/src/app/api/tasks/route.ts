@@ -29,6 +29,16 @@ function logProxyError(error: unknown): void {
   console.error("api/tasks proxy failed", { message });
 }
 
+async function upstreamErrorResponse(upstreamResponse: Response) {
+  if (upstreamResponse.status === 502) {
+    return NextResponse.json({ message: "Upstream API error" }, { status: 502 });
+  }
+
+  const body = (await upstreamResponse.json().catch(() => ({}))) as { detail?: unknown };
+  const detail = typeof body.detail === "string" ? body.detail : "Request failed";
+  return NextResponse.json({ message: detail }, { status: upstreamResponse.status });
+}
+
 export async function GET(request: NextRequest) {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl) {
@@ -56,7 +66,7 @@ export async function GET(request: NextRequest) {
       console.error("api/tasks proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
-      return NextResponse.json({ message: "Upstream API error" }, { status: 502 });
+      return upstreamErrorResponse(upstreamResponse);
     }
 
     const body = (await upstreamResponse.json().catch(() => ({}))) as unknown;
@@ -81,6 +91,7 @@ export async function POST(request: NextRequest) {
   const payload = (await request.json().catch(() => null)) as {
     org_id?: unknown;
     title?: unknown;
+    description?: unknown;
     alert_id?: unknown;
     finding_id?: unknown;
     due_at?: unknown;
@@ -88,6 +99,7 @@ export async function POST(request: NextRequest) {
 
   const orgId = typeof payload?.org_id === "string" ? payload.org_id.trim() : "";
   const title = typeof payload?.title === "string" ? payload.title.trim() : "";
+  const description = typeof payload?.description === "string" ? payload.description.trim() : null;
   const alertId = typeof payload?.alert_id === "string" ? payload.alert_id.trim() : null;
   const findingId = typeof payload?.finding_id === "string" ? payload.finding_id.trim() : null;
   const dueAt = typeof payload?.due_at === "string" ? payload.due_at.trim() : null;
@@ -103,6 +115,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         org_id: orgId,
         title,
+        description,
         alert_id: alertId,
         finding_id: findingId,
         due_at: dueAt,
@@ -114,9 +127,7 @@ export async function POST(request: NextRequest) {
       console.error("api/tasks proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
-      const body = (await upstreamResponse.json().catch(() => ({}))) as { detail?: unknown };
-      const detail = typeof body.detail === "string" ? body.detail : "Upstream API error";
-      return NextResponse.json({ message: detail }, { status: upstreamResponse.status });
+      return upstreamErrorResponse(upstreamResponse);
     }
 
     const body = (await upstreamResponse.json().catch(() => ({}))) as unknown;

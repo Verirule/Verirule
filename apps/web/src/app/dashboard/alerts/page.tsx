@@ -2,9 +2,10 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 type OrgRecord = {
   id: string;
@@ -74,6 +75,13 @@ export default function DashboardAlertsPage() {
   const [isLoadingAlerts, setIsLoadingAlerts] = useState(false);
   const [updatingAlertId, setUpdatingAlertId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [createTaskAlert, setCreateTaskAlert] = useState<AlertRecord | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskCreateError, setTaskCreateError] = useState<string | null>(null);
+  const [taskCreatedId, setTaskCreatedId] = useState<string | null>(null);
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
 
   const findingById = useMemo(() => {
     return new Map(findings.map((finding) => [finding.id, finding]));
@@ -201,7 +209,8 @@ export default function DashboardAlertsPage() {
       }
 
       if (!response.ok) {
-        setError("Unable to update alert right now.");
+        const body = (await response.json().catch(() => ({}))) as { message?: unknown };
+        setError(typeof body.message === "string" ? body.message : "Unable to update alert right now.");
         return;
       }
 
@@ -210,6 +219,74 @@ export default function DashboardAlertsPage() {
       setError("Unable to update alert right now.");
     } finally {
       setUpdatingAlertId(null);
+    }
+  };
+
+  const openCreateTaskModal = (alert: AlertRecord) => {
+    const finding = findingById.get(alert.finding_id);
+    const baseTitle = finding?.title?.trim() || "Alert remediation";
+    setCreateTaskAlert(alert);
+    setTaskTitle(`Remediate: ${baseTitle}`);
+    setTaskDescription(finding?.summary?.trim() || `Remediation task for alert ${alert.id}.`);
+    setTaskCreateError(null);
+    setTaskCreatedId(null);
+  };
+
+  const closeCreateTaskModal = () => {
+    setCreateTaskAlert(null);
+    setTaskTitle("");
+    setTaskDescription("");
+    setTaskCreateError(null);
+    setTaskCreatedId(null);
+    setIsCreatingTask(false);
+  };
+
+  const createTaskFromAlert = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!createTaskAlert) {
+      return;
+    }
+
+    const title = taskTitle.trim();
+    if (!title) {
+      setTaskCreateError("Task title is required.");
+      return;
+    }
+
+    setIsCreatingTask(true);
+    setTaskCreateError(null);
+    setTaskCreatedId(null);
+
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          org_id: createTaskAlert.org_id,
+          title,
+          description: taskDescription.trim() || null,
+          alert_id: createTaskAlert.id,
+          finding_id: createTaskAlert.finding_id,
+        }),
+      });
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      const body = (await response.json().catch(() => ({}))) as { id?: unknown; message?: unknown };
+      if (!response.ok) {
+        setTaskCreateError(typeof body.message === "string" ? body.message : "Unable to create task.");
+        return;
+      }
+
+      setTaskCreatedId(typeof body.id === "string" ? body.id : null);
+      await loadAlertsAndFindings(selectedOrgId);
+    } catch {
+      setTaskCreateError("Unable to create task.");
+    } finally {
+      setIsCreatingTask(false);
     }
   };
 
@@ -335,7 +412,7 @@ export default function DashboardAlertsPage() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => setError("Create task flow is coming in the next phase.")}
+                          onClick={() => openCreateTaskModal(alert)}
                         >
                           Create task
                         </Button>
@@ -354,6 +431,67 @@ export default function DashboardAlertsPage() {
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </CardContent>
       </Card>
+
+      {createTaskAlert ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-lg border border-border/70 bg-background p-4 shadow-lg sm:p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Create Remediation Task</h2>
+              <Button type="button" variant="outline" size="sm" onClick={closeCreateTaskModal}>
+                Close
+              </Button>
+            </div>
+
+            <form onSubmit={createTaskFromAlert} className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="task-title">Title</Label>
+                <Input
+                  id="task-title"
+                  value={taskTitle}
+                  onChange={(event) => setTaskTitle(event.target.value)}
+                  maxLength={120}
+                  placeholder="Remediate: finding title"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="task-description">Description</Label>
+                <textarea
+                  id="task-description"
+                  value={taskDescription}
+                  onChange={(event) => setTaskDescription(event.target.value)}
+                  className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  placeholder="Remediation details"
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Alert: {createTaskAlert.id} | Finding: {createTaskAlert.finding_id}
+              </p>
+
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={isCreatingTask}>
+                  {isCreatingTask ? "Creating..." : "Create Task"}
+                </Button>
+                {taskCreatedId ? (
+                  <Button asChild type="button" variant="outline">
+                    <Link
+                      href={`/dashboard/tasks?org_id=${encodeURIComponent(
+                        createTaskAlert.org_id,
+                      )}&task_id=${encodeURIComponent(taskCreatedId)}`}
+                    >
+                      Go to Tasks
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+            </form>
+
+            {taskCreatedId ? <p className="mt-3 text-sm text-emerald-600">Task created.</p> : null}
+            {taskCreateError ? <p className="mt-3 text-sm text-destructive">{taskCreateError}</p> : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

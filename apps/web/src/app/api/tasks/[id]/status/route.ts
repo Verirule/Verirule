@@ -26,7 +26,17 @@ function upstreamHeaders(accessToken: string): HeadersInit {
 
 function logProxyError(error: unknown): void {
   const message = error instanceof Error ? error.message : undefined;
-  console.error("api/tasks/[id] proxy failed", { message });
+  console.error("api/tasks/[id]/status proxy failed", { message });
+}
+
+async function upstreamErrorResponse(upstreamResponse: Response) {
+  if (upstreamResponse.status === 502) {
+    return NextResponse.json({ message: "Upstream API error" }, { status: 502 });
+  }
+
+  const body = (await upstreamResponse.json().catch(() => ({}))) as { detail?: unknown };
+  const detail = typeof body.detail === "string" ? body.detail : "Request failed";
+  return NextResponse.json({ message: detail }, { status: upstreamResponse.status });
 }
 
 export async function PATCH(
@@ -49,42 +59,35 @@ export async function PATCH(
     return NextResponse.json({ message: "Invalid task id" }, { status: 400 });
   }
 
-  const payload = (await request.json().catch(() => null)) as {
-    status?: unknown;
-    assignee_user_id?: unknown;
-  } | null;
+  const payload = (await request.json().catch(() => null)) as { status?: unknown } | null;
   const status =
     payload?.status === "open" ||
     payload?.status === "in_progress" ||
-    payload?.status === "resolved" ||
-    payload?.status === "blocked"
+    payload?.status === "blocked" ||
+    payload?.status === "done"
       ? payload.status
-      : undefined;
-  const assigneeUserId =
-    typeof payload?.assignee_user_id === "string" ? payload.assignee_user_id.trim() : undefined;
+      : null;
 
-  if (!status && !assigneeUserId) {
-    return NextResponse.json({ message: "Invalid task update payload" }, { status: 400 });
+  if (!status) {
+    return NextResponse.json({ message: "Invalid task status payload" }, { status: 400 });
   }
 
   try {
-    const upstreamResponse = await fetch(`${apiBaseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`, {
-      method: "PATCH",
-      headers: upstreamHeaders(accessToken),
-      body: JSON.stringify({
-        status,
-        assignee_user_id: assigneeUserId,
-      }),
-      cache: "no-store",
-    });
+    const upstreamResponse = await fetch(
+      `${apiBaseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/status`,
+      {
+        method: "PATCH",
+        headers: upstreamHeaders(accessToken),
+        body: JSON.stringify({ status }),
+        cache: "no-store",
+      },
+    );
 
     if (!upstreamResponse.ok) {
-      console.error("api/tasks/[id] proxy failed", {
+      console.error("api/tasks/[id]/status proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
-      const body = (await upstreamResponse.json().catch(() => ({}))) as { detail?: unknown };
-      const detail = typeof body.detail === "string" ? body.detail : "Upstream API error";
-      return NextResponse.json({ message: detail }, { status: upstreamResponse.status });
+      return upstreamErrorResponse(upstreamResponse);
     }
 
     const body = (await upstreamResponse.json().catch(() => ({}))) as unknown;

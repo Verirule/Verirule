@@ -39,13 +39,13 @@ type TaskRecord = {
   id: string;
   org_id: string;
   title: string;
-  status: "open" | "in_progress" | "resolved" | "blocked";
+  status: "open" | "in_progress" | "blocked" | "done";
   assignee_user_id: string | null;
   alert_id: string | null;
   finding_id: string | null;
   due_at: string | null;
-  created_by_user_id: string;
   created_at: string;
+  updated_at: string;
 };
 
 type AlertsResponse = { alerts: AlertRecord[] };
@@ -57,7 +57,6 @@ type EvidenceResponse = {
     task_id: string;
     type: "link" | "file" | "log";
     ref: string;
-    created_by_user_id: string;
     created_at: string;
   }>;
 };
@@ -316,7 +315,7 @@ export default function AlertDetailsPage() {
                 id="task-title"
                 value={taskTitle}
                 onChange={(event) => setTaskTitle(event.target.value)}
-                maxLength={300}
+                maxLength={120}
                 placeholder="Investigate suspicious change"
               />
             </div>

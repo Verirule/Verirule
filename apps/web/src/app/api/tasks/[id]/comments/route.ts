@@ -29,6 +29,16 @@ function logProxyError(error: unknown): void {
   console.error("api/tasks/[id]/comments proxy failed", { message });
 }
 
+async function upstreamErrorResponse(upstreamResponse: Response) {
+  if (upstreamResponse.status === 502) {
+    return NextResponse.json({ message: "Upstream API error" }, { status: 502 });
+  }
+
+  const body = (await upstreamResponse.json().catch(() => ({}))) as { detail?: unknown };
+  const detail = typeof body.detail === "string" ? body.detail : "Request failed";
+  return NextResponse.json({ message: detail }, { status: upstreamResponse.status });
+}
+
 export async function GET(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -63,7 +73,7 @@ export async function GET(
       console.error("api/tasks/[id]/comments proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
-      return NextResponse.json({ message: "Upstream API error" }, { status: 502 });
+      return upstreamErrorResponse(upstreamResponse);
     }
 
     const body = (await upstreamResponse.json().catch(() => ({}))) as unknown;
@@ -115,9 +125,7 @@ export async function POST(
       console.error("api/tasks/[id]/comments proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
-      const body = (await upstreamResponse.json().catch(() => ({}))) as { detail?: unknown };
-      const detail = typeof body.detail === "string" ? body.detail : "Upstream API error";
-      return NextResponse.json({ message: detail }, { status: upstreamResponse.status });
+      return upstreamErrorResponse(upstreamResponse);
     }
 
     const body = (await upstreamResponse.json().catch(() => ({}))) as unknown;
