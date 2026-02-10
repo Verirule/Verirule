@@ -26,13 +26,10 @@ function upstreamHeaders(accessToken: string): HeadersInit {
 
 function logProxyError(error: unknown): void {
   const message = error instanceof Error ? error.message : undefined;
-  console.error("api/alerts/[id] proxy failed", { message });
+  console.error("api/monitor/run proxy failed", { message });
 }
 
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> },
-) {
+export async function POST(request: NextRequest) {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl) {
     return NextResponse.json({ message: "API not configured" }, { status: 501 });
@@ -43,30 +40,27 @@ export async function PATCH(
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await context.params;
-  const alertId = id?.trim() ?? "";
-  if (!alertId) {
-    return NextResponse.json({ message: "Invalid alert id" }, { status: 400 });
-  }
+  const payload = (await request.json().catch(() => null)) as {
+    org_id?: unknown;
+    source_id?: unknown;
+  } | null;
+  const orgId = typeof payload?.org_id === "string" ? payload.org_id.trim() : "";
+  const sourceId = typeof payload?.source_id === "string" ? payload.source_id.trim() : "";
 
-  const payload = (await request.json().catch(() => null)) as { status?: unknown } | null;
-  const status =
-    payload?.status === "acknowledged" || payload?.status === "resolved" ? payload.status : null;
-
-  if (!status) {
-    return NextResponse.json({ message: "Invalid alert payload" }, { status: 400 });
+  if (!orgId || !sourceId) {
+    return NextResponse.json({ message: "Invalid monitor run payload" }, { status: 400 });
   }
 
   try {
-    const upstreamResponse = await fetch(`${apiBaseUrl}/api/v1/alerts/${encodeURIComponent(alertId)}`, {
-      method: "PATCH",
+    const upstreamResponse = await fetch(`${apiBaseUrl}/api/v1/monitor/run`, {
+      method: "POST",
       headers: upstreamHeaders(accessToken),
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ org_id: orgId, source_id: sourceId }),
       cache: "no-store",
     });
 
     if (!upstreamResponse.ok) {
-      console.error("api/alerts/[id] proxy failed", {
+      console.error("api/monitor/run proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
       return NextResponse.json({ message: "Upstream API error" }, { status: 502 });

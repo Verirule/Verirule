@@ -5,7 +5,17 @@ import { ThemeToggle } from "@/src/components/theme/ThemeToggle";
 import { LogoutButton } from "@/components/logout-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Bell, ClipboardList, LayoutDashboard, ListChecks, Menu, RadioTower, Settings, X } from "lucide-react";
+import {
+  Bell,
+  ClipboardList,
+  LayoutDashboard,
+  ListChecks,
+  Menu,
+  RadioTower,
+  SearchCheck,
+  Settings,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -13,6 +23,7 @@ import { useState } from "react";
 const navigationLinks = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/sources", label: "Sources", icon: RadioTower },
+  { href: "/dashboard/findings", label: "Findings", icon: SearchCheck },
   { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
   { href: "/dashboard/tasks", label: "Tasks", icon: ListChecks },
   { href: "/dashboard/audit", label: "Audit", icon: ClipboardList },

@@ -67,6 +67,7 @@ export default function DashboardSourcesPage() {
   const [isLoadingSources, setIsLoadingSources] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [runningSourceId, setRunningSourceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const trimmedName = useMemo(() => name.trim(), [name]);
@@ -134,7 +135,7 @@ export default function DashboardSourcesPage() {
           method: "GET",
           cache: "no-store",
         }),
-        fetch(`/api/monitor-runs?org_id=${encodeURIComponent(orgId)}`, {
+        fetch(`/api/monitor/runs?org_id=${encodeURIComponent(orgId)}`, {
           method: "GET",
           cache: "no-store",
         }),
@@ -270,6 +271,43 @@ export default function DashboardSourcesPage() {
     }
   };
 
+  const runNow = async (sourceId: string) => {
+    if (!selectedOrgId) {
+      setError("Select an organization first.");
+      return;
+    }
+
+    setRunningSourceId(sourceId);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/monitor/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          org_id: selectedOrgId,
+          source_id: sourceId,
+        }),
+      });
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      if (!response.ok) {
+        setError("Unable to queue monitor run right now.");
+        return;
+      }
+
+      await loadSourcesAndRuns(selectedOrgId);
+    } catch {
+      setError("Unable to queue monitor run right now.");
+    } finally {
+      setRunningSourceId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section>
@@ -349,19 +387,29 @@ export default function DashboardSourcesPage() {
                         Last run: {latestRunBySource.get(source.id)?.status ?? "never"}
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant={source.is_enabled ? "outline" : "default"}
-                      size="sm"
-                      disabled={togglingId === source.id}
-                      onClick={() => toggleSource(source.id, !source.is_enabled)}
-                    >
-                      {togglingId === source.id
-                        ? "Saving..."
-                        : source.is_enabled
-                          ? "Disable"
-                          : "Enable"}
-                    </Button>
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={runningSourceId === source.id}
+                        onClick={() => void runNow(source.id)}
+                      >
+                        {runningSourceId === source.id ? "Queueing..." : "Run now"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={source.is_enabled ? "outline" : "default"}
+                        size="sm"
+                        disabled={togglingId === source.id}
+                        onClick={() => void toggleSource(source.id, !source.is_enabled)}
+                      >
+                        {togglingId === source.id
+                          ? "Saving..."
+                          : source.is_enabled
+                            ? "Disable"
+                            : "Enable"}
+                      </Button>
+                    </div>
                   </div>
                 </li>
               ))}

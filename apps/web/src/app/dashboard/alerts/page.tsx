@@ -14,6 +14,7 @@ type OrgRecord = {
 
 type AlertStatus = "open" | "acknowledged" | "resolved";
 type AlertAction = "acknowledged" | "resolved";
+type AlertTab = "open" | "acknowledged" | "resolved";
 type FindingSeverity = "low" | "medium" | "high" | "critical";
 
 type AlertRecord = {
@@ -68,6 +69,7 @@ export default function DashboardAlertsPage() {
   const [alerts, setAlerts] = useState<AlertRecord[]>([]);
   const [findings, setFindings] = useState<FindingRecord[]>([]);
 
+  const [activeTab, setActiveTab] = useState<AlertTab>("open");
   const [isLoadingOrgs, setIsLoadingOrgs] = useState(true);
   const [isLoadingAlerts, setIsLoadingAlerts] = useState(false);
   const [updatingAlertId, setUpdatingAlertId] = useState<string | null>(null);
@@ -76,6 +78,10 @@ export default function DashboardAlertsPage() {
   const findingById = useMemo(() => {
     return new Map(findings.map((finding) => [finding.id, finding]));
   }, [findings]);
+
+  const filteredAlerts = useMemo(() => {
+    return alerts.filter((alert) => alert.status === activeTab);
+  }, [activeTab, alerts]);
 
   const loadOrgs = async () => {
     setIsLoadingOrgs(true);
@@ -195,10 +201,7 @@ export default function DashboardAlertsPage() {
       }
 
       if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { message?: unknown };
-        setError(
-          typeof body.message === "string" ? body.message : "Unable to update alert right now.",
-        );
+        setError("Unable to update alert right now.");
         return;
       }
 
@@ -215,7 +218,7 @@ export default function DashboardAlertsPage() {
       <section>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Alerts</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Review and triage findings that have been promoted to alerts.
+          Triage alert states and move findings through remediation.
         </p>
       </section>
 
@@ -233,9 +236,9 @@ export default function DashboardAlertsPage() {
           ) : null}
           {!isLoadingOrgs && orgs.length > 0 ? (
             <div className="space-y-2">
-              <Label htmlFor="org-selector">Workspace</Label>
+              <Label htmlFor="alerts-org-selector">Workspace</Label>
               <select
-                id="org-selector"
+                id="alerts-org-selector"
                 value={selectedOrgId}
                 onChange={(event) => setSelectedOrgId(event.target.value)}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -254,16 +257,31 @@ export default function DashboardAlertsPage() {
       <Card className="border-border/70">
         <CardHeader>
           <CardTitle>Alert Queue</CardTitle>
-          <CardDescription>Alerts and findings are scoped by Supabase RLS membership.</CardDescription>
+          <CardDescription>Open, acknowledged, and resolved queues by workspace.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {(["open", "acknowledged", "resolved"] as const).map((tab) => (
+              <Button
+                key={tab}
+                type="button"
+                size="sm"
+                variant={activeTab === tab ? "default" : "outline"}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab === "open" ? "Open" : tab === "acknowledged" ? "Acknowledged" : "Resolved"}
+              </Button>
+            ))}
+          </div>
+
           {isLoadingAlerts ? <p className="text-sm text-muted-foreground">Loading alerts...</p> : null}
-          {!isLoadingAlerts && selectedOrgId && alerts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No alerts yet for this workspace.</p>
+          {!isLoadingAlerts && selectedOrgId && filteredAlerts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No {activeTab} alerts for this workspace.</p>
           ) : null}
-          {!isLoadingAlerts && alerts.length > 0 ? (
+
+          {!isLoadingAlerts && filteredAlerts.length > 0 ? (
             <ul className="space-y-2">
-              {alerts.map((alert) => {
+              {filteredAlerts.map((alert) => {
                 const finding = findingById.get(alert.finding_id);
                 return (
                   <li
@@ -283,22 +301,25 @@ export default function DashboardAlertsPage() {
                           {finding?.severity ?? "unknown"}
                         </span>
                       </div>
+
                       <div>
                         <p className="font-medium">{finding?.title ?? "Related finding unavailable"}</p>
                         <p className="text-xs text-muted-foreground">
                           {finding?.summary ?? "No summary available."}
                         </p>
                       </div>
+
                       <div className="text-xs text-muted-foreground">
                         Created {formatTime(alert.created_at)}. Resolved {formatTime(alert.resolved_at)}.
                       </div>
+
                       <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
                           disabled={updatingAlertId === alert.id || alert.status !== "open"}
-                          onClick={() => updateAlert(alert.id, "acknowledged")}
+                          onClick={() => void updateAlert(alert.id, "acknowledged")}
                         >
                           {updatingAlertId === alert.id ? "Saving..." : "Acknowledge"}
                         </Button>
@@ -306,9 +327,17 @@ export default function DashboardAlertsPage() {
                           type="button"
                           size="sm"
                           disabled={updatingAlertId === alert.id || alert.status === "resolved"}
-                          onClick={() => updateAlert(alert.id, "resolved")}
+                          onClick={() => void updateAlert(alert.id, "resolved")}
                         >
                           {updatingAlertId === alert.id ? "Saving..." : "Resolve"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setError("Create task flow is coming in the next phase.")}
+                        >
+                          Create task
                         </Button>
                         <Button asChild type="button" variant="ghost" size="sm">
                           <Link href={`/dashboard/alerts/${alert.id}?org_id=${encodeURIComponent(alert.org_id)}`}>
