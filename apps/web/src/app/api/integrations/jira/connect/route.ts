@@ -26,7 +26,7 @@ function upstreamHeaders(accessToken: string): HeadersInit {
 
 function logProxyError(error: unknown): void {
   const message = error instanceof Error ? error.message : undefined;
-  console.error("api/integrations/slack/test proxy failed", { message });
+  console.error("api/integrations/jira/connect proxy failed", { message });
 }
 
 async function upstreamErrorResponse(upstreamResponse: Response) {
@@ -50,24 +50,40 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const payload = (await request.json().catch(() => null)) as { org_id?: unknown; message?: unknown } | null;
+  const payload = (await request.json().catch(() => null)) as
+    | {
+        org_id?: unknown;
+        base_url?: unknown;
+        email?: unknown;
+        api_token?: unknown;
+        project_key?: unknown;
+      }
+    | null;
   const orgId = typeof payload?.org_id === "string" ? payload.org_id.trim() : "";
-  const message = typeof payload?.message === "string" ? payload.message.trim() : null;
-
-  if (!orgId) {
-    return NextResponse.json({ message: "Invalid Slack test payload" }, { status: 400 });
+  const baseUrl = typeof payload?.base_url === "string" ? payload.base_url.trim() : "";
+  const email = typeof payload?.email === "string" ? payload.email.trim() : "";
+  const apiToken = typeof payload?.api_token === "string" ? payload.api_token.trim() : "";
+  const projectKey = typeof payload?.project_key === "string" ? payload.project_key.trim() : "";
+  if (!orgId || !baseUrl || !email || !apiToken || !projectKey) {
+    return NextResponse.json({ message: "Invalid Jira connect payload" }, { status: 400 });
   }
 
   try {
-    const upstreamResponse = await fetch(`${apiBaseUrl}/api/v1/integrations/slack/test`, {
+    const upstreamResponse = await fetch(`${apiBaseUrl}/api/v1/integrations/jira/connect`, {
       method: "POST",
       headers: upstreamHeaders(accessToken),
-      body: JSON.stringify({ org_id: orgId, message }),
+      body: JSON.stringify({
+        org_id: orgId,
+        base_url: baseUrl,
+        email,
+        api_token: apiToken,
+        project_key: projectKey,
+      }),
       cache: "no-store",
     });
 
     if (!upstreamResponse.ok) {
-      console.error("api/integrations/slack/test proxy failed", {
+      console.error("api/integrations/jira/connect proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
       return upstreamErrorResponse(upstreamResponse);

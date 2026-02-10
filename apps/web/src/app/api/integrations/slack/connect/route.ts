@@ -26,7 +26,7 @@ function upstreamHeaders(accessToken: string): HeadersInit {
 
 function logProxyError(error: unknown): void {
   const message = error instanceof Error ? error.message : undefined;
-  console.error("api/integrations/slack/test proxy failed", { message });
+  console.error("api/integrations/slack/connect proxy failed", { message });
 }
 
 async function upstreamErrorResponse(upstreamResponse: Response) {
@@ -50,24 +50,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const payload = (await request.json().catch(() => null)) as { org_id?: unknown; message?: unknown } | null;
+  const payload = (await request.json().catch(() => null)) as
+    | { org_id?: unknown; webhook_url?: unknown }
+    | null;
   const orgId = typeof payload?.org_id === "string" ? payload.org_id.trim() : "";
-  const message = typeof payload?.message === "string" ? payload.message.trim() : null;
-
-  if (!orgId) {
-    return NextResponse.json({ message: "Invalid Slack test payload" }, { status: 400 });
+  const webhookUrl = typeof payload?.webhook_url === "string" ? payload.webhook_url.trim() : "";
+  if (!orgId || !webhookUrl) {
+    return NextResponse.json({ message: "Invalid Slack connect payload" }, { status: 400 });
   }
 
   try {
-    const upstreamResponse = await fetch(`${apiBaseUrl}/api/v1/integrations/slack/test`, {
+    const upstreamResponse = await fetch(`${apiBaseUrl}/api/v1/integrations/slack/connect`, {
       method: "POST",
       headers: upstreamHeaders(accessToken),
-      body: JSON.stringify({ org_id: orgId, message }),
+      body: JSON.stringify({ org_id: orgId, webhook_url: webhookUrl }),
       cache: "no-store",
     });
 
     if (!upstreamResponse.ok) {
-      console.error("api/integrations/slack/test proxy failed", {
+      console.error("api/integrations/slack/connect proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
       return upstreamErrorResponse(upstreamResponse);

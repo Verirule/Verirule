@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
-type IntegrationStatus = "enabled" | "disabled";
+type IntegrationType = "slack" | "jira";
+type IntegrationStatus = "connected" | "disabled";
 
 type OrgRecord = {
   id: string;
@@ -18,22 +19,23 @@ type OrgRecord = {
 type IntegrationRecord = {
   id: string;
   org_id: string;
-  type: "slack" | "jira" | "github";
+  type: IntegrationType;
   status: IntegrationStatus;
-  has_secret: boolean;
-  created_at: string;
+  config: Record<string, unknown>;
   updated_at: string;
 };
 
 type OrgsResponse = { orgs: OrgRecord[] };
 type IntegrationsResponse = { integrations: IntegrationRecord[] };
 
-function formatTime(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "Unknown time";
+function statusClass(status: IntegrationStatus | "not_connected"): string {
+  if (status === "connected") {
+    return "bg-emerald-100 text-emerald-800";
   }
-  return parsed.toLocaleString();
+  if (status === "disabled") {
+    return "bg-amber-100 text-amber-800";
+  }
+  return "bg-slate-100 text-slate-700";
 }
 
 export default function DashboardIntegrationsPage() {
@@ -42,18 +44,26 @@ export default function DashboardIntegrationsPage() {
   const [integrations, setIntegrations] = useState<IntegrationRecord[]>([]);
 
   const [slackWebhookUrl, setSlackWebhookUrl] = useState("");
-  const [slackStatus, setSlackStatus] = useState<IntegrationStatus>("enabled");
-  const [testMessage, setTestMessage] = useState("Verirule Slack integration test.");
+  const [jiraBaseUrl, setJiraBaseUrl] = useState("");
+  const [jiraEmail, setJiraEmail] = useState("");
+  const [jiraApiToken, setJiraApiToken] = useState("");
+  const [jiraProjectKey, setJiraProjectKey] = useState("");
 
   const [isLoadingOrgs, setIsLoadingOrgs] = useState(true);
   const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(false);
-  const [isSavingSlack, setIsSavingSlack] = useState(false);
+  const [isConnectingSlack, setIsConnectingSlack] = useState(false);
   const [isTestingSlack, setIsTestingSlack] = useState(false);
+  const [isConnectingJira, setIsConnectingJira] = useState(false);
+  const [isTestingJira, setIsTestingJira] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const slackIntegration = useMemo(
     () => integrations.find((integration) => integration.type === "slack") ?? null,
+    [integrations],
+  );
+  const jiraIntegration = useMemo(
+    () => integrations.find((integration) => integration.type === "jira") ?? null,
     [integrations],
   );
 
@@ -101,14 +111,15 @@ export default function DashboardIntegrationsPage() {
     }
     setIsLoadingIntegrations(true);
     setError(null);
-    setSuccess(null);
 
     try {
       const response = await fetch(`/api/integrations?org_id=${encodeURIComponent(orgId)}`, {
         method: "GET",
         cache: "no-store",
       });
-      const body = (await response.json().catch(() => ({}))) as Partial<IntegrationsResponse>;
+      const body = (await response.json().catch(() => ({}))) as Partial<IntegrationsResponse> & {
+        message?: unknown;
+      };
 
       if (response.status === 401) {
         window.location.href = "/auth/login";
@@ -116,19 +127,26 @@ export default function DashboardIntegrationsPage() {
       }
 
       if (!response.ok || !Array.isArray(body.integrations)) {
-        setError("Unable to load integrations right now.");
+        setError(typeof body.message === "string" ? body.message : "Unable to load integrations.");
         setIntegrations([]);
         return;
       }
 
-      const integrationRows = body.integrations;
-      setIntegrations(integrationRows);
-      const slack = integrationRows.find((integration) => integration.type === "slack");
-      if (slack) {
-        setSlackStatus(slack.status);
+      const rows = body.integrations;
+      setIntegrations(rows);
+
+      const jira = rows.find((integration) => integration.type === "jira");
+      const jiraConfig = jira?.config ?? {};
+      const baseUrl = typeof jiraConfig.base_url === "string" ? jiraConfig.base_url : "";
+      const projectKey = typeof jiraConfig.project_key === "string" ? jiraConfig.project_key : "";
+      if (baseUrl) {
+        setJiraBaseUrl(baseUrl);
+      }
+      if (projectKey) {
+        setJiraProjectKey(projectKey);
       }
     } catch {
-      setError("Unable to load integrations right now.");
+      setError("Unable to load integrations.");
       setIntegrations([]);
     } finally {
       setIsLoadingIntegrations(false);
@@ -152,24 +170,60 @@ export default function DashboardIntegrationsPage() {
     setError(null);
     setSuccess(null);
 
-    if (!selectedOrgId) {
-      setError("Select an organization first.");
-      return;
-    }
-    if (!slackWebhookUrl.trim()) {
+    if (!selectedOrgId || !slackWebhookUrl.trim()) {
       setError("Slack webhook URL is required.");
       return;
     }
 
-    setIsSavingSlack(true);
+    setIsConnectingSlack(true);
     try {
-      const response = await fetch("/api/integrations/slack", {
+      const response = await fetch("/api/integrations/slack/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ org_id: selectedOrgId, webhook_url: slackWebhookUrl.trim() }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { message?: unknown };
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+      if (!response.ok) {
+        setError(typeof body.message === "string" ? body.message : "Unable to connect Slack.");
+        return;
+      }
+
+      setSlackWebhookUrl("");
+      setSuccess("Slack connected.");
+      await loadIntegrations(selectedOrgId);
+    } catch {
+      setError("Unable to connect Slack.");
+    } finally {
+      setIsConnectingSlack(false);
+    }
+  };
+
+  const connectJira = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    if (!selectedOrgId || !jiraBaseUrl.trim() || !jiraEmail.trim() || !jiraApiToken.trim() || !jiraProjectKey.trim()) {
+      setError("Jira base URL, email, API token, and project key are required.");
+      return;
+    }
+
+    setIsConnectingJira(true);
+    try {
+      const response = await fetch("/api/integrations/jira/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           org_id: selectedOrgId,
-          webhook_url: slackWebhookUrl.trim(),
-          status: slackStatus,
+          base_url: jiraBaseUrl.trim(),
+          email: jiraEmail.trim(),
+          api_token: jiraApiToken.trim(),
+          project_key: jiraProjectKey.trim(),
         }),
       });
       const body = (await response.json().catch(() => ({}))) as { message?: unknown };
@@ -178,25 +232,22 @@ export default function DashboardIntegrationsPage() {
         window.location.href = "/auth/login";
         return;
       }
-
       if (!response.ok) {
-        setError(
-          typeof body.message === "string" ? body.message : "Unable to save Slack integration.",
-        );
+        setError(typeof body.message === "string" ? body.message : "Unable to connect Jira.");
         return;
       }
 
-      setSlackWebhookUrl("");
-      setSuccess("Slack integration saved securely.");
+      setJiraApiToken("");
+      setSuccess("Jira connected.");
       await loadIntegrations(selectedOrgId);
     } catch {
-      setError("Unable to save Slack integration.");
+      setError("Unable to connect Jira.");
     } finally {
-      setIsSavingSlack(false);
+      setIsConnectingJira(false);
     }
   };
 
-  const sendSlackTest = async () => {
+  const testSlack = async () => {
     setError(null);
     setSuccess(null);
 
@@ -210,10 +261,7 @@ export default function DashboardIntegrationsPage() {
       const response = await fetch("/api/integrations/slack/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          org_id: selectedOrgId,
-          message: testMessage.trim() || null,
-        }),
+        body: JSON.stringify({ org_id: selectedOrgId }),
       });
       const body = (await response.json().catch(() => ({}))) as { message?: unknown };
 
@@ -221,17 +269,49 @@ export default function DashboardIntegrationsPage() {
         window.location.href = "/auth/login";
         return;
       }
-
       if (!response.ok) {
         setError(typeof body.message === "string" ? body.message : "Slack test failed.");
         return;
       }
-
       setSuccess("Slack test message sent.");
     } catch {
       setError("Slack test failed.");
     } finally {
       setIsTestingSlack(false);
+    }
+  };
+
+  const testJira = async () => {
+    setError(null);
+    setSuccess(null);
+
+    if (!selectedOrgId) {
+      setError("Select an organization first.");
+      return;
+    }
+
+    setIsTestingJira(true);
+    try {
+      const response = await fetch("/api/integrations/jira/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ org_id: selectedOrgId }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { message?: unknown };
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+      if (!response.ok) {
+        setError(typeof body.message === "string" ? body.message : "Jira test failed.");
+        return;
+      }
+      setSuccess("Jira test succeeded.");
+    } catch {
+      setError("Jira test failed.");
+    } finally {
+      setIsTestingJira(false);
     }
   };
 
@@ -245,7 +325,7 @@ export default function DashboardIntegrationsPage() {
           </Button>
         </div>
         <p className="text-sm text-muted-foreground">
-          Configure pluggable alert routing connectors. Secrets are write-only and never returned to the client.
+          Configure Slack and Jira per workspace. Secrets are encrypted server-side and never returned.
         </p>
       </section>
 
@@ -279,26 +359,20 @@ export default function DashboardIntegrationsPage() {
       <Card className="border-border/70">
         <CardHeader>
           <CardTitle>Slack</CardTitle>
-          <CardDescription>Configure incoming webhook for alert notifications.</CardDescription>
+          <CardDescription>Incoming webhook for alert notifications.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {isLoadingIntegrations ? (
-            <p className="text-sm text-muted-foreground">Loading integrations...</p>
-          ) : (
-            <div className="rounded-lg border border-border/70 bg-card p-3 text-sm">
-              <p>
-                <span className="font-medium">Current status:</span> {slackIntegration?.status ?? "not configured"}
-              </p>
-              <p className="text-muted-foreground">
-                Secret configured: {slackIntegration?.has_secret ? "yes" : "no"}
-              </p>
-              {slackIntegration ? (
-                <p className="text-xs text-muted-foreground">
-                  Updated at {formatTime(slackIntegration.updated_at)}
-                </p>
-              ) : null}
-            </div>
-          )}
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-medium">Status:</span>
+            <span
+              className={`rounded px-2 py-1 text-xs font-medium ${statusClass(
+                slackIntegration?.status ?? "not_connected",
+              )}`}
+            >
+              {slackIntegration?.status ?? "not_connected"}
+            </span>
+            {isLoadingIntegrations ? <span className="text-muted-foreground">Refreshing...</span> : null}
+          </div>
 
           <form onSubmit={connectSlack} className="space-y-3">
             <div className="space-y-2">
@@ -312,40 +386,100 @@ export default function DashboardIntegrationsPage() {
                 autoComplete="off"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="slack-status">Status</Label>
-              <select
-                id="slack-status"
-                value={slackStatus}
-                onChange={(event) => setSlackStatus(event.target.value as IntegrationStatus)}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" disabled={isConnectingSlack || !selectedOrgId}>
+                {isConnectingSlack ? "Connecting..." : "Connect"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isTestingSlack || !selectedOrgId || slackIntegration?.status !== "connected"}
+                onClick={testSlack}
               >
-                <option value="enabled">enabled</option>
-                <option value="disabled">disabled</option>
-              </select>
+                {isTestingSlack ? "Testing..." : "Test"}
+              </Button>
             </div>
-            <Button type="submit" disabled={isSavingSlack || !selectedOrgId}>
-              {isSavingSlack ? "Saving..." : "Save Slack Integration"}
-            </Button>
           </form>
-
-          <div className="space-y-2 border-t border-border/70 pt-4">
-            <Label htmlFor="slack-test-message">Test message</Label>
-            <Input
-              id="slack-test-message"
-              value={testMessage}
-              onChange={(event) => setTestMessage(event.target.value)}
-              placeholder="Verirule Slack integration test."
-            />
-            <Button type="button" variant="outline" disabled={isTestingSlack || !selectedOrgId} onClick={sendSlackTest}>
-              {isTestingSlack ? "Sending..." : "Send Test Message"}
-            </Button>
-          </div>
-
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          {success ? <p className="text-sm text-green-700">{success}</p> : null}
         </CardContent>
       </Card>
+
+      <Card className="border-border/70">
+        <CardHeader>
+          <CardTitle>Jira</CardTitle>
+          <CardDescription>Atlassian Cloud issue creation integration.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-medium">Status:</span>
+            <span
+              className={`rounded px-2 py-1 text-xs font-medium ${statusClass(
+                jiraIntegration?.status ?? "not_connected",
+              )}`}
+            >
+              {jiraIntegration?.status ?? "not_connected"}
+            </span>
+            {isLoadingIntegrations ? <span className="text-muted-foreground">Refreshing...</span> : null}
+          </div>
+
+          <form onSubmit={connectJira} className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="jira-base-url">Base URL</Label>
+              <Input
+                id="jira-base-url"
+                value={jiraBaseUrl}
+                onChange={(event) => setJiraBaseUrl(event.target.value)}
+                placeholder="https://yourdomain.atlassian.net"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="jira-email">Email</Label>
+              <Input
+                id="jira-email"
+                value={jiraEmail}
+                onChange={(event) => setJiraEmail(event.target.value)}
+                placeholder="you@company.com"
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="jira-api-token">API Token</Label>
+              <Input
+                id="jira-api-token"
+                type="password"
+                value={jiraApiToken}
+                onChange={(event) => setJiraApiToken(event.target.value)}
+                placeholder="Atlassian API token"
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="jira-project-key">Project Key</Label>
+              <Input
+                id="jira-project-key"
+                value={jiraProjectKey}
+                onChange={(event) => setJiraProjectKey(event.target.value)}
+                placeholder="SEC"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" disabled={isConnectingJira || !selectedOrgId}>
+                {isConnectingJira ? "Connecting..." : "Connect"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isTestingJira || !selectedOrgId || jiraIntegration?.status !== "connected"}
+                onClick={testJira}
+              >
+                {isTestingJira ? "Testing..." : "Test"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {success ? <p className="text-sm text-emerald-700">{success}</p> : null}
     </div>
   );
 }

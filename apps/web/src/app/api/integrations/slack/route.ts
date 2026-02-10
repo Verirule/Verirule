@@ -29,6 +29,16 @@ function logProxyError(error: unknown): void {
   console.error("api/integrations/slack proxy failed", { message });
 }
 
+async function upstreamErrorResponse(upstreamResponse: Response) {
+  if (upstreamResponse.status === 502) {
+    return NextResponse.json({ message: "Upstream API error" }, { status: 502 });
+  }
+
+  const body = (await upstreamResponse.json().catch(() => ({}))) as { detail?: unknown };
+  const detail = typeof body.detail === "string" ? body.detail : "Request failed";
+  return NextResponse.json({ message: detail }, { status: upstreamResponse.status });
+}
+
 export async function POST(request: NextRequest) {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl) {
@@ -43,21 +53,19 @@ export async function POST(request: NextRequest) {
   const payload = (await request.json().catch(() => null)) as {
     org_id?: unknown;
     webhook_url?: unknown;
-    status?: unknown;
   } | null;
   const orgId = typeof payload?.org_id === "string" ? payload.org_id.trim() : "";
   const webhookUrl = typeof payload?.webhook_url === "string" ? payload.webhook_url.trim() : "";
-  const status = payload?.status === "enabled" || payload?.status === "disabled" ? payload.status : "enabled";
 
   if (!orgId || !webhookUrl) {
     return NextResponse.json({ message: "Invalid Slack integration payload" }, { status: 400 });
   }
 
   try {
-    const upstreamResponse = await fetch(`${apiBaseUrl}/api/v1/integrations/slack`, {
+    const upstreamResponse = await fetch(`${apiBaseUrl}/api/v1/integrations/slack/connect`, {
       method: "POST",
       headers: upstreamHeaders(accessToken),
-      body: JSON.stringify({ org_id: orgId, webhook_url: webhookUrl, status }),
+      body: JSON.stringify({ org_id: orgId, webhook_url: webhookUrl }),
       cache: "no-store",
     });
 
@@ -65,9 +73,7 @@ export async function POST(request: NextRequest) {
       console.error("api/integrations/slack proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
-      const body = (await upstreamResponse.json().catch(() => ({}))) as { detail?: unknown };
-      const detail = typeof body.detail === "string" ? body.detail : "Upstream API error";
-      return NextResponse.json({ message: detail }, { status: upstreamResponse.status });
+      return upstreamErrorResponse(upstreamResponse);
     }
 
     const body = (await upstreamResponse.json().catch(() => ({}))) as unknown;

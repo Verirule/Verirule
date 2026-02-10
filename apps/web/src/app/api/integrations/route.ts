@@ -29,6 +29,16 @@ function logProxyError(error: unknown): void {
   console.error("api/integrations proxy failed", { message });
 }
 
+async function upstreamErrorResponse(upstreamResponse: Response) {
+  if (upstreamResponse.status === 502) {
+    return NextResponse.json({ message: "Upstream API error" }, { status: 502 });
+  }
+
+  const body = (await upstreamResponse.json().catch(() => ({}))) as { detail?: unknown };
+  const detail = typeof body.detail === "string" ? body.detail : "Request failed";
+  return NextResponse.json({ message: detail }, { status: upstreamResponse.status });
+}
+
 export async function GET(request: NextRequest) {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl) {
@@ -59,7 +69,7 @@ export async function GET(request: NextRequest) {
       console.error("api/integrations proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
-      return NextResponse.json({ message: "Upstream API error" }, { status: 502 });
+      return upstreamErrorResponse(upstreamResponse);
     }
 
     const body = (await upstreamResponse.json().catch(() => ({}))) as unknown;

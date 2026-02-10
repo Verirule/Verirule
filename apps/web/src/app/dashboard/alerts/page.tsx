@@ -45,6 +45,15 @@ type FindingRecord = {
 type OrgsResponse = { orgs: OrgRecord[] };
 type AlertsResponse = { alerts: AlertRecord[] };
 type FindingsResponse = { findings: FindingRecord[] };
+type IntegrationRecord = {
+  id: string;
+  org_id: string;
+  type: "slack" | "jira";
+  status: "connected" | "disabled";
+  config: Record<string, unknown>;
+  updated_at: string;
+};
+type IntegrationsResponse = { integrations: IntegrationRecord[] };
 
 function formatTime(value: string | null): string {
   if (!value) {
@@ -69,12 +78,15 @@ export default function DashboardAlertsPage() {
   const [selectedOrgId, setSelectedOrgId] = useState("");
   const [alerts, setAlerts] = useState<AlertRecord[]>([]);
   const [findings, setFindings] = useState<FindingRecord[]>([]);
+  const [integrations, setIntegrations] = useState<IntegrationRecord[]>([]);
 
   const [activeTab, setActiveTab] = useState<AlertTab>("open");
   const [isLoadingOrgs, setIsLoadingOrgs] = useState(true);
   const [isLoadingAlerts, setIsLoadingAlerts] = useState(false);
   const [updatingAlertId, setUpdatingAlertId] = useState<string | null>(null);
+  const [actingAlertId, setActingAlertId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const [createTaskAlert, setCreateTaskAlert] = useState<AlertRecord | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
@@ -90,6 +102,14 @@ export default function DashboardAlertsPage() {
   const filteredAlerts = useMemo(() => {
     return alerts.filter((alert) => alert.status === activeTab);
   }, [activeTab, alerts]);
+  const slackConnected = useMemo(
+    () => integrations.some((integration) => integration.type === "slack" && integration.status === "connected"),
+    [integrations],
+  );
+  const jiraConnected = useMemo(
+    () => integrations.some((integration) => integration.type === "jira" && integration.status === "connected"),
+    [integrations],
+  );
 
   const loadOrgs = async () => {
     setIsLoadingOrgs(true);
@@ -131,14 +151,16 @@ export default function DashboardAlertsPage() {
     if (!orgId) {
       setAlerts([]);
       setFindings([]);
+      setIntegrations([]);
       return;
     }
 
     setIsLoadingAlerts(true);
     setError(null);
+    setActionMessage(null);
 
     try {
-      const [alertsResponse, findingsResponse] = await Promise.all([
+      const [alertsResponse, findingsResponse, integrationsResponse] = await Promise.all([
         fetch(`/api/alerts?org_id=${encodeURIComponent(orgId)}`, {
           method: "GET",
           cache: "no-store",
@@ -147,15 +169,20 @@ export default function DashboardAlertsPage() {
           method: "GET",
           cache: "no-store",
         }),
+        fetch(`/api/integrations?org_id=${encodeURIComponent(orgId)}`, {
+          method: "GET",
+          cache: "no-store",
+        }),
       ]);
 
-      if (alertsResponse.status === 401 || findingsResponse.status === 401) {
+      if (alertsResponse.status === 401 || findingsResponse.status === 401 || integrationsResponse.status === 401) {
         window.location.href = "/auth/login";
         return;
       }
 
       const alertsBody = (await alertsResponse.json().catch(() => ({}))) as Partial<AlertsResponse>;
       const findingsBody = (await findingsResponse.json().catch(() => ({}))) as Partial<FindingsResponse>;
+      const integrationsBody = (await integrationsResponse.json().catch(() => ({}))) as Partial<IntegrationsResponse>;
 
       if (!alertsResponse.ok || !Array.isArray(alertsBody.alerts)) {
         setError("Unable to load alerts right now.");
@@ -168,13 +195,20 @@ export default function DashboardAlertsPage() {
         setFindings([]);
         return;
       }
+      if (!integrationsResponse.ok || !Array.isArray(integrationsBody.integrations)) {
+        setError("Unable to load integrations right now.");
+        setIntegrations([]);
+        return;
+      }
 
       setAlerts(alertsBody.alerts);
       setFindings(findingsBody.findings);
+      setIntegrations(integrationsBody.integrations);
     } catch {
       setError("Unable to load alerts right now.");
       setAlerts([]);
       setFindings([]);
+      setIntegrations([]);
     } finally {
       setIsLoadingAlerts(false);
     }
@@ -188,6 +222,7 @@ export default function DashboardAlertsPage() {
     if (!selectedOrgId) {
       setAlerts([]);
       setFindings([]);
+      setIntegrations([]);
       return;
     }
     void loadAlertsAndFindings(selectedOrgId);
@@ -287,6 +322,65 @@ export default function DashboardAlertsPage() {
       setTaskCreateError("Unable to create task.");
     } finally {
       setIsCreatingTask(false);
+    }
+  };
+
+  const sendToSlack = async (alert: AlertRecord) => {
+    setError(null);
+    setActionMessage(null);
+    setActingAlertId(alert.id);
+
+    try {
+      const response = await fetch("/api/integrations/slack/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ org_id: alert.org_id, alert_id: alert.id }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { message?: unknown };
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+      if (!response.ok) {
+        setError(typeof body.message === "string" ? body.message : "Failed to send alert to Slack.");
+        return;
+      }
+      setActionMessage("Alert sent to Slack.");
+    } catch {
+      setError("Failed to send alert to Slack.");
+    } finally {
+      setActingAlertId(null);
+    }
+  };
+
+  const createJiraTicket = async (alert: AlertRecord) => {
+    setError(null);
+    setActionMessage(null);
+    setActingAlertId(alert.id);
+
+    try {
+      const response = await fetch("/api/integrations/jira/create-issue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ org_id: alert.org_id, alert_id: alert.id }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { message?: unknown; issueKey?: unknown };
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+      if (!response.ok) {
+        setError(typeof body.message === "string" ? body.message : "Failed to create Jira issue.");
+        return;
+      }
+      const issueKey = typeof body.issueKey === "string" ? body.issueKey : "issue";
+      setActionMessage(`Jira ticket created: ${issueKey}.`);
+    } catch {
+      setError("Failed to create Jira issue.");
+    } finally {
+      setActingAlertId(null);
     }
   };
 
@@ -416,12 +510,39 @@ export default function DashboardAlertsPage() {
                         >
                           Create task
                         </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={
+                            actingAlertId === alert.id || alert.status !== "open" || !slackConnected
+                          }
+                          onClick={() => void sendToSlack(alert)}
+                        >
+                          {actingAlertId === alert.id ? "Sending..." : "Send to Slack"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={actingAlertId === alert.id || alert.status !== "open" || !jiraConnected}
+                          onClick={() => void createJiraTicket(alert)}
+                        >
+                          {actingAlertId === alert.id ? "Creating..." : "Create Jira ticket"}
+                        </Button>
                         <Button asChild type="button" variant="ghost" size="sm">
                           <Link href={`/dashboard/alerts/${alert.id}?org_id=${encodeURIComponent(alert.org_id)}`}>
                             Details
                           </Link>
                         </Button>
                       </div>
+                      {alert.status === "open" && (!slackConnected || !jiraConnected) ? (
+                        <p className="text-xs text-muted-foreground">
+                          Connect {!slackConnected ? "Slack" : ""}
+                          {!slackConnected && !jiraConnected ? " and " : ""}
+                          {!jiraConnected ? "Jira" : ""} in Settings to use alert actions.
+                        </p>
+                      ) : null}
                     </div>
                   </li>
                 );
@@ -429,6 +550,7 @@ export default function DashboardAlertsPage() {
             </ul>
           ) : null}
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {actionMessage ? <p className="text-sm text-emerald-700">{actionMessage}</p> : null}
         </CardContent>
       </Card>
 
