@@ -23,36 +23,80 @@ export function SignUpForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     const supabase = createClient();
-    setIsLoading(true);
+    setLoading(true);
     setError(null);
+    setMessage(null);
 
     if (password !== repeatPassword) {
       setError("Passwords do not match");
-      setIsLoading(false);
+      setLoading(false);
       return;
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/protected`,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
-      if (error) throw error;
-      router.push("/auth/sign-up-success");
+
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
+
+      if (data.session) {
+        router.push("/dashboard");
+        return;
+      }
+
+      setMessage("Check your email to confirm your account. Once confirmed, you can log in.");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!email.trim()) {
+      setError("Enter your email address first.");
+      return;
+    }
+
+    const supabase = createClient();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (resendError) {
+        setError(resendError.message);
+        return;
+      }
+
+      setMessage("If the account exists, a new confirmation email has been sent.");
+    } catch (resendError: unknown) {
+      setError(resendError instanceof Error ? resendError.message : "Unable to resend confirmation email.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -101,10 +145,30 @@ export function SignUpForm({
                   onChange={(e) => setRepeatPassword(e.target.value)}
                 />
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Creating an account..." : "Sign up"}
+              {error ? (
+                <div
+                  role="alert"
+                  className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
+                >
+                  {error}
+                </div>
+              ) : null}
+              {message ? (
+                <div
+                  aria-live="polite"
+                  className="rounded-md border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-200"
+                >
+                  {message}
+                </div>
+              ) : null}
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Creating account..." : "Sign up"}
               </Button>
+              {message && email.trim() ? (
+                <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={handleResendConfirmation}>
+                  {loading ? "Resending..." : "Resend confirmation email"}
+                </Button>
+              ) : null}
             </div>
             <div className="mt-4 text-center text-sm">
               Already have an account?{" "}
