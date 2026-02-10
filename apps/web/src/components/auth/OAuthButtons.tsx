@@ -75,11 +75,11 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
             key={provider}
             type="button"
             variant="outline"
-            className="relative z-20 h-11 w-full justify-center border-slate-300 bg-transparent text-foreground hover:bg-slate-100/60 dark:border-slate-700 dark:hover:bg-slate-800/70 pointer-events-auto"
+            className="relative z-20 h-11 w-full justify-center border border-slate-300/90 bg-white text-slate-900 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800/80 pointer-events-auto"
             disabled={loadingProvider !== null}
             onClick={() => handleOAuth(provider)}
           >
-            <ProviderIcon className="size-4" />
+            <ProviderIcon className="size-4 text-current" />
             {loadingProvider === provider
               ? `Redirecting to ${providerLabels[provider]}...`
               : `${actionText} ${providerLabels[provider]}`}

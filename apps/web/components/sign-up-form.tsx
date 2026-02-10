@@ -189,9 +189,6 @@ export function SignUpForm({
               >
                 {loading ? "Creating account..." : "Sign up"}
               </Button>
-              <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                Debug: emailLen={email.trim().length} passwordLen={password.length} loading={String(loading)}
-              </div>
               {message && email.trim() ? (
                 <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={handleResendConfirmation}>
                   {loading ? "Resending..." : "Resend confirmation email"}

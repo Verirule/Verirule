@@ -115,9 +115,6 @@ export function LoginForm({
               >
                 {loading ? "Logging in..." : "Login"}
               </Button>
-              <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                Debug: emailLen={email.trim().length} passwordLen={password.length} loading={String(loading)}
-              </div>
             </div>
             <div className="mt-4 text-center text-sm">
               Don&apos;t have an account?{" "}

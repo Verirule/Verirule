@@ -9,12 +9,10 @@ export function Footer() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <LogoMark className="h-8 w-8 text-sky-400" />
+            <LogoMark className="h-8 w-8 text-[#38BDF8]" />
             <span className="text-lg font-semibold text-white">Verirule</span>
           </div>
-          <p className="max-w-md text-sm text-slate-400">
-            AI-powered compliance monitoring for modern teams.
-          </p>
+          <p className="max-w-md text-sm text-slate-400">AI-powered compliance monitoring for modern teams.</p>
           <SocialIcons />
         </div>
 
@@ -40,7 +38,7 @@ export function Footer() {
               License (GNU AGPLv3)
             </Link>
           </div>
-          <p className="text-slate-500">© Verirule</p>
+          <p className="text-slate-500">&copy; Verirule</p>
         </div>
       </div>
     </footer>
