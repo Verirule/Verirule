@@ -11,8 +11,8 @@ from app.api.v1.schemas.monitoring import (
     MonitorRunOut,
 )
 from app.core.integration_crypto import decrypt_integration_secret
-from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.core.settings import get_settings
+from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.core.supabase_rest import (
     count_alert_task_evidence,
     rpc_append_audit,
@@ -20,10 +20,10 @@ from app.core.supabase_rest import (
     rpc_set_alert_status,
     rpc_upsert_alert_for_finding,
     rpc_upsert_finding,
-    select_integration,
     select_alerts,
     select_audit_log,
     select_findings,
+    select_integration,
     select_monitor_runs,
 )
 from app.integrations.models import AlertNotification

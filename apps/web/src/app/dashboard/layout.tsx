@@ -8,10 +8,10 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <DashboardShell>
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading dashboard...</p>}>
+    <Suspense fallback={<p className="px-4 py-6 text-sm text-muted-foreground">Loading dashboard...</p>}>
+      <DashboardShell>
         <DashboardAuthGate>{children}</DashboardAuthGate>
-      </Suspense>
-    </DashboardShell>
+      </DashboardShell>
+    </Suspense>
   );
 }

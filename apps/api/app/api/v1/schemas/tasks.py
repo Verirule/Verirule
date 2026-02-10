@@ -4,7 +4,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
-
 TaskStatus = Literal["open", "in_progress", "resolved", "blocked"]
 
 

@@ -77,12 +77,13 @@ export default function DashboardIntegrationsPage() {
         return;
       }
 
-      setOrgs(body.orgs);
+      const orgRows = body.orgs;
+      setOrgs(orgRows);
       setSelectedOrgId((current) => {
-        if (current && body.orgs.some((org) => org.id === current)) {
+        if (current && orgRows.some((org) => org.id === current)) {
           return current;
         }
-        return body.orgs[0]?.id ?? "";
+        return orgRows[0]?.id ?? "";
       });
     } catch {
       setError("Unable to load organizations right now.");
@@ -120,8 +121,9 @@ export default function DashboardIntegrationsPage() {
         return;
       }
 
-      setIntegrations(body.integrations);
-      const slack = body.integrations.find((integration) => integration.type === "slack");
+      const integrationRows = body.integrations;
+      setIntegrations(integrationRows);
+      const slack = integrationRows.find((integration) => integration.type === "slack");
       if (slack) {
         setSlackStatus(slack.status);
       }

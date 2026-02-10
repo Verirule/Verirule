@@ -143,15 +143,16 @@ export default function DashboardTasksPage() {
         return;
       }
 
-      setOrgs(body.orgs);
+      const orgRows = body.orgs;
+      setOrgs(orgRows);
       setSelectedOrgId((current) => {
-        if (requestedOrgId && body.orgs.some((org) => org.id === requestedOrgId)) {
+        if (requestedOrgId && orgRows.some((org) => org.id === requestedOrgId)) {
           return requestedOrgId;
         }
-        if (current && body.orgs.some((org) => org.id === current)) {
+        if (current && orgRows.some((org) => org.id === current)) {
           return current;
         }
-        return body.orgs[0]?.id ?? "";
+        return orgRows[0]?.id ?? "";
       });
     } catch {
       setError("Unable to load organizations right now.");
@@ -188,7 +189,8 @@ export default function DashboardTasksPage() {
         return;
       }
 
-      setTasks(body.tasks);
+      const taskRows = body.tasks;
+      setTasks(taskRows);
     } catch {
       setError("Unable to load tasks right now.");
       setTasks([]);
