@@ -4,6 +4,9 @@
 
 @layer base {
   :root {
+    --vr-bg: 255 255 255;
+    --vr-fg: 15 23 42;
+    --vr-card: 248 250 252;
     --background: 0 0% 100%;
     --foreground: 0 0% 3.9%;
     --card: 0 0% 100%;
@@ -31,6 +34,9 @@
     --radius: 0.5rem;
   }
   .dark {
+    --vr-bg: 15 23 42;
+    --vr-fg: 248 250 252;
+    --vr-card: 17 24 39;
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
     --card: 0 0% 3.9%;
@@ -67,12 +73,24 @@
   }
   body {
     @apply text-foreground;
-    background-color: hsl(var(--background));
+    background-color: rgb(var(--vr-bg));
+    color: rgb(var(--vr-fg));
     background-image: radial-gradient(
         1200px 600px at 10% -10%,
         hsl(var(--secondary) / 0.45),
         transparent 60%
       ),
       radial-gradient(800px 500px at 100% 0%, hsl(var(--accent) / 0.4), transparent 55%);
+  }
+}
+
+@layer components {
+  .vr-page {
+    background-color: rgb(var(--vr-bg));
+    color: rgb(var(--vr-fg));
+  }
+
+  .vr-surface {
+    background-color: rgb(var(--vr-card));
   }
 }

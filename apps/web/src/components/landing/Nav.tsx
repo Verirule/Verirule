@@ -1,7 +1,8 @@
 "use client";
 
+import { LogoMark } from "@/src/components/brand/LogoMark";
+import { ThemeToggle } from "@/src/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
-import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -17,10 +18,10 @@ export function Nav() {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-border/60 bg-background/90 backdrop-blur">
+    <nav className="vr-surface sticky top-0 z-50 border-b border-border/60 bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-3 font-semibold tracking-tight">
-          <Image src="/brand/logo.svg" alt="Verirule logo" width={28} height={28} />
+          <LogoMark className="h-7 w-7 text-slate-900 dark:text-white" />
           <span>Verirule</span>
         </Link>
 
@@ -40,26 +41,30 @@ export function Nav() {
           <Link href="/auth/login" className="text-muted-foreground transition-colors hover:text-foreground">
             Login
           </Link>
+          <ThemeToggle />
           <Button asChild size="sm">
             <Link href="/auth/sign-up">Get started</Link>
           </Button>
         </div>
 
-        <button
-          type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-border md:hidden"
-          onClick={() => setIsOpen((value) => !value)}
-          aria-expanded={isOpen}
-          aria-controls="mobile-nav-panel"
-          aria-label="Toggle navigation menu"
-        >
-          <span className="sr-only">Menu</span>
-          <span className="flex flex-col gap-1.5">
-            <span className="block h-0.5 w-4 bg-foreground" />
-            <span className="block h-0.5 w-4 bg-foreground" />
-            <span className="block h-0.5 w-4 bg-foreground" />
-          </span>
-        </button>
+        <div className="flex items-center gap-2 md:hidden">
+          <ThemeToggle className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent" />
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-border"
+            onClick={() => setIsOpen((value) => !value)}
+            aria-expanded={isOpen}
+            aria-controls="mobile-nav-panel"
+            aria-label="Toggle navigation menu"
+          >
+            <span className="sr-only">Menu</span>
+            <span className="flex flex-col gap-1.5">
+              <span className="block h-0.5 w-4 bg-foreground" />
+              <span className="block h-0.5 w-4 bg-foreground" />
+              <span className="block h-0.5 w-4 bg-foreground" />
+            </span>
+          </button>
+        </div>
       </div>
 
       {isOpen ? (
