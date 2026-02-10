@@ -1,4 +1,4 @@
-app = "verirule"
+app = "verirule-api"
 primary_region = "lhr"
 
 [build]
