@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
 type TaskStatus = "open" | "in_progress" | "blocked" | "done";
 type EvidenceType = "link" | "log";
@@ -50,6 +50,8 @@ type OrgsResponse = { orgs: OrgRecord[] };
 type TasksResponse = { tasks: TaskRecord[] };
 type CommentsResponse = { comments: TaskCommentRecord[] };
 type EvidenceResponse = { evidence: TaskEvidenceRecord[] };
+type TaskEvidenceUploadUrlResponse = { path: string; uploadUrl: string; expiresIn: number };
+type TaskEvidenceDownloadUrlResponse = { downloadUrl: string; expiresIn: number };
 
 function formatTime(value: string | null): string {
   if (!value) {
@@ -60,6 +62,46 @@ function formatTime(value: string | null): string {
     return "Unknown time";
   }
   return parsed.toLocaleString();
+}
+
+function evidenceDisplayName(item: TaskEvidenceRecord): string {
+  if (item.type !== "file") {
+    return item.ref;
+  }
+  const parts = item.ref.split("/");
+  return parts[parts.length - 1] || item.ref;
+}
+
+function uploadFileToSignedUrl(
+  uploadUrl: string,
+  file: File,
+  onProgress: (progress: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("PUT", uploadUrl, true);
+    request.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable) {
+        return;
+      }
+      const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+      onProgress(percent);
+    };
+
+    request.onerror = () => reject(new Error("Upload failed."));
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) {
+        onProgress(100);
+        resolve();
+        return;
+      }
+      reject(new Error(`Upload failed (${request.status}).`));
+    };
+
+    request.send(file);
+  });
 }
 
 export default function DashboardTasksPage() {
@@ -82,12 +124,16 @@ export default function DashboardTasksPage() {
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isSavingTask, setIsSavingTask] = useState(false);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [downloadingEvidenceId, setDownloadingEvidenceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [detailsError, setDetailsError] = useState<string | null>(null);
 
   const [commentBody, setCommentBody] = useState("");
   const [evidenceType, setEvidenceType] = useState<EvidenceType>("link");
   const [evidenceRef, setEvidenceRef] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const filteredTasks = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -335,6 +381,131 @@ export default function DashboardTasksPage() {
     }
   };
 
+  const beginFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const onFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!selectedTask || !file) {
+      return;
+    }
+
+    setIsUploadingFile(true);
+    setUploadProgress(0);
+    setDetailsError(null);
+
+    try {
+      const uploadUrlResponse = await fetch(
+        `/api/tasks/${encodeURIComponent(selectedTask.id)}/evidence/upload-url`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: file.name,
+            content_type: file.type || null,
+          }),
+        },
+      );
+
+      if (uploadUrlResponse.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      const uploadUrlBody = (await uploadUrlResponse.json().catch(() => ({}))) as Partial<TaskEvidenceUploadUrlResponse> &
+        { message?: unknown };
+      if (!uploadUrlResponse.ok) {
+        setDetailsError(
+          typeof uploadUrlBody.message === "string"
+            ? uploadUrlBody.message
+            : "Unable to request file upload URL.",
+        );
+        return;
+      }
+
+      const uploadUrl = typeof uploadUrlBody.uploadUrl === "string" ? uploadUrlBody.uploadUrl : "";
+      const evidencePath = typeof uploadUrlBody.path === "string" ? uploadUrlBody.path : "";
+      if (!uploadUrl || !evidencePath) {
+        setDetailsError("Unable to request file upload URL.");
+        return;
+      }
+
+      await uploadFileToSignedUrl(uploadUrl, file, setUploadProgress);
+
+      const fileEvidenceResponse = await fetch(
+        `/api/tasks/${encodeURIComponent(selectedTask.id)}/evidence/file`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: evidencePath }),
+        },
+      );
+
+      if (fileEvidenceResponse.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      if (!fileEvidenceResponse.ok) {
+        const body = (await fileEvidenceResponse.json().catch(() => ({}))) as { message?: unknown };
+        setDetailsError(
+          typeof body.message === "string" ? body.message : "Unable to save file evidence.",
+        );
+        return;
+      }
+
+      await loadTaskDetails(selectedTask);
+    } catch {
+      setDetailsError("Unable to upload file evidence.");
+    } finally {
+      setIsUploadingFile(false);
+      setUploadProgress(null);
+      event.target.value = "";
+    }
+  };
+
+  const openEvidenceFile = async (item: TaskEvidenceRecord) => {
+    if (!selectedTask || item.type !== "file") {
+      return;
+    }
+
+    setDownloadingEvidenceId(item.id);
+    setDetailsError(null);
+
+    try {
+      const response = await fetch(
+        `/api/tasks/${encodeURIComponent(selectedTask.id)}/evidence/${encodeURIComponent(
+          item.id,
+        )}/download-url`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      );
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      const body = (await response.json().catch(() => ({}))) as Partial<TaskEvidenceDownloadUrlResponse> & {
+        message?: unknown;
+      };
+
+      if (!response.ok || typeof body.downloadUrl !== "string") {
+        setDetailsError(typeof body.message === "string" ? body.message : "Unable to fetch download URL.");
+        return;
+      }
+
+      window.open(body.downloadUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      setDetailsError("Unable to fetch download URL.");
+    } finally {
+      setDownloadingEvidenceId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section>
@@ -495,23 +666,69 @@ export default function DashboardTasksPage() {
                       className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       placeholder="Add context for teammates..."
                     />
-                    <Button type="submit" size="sm" disabled={isSavingTask || !commentBody.trim()}>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={isSavingTask || isUploadingFile || !commentBody.trim()}
+                    >
                       Add Comment
                     </Button>
                   </form>
                 </section>
 
                 <section className="space-y-2 rounded-lg border border-border/70 p-3">
-                  <h3 className="font-medium">Evidence</h3>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="font-medium">Evidence</h3>
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="application/pdf,image/*,.txt"
+                        className="hidden"
+                        onChange={onFileSelected}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isUploadingFile || isSavingTask}
+                        onClick={beginFileUpload}
+                      >
+                        {isUploadingFile ? "Uploading..." : "Upload file"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {uploadProgress !== null ? (
+                    <p className="text-xs text-muted-foreground">Upload progress: {uploadProgress}%</p>
+                  ) : null}
+
                   {evidence.length === 0 ? (
                     <p className="text-xs text-muted-foreground">No evidence attached yet.</p>
                   ) : (
                     <ul className="space-y-2">
                       {evidence.map((item) => (
                         <li key={item.id} className="rounded-md border border-border/60 p-2 text-sm">
-                          <p className="font-medium">{item.type}</p>
-                          <p className="break-all text-xs text-muted-foreground">{item.ref}</p>
-                          <p className="text-xs text-muted-foreground">{formatTime(item.created_at)}</p>
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-medium">{item.type}</p>
+                              <p className="break-all text-xs text-muted-foreground">
+                                {evidenceDisplayName(item)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">{formatTime(item.created_at)}</p>
+                            </div>
+                            {item.type === "file" ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={downloadingEvidenceId === item.id || isUploadingFile}
+                                onClick={() => void openEvidenceFile(item)}
+                              >
+                                {downloadingEvidenceId === item.id ? "Loading..." : "View/Download"}
+                              </Button>
+                            ) : null}
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -533,7 +750,11 @@ export default function DashboardTasksPage() {
                         placeholder="URL or log reference"
                       />
                     </div>
-                    <Button type="submit" size="sm" disabled={isSavingTask || !evidenceRef.trim()}>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={isSavingTask || isUploadingFile || !evidenceRef.trim()}
+                    >
                       Add Evidence
                     </Button>
                   </form>
