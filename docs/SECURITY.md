@@ -4,10 +4,12 @@
 - Keep secrets only in environment variables.
 - Commit only `.env.example` templates.
 - Never hardcode API keys, service-role credentials, or signing secrets in source.
+- `SUPABASE_SERVICE_ROLE_KEY` is server-only (Fly secrets for API/worker) and must never be exposed to browsers.
 
 ## Web Environment Guardrail
 - Never set `POSTGRES_URL`, `DATABASE_URL`, or any DB credentials in the web (`apps/web`) environment.
 - Only use public Supabase URL + publishable/anon keys in web.
+- Never set `SUPABASE_SERVICE_ROLE_KEY` in Vercel or any `NEXT_PUBLIC_*` variable.
 
 ## Authentication and Token Verification
 - Frontend may hold Supabase session state, but backend must never trust session cookies directly.

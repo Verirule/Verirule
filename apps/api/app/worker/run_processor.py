@@ -124,8 +124,13 @@ async def fetch_url_snapshot(
 @dataclass
 class MonitorRunProcessor:
     access_token: str
+    write_access_token: str | None = None
     fetch_timeout_seconds: float = 10.0
     fetch_max_bytes: int = 1_000_000
+
+    @property
+    def write_token(self) -> str:
+        return self.write_access_token or self.access_token
 
     async def process_queued_runs_once(self, limit: int = 5) -> int:
         runs = await select_queued_monitor_runs(self.access_token, limit=limit)
@@ -139,7 +144,7 @@ class MonitorRunProcessor:
         source_id = str(run["source_id"])
 
         await rpc_set_monitor_run_state(
-            self.access_token,
+            self.write_token,
             {"p_run_id": run_id, "p_status": "running", "p_error": None},
         )
 
@@ -162,7 +167,7 @@ class MonitorRunProcessor:
             previous_snapshot = await select_latest_snapshot(self.access_token, source_id)
 
             await rpc_insert_snapshot(
-                self.access_token,
+                self.write_token,
                 {
                     "p_org_id": org_id,
                     "p_source_id": source_id,
@@ -181,7 +186,7 @@ class MonitorRunProcessor:
             if previous_hash != current_hash:
                 fingerprint = hashlib.sha256(f"{source_id}:{current_hash}".encode()).hexdigest()
                 finding_id = await rpc_upsert_finding(
-                    self.access_token,
+                    self.write_token,
                     {
                         "p_org_id": org_id,
                         "p_source_id": source_id,
@@ -195,11 +200,11 @@ class MonitorRunProcessor:
                     },
                 )
                 alert_result = await rpc_upsert_alert_for_finding(
-                    self.access_token,
+                    self.write_token,
                     {"p_org_id": org_id, "p_finding_id": finding_id},
                 )
                 await rpc_append_audit(
-                    self.access_token,
+                    self.write_token,
                     {
                         "p_org_id": org_id,
                         "p_action": "worker_finding_detected",
@@ -214,12 +219,12 @@ class MonitorRunProcessor:
                 )
 
             await rpc_set_monitor_run_state(
-                self.access_token,
+                self.write_token,
                 {"p_run_id": run_id, "p_status": "succeeded", "p_error": None},
             )
         except (HTTPException, ValueError, httpx.HTTPError) as exc:
             await rpc_set_monitor_run_state(
-                self.access_token,
+                self.write_token,
                 {
                     "p_run_id": run_id,
                     "p_status": "failed",
@@ -228,7 +233,7 @@ class MonitorRunProcessor:
             )
         except Exception as exc:  # pragma: no cover - catch-all safety
             await rpc_set_monitor_run_state(
-                self.access_token,
+                self.write_token,
                 {
                     "p_run_id": run_id,
                     "p_status": "failed",
@@ -239,16 +244,26 @@ class MonitorRunProcessor:
 
 async def run_worker_loop() -> None:
     settings = get_settings()
-    if not settings.WORKER_SUPABASE_ACCESS_TOKEN:
-        raise RuntimeError("WORKER_SUPABASE_ACCESS_TOKEN must be configured for worker mode")
+    read_access_token = settings.WORKER_SUPABASE_ACCESS_TOKEN or settings.SUPABASE_SERVICE_ROLE_KEY
+    if not read_access_token:
+        raise RuntimeError(
+            "SUPABASE_SERVICE_ROLE_KEY must be configured for worker mode"
+        )
+    write_access_token = settings.SUPABASE_SERVICE_ROLE_KEY or read_access_token
 
     processor = MonitorRunProcessor(
-        access_token=settings.WORKER_SUPABASE_ACCESS_TOKEN,
+        access_token=read_access_token,
+        write_access_token=write_access_token,
         fetch_timeout_seconds=settings.WORKER_FETCH_TIMEOUT_SECONDS,
         fetch_max_bytes=settings.WORKER_FETCH_MAX_BYTES,
     )
 
     while True:
-        processed = await processor.process_queued_runs_once(limit=settings.WORKER_BATCH_LIMIT)
+        try:
+            processed = await processor.process_queued_runs_once(limit=settings.WORKER_BATCH_LIMIT)
+        except Exception as exc:  # pragma: no cover - loop resiliency
+            print(f"worker loop error: {exc}")
+            await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))
+            continue
         if processed == 0:
             await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))

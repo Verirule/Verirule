@@ -148,3 +148,69 @@ def test_process_run_creates_finding_when_hash_changes(monkeypatch) -> None:
     assert len(alert_payloads) == 1
     assert alert_payloads[0]["p_finding_id"] == FINDING_ID
     assert len(audit_payloads) == 1
+
+
+def test_process_run_uses_service_role_for_writes(monkeypatch) -> None:
+    read_token = "worker-read-token"
+    write_token = "service-role-token"
+    called_read_tokens: list[str] = []
+    called_write_tokens: list[str] = []
+
+    async def fake_select_queued(access_token: str, limit: int) -> list[dict[str, str]]:
+        called_read_tokens.append(access_token)
+        assert limit == 5
+        return [{"id": RUN_ID, "org_id": ORG_ID, "source_id": SOURCE_ID, "status": "queued"}]
+
+    async def fake_set_state(access_token: str, payload: dict[str, str | None]) -> None:
+        called_write_tokens.append(access_token)
+        assert payload["p_run_id"] == RUN_ID
+
+    async def fake_select_source(access_token: str, source_id: str) -> dict[str, object] | None:
+        called_read_tokens.append(access_token)
+        assert source_id == SOURCE_ID
+        return {
+            "id": SOURCE_ID,
+            "org_id": ORG_ID,
+            "url": "https://example.com/policy",
+            "is_enabled": True,
+        }
+
+    async def fake_select_latest_snapshot(access_token: str, source_id: str) -> dict[str, str] | None:
+        called_read_tokens.append(access_token)
+        assert source_id == SOURCE_ID
+        return {"content_hash": "same-hash"}
+
+    async def fake_insert_snapshot(access_token: str, payload: dict[str, object]) -> str:
+        called_write_tokens.append(access_token)
+        assert payload["p_run_id"] == RUN_ID
+        return "snapshot-id"
+
+    async def fake_fetch(url: str, *, timeout_seconds: float, max_bytes: int) -> dict[str, object]:
+        assert url == "https://example.com/policy"
+        assert timeout_seconds == 10.0
+        assert max_bytes == 1_000_000
+        return {
+            "fetched_url": "https://example.com/policy",
+            "content_hash": "same-hash",
+            "content_type": "text/html",
+            "content_len": 123,
+        }
+
+    monkeypatch.setattr(run_processor, "select_queued_monitor_runs", fake_select_queued)
+    monkeypatch.setattr(run_processor, "rpc_set_monitor_run_state", fake_set_state)
+    monkeypatch.setattr(run_processor, "select_source_by_id", fake_select_source)
+    monkeypatch.setattr(run_processor, "select_latest_snapshot", fake_select_latest_snapshot)
+    monkeypatch.setattr(run_processor, "rpc_insert_snapshot", fake_insert_snapshot)
+    monkeypatch.setattr(run_processor, "fetch_url_snapshot", fake_fetch)
+
+    processor = run_processor.MonitorRunProcessor(
+        access_token=read_token,
+        write_access_token=write_token,
+    )
+    processed_count = asyncio.run(processor.process_queued_runs_once(limit=5))
+
+    assert processed_count == 1
+    assert called_read_tokens
+    assert called_write_tokens
+    assert all(token == read_token for token in called_read_tokens)
+    assert all(token == write_token for token in called_write_tokens)

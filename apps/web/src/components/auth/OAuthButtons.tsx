@@ -13,6 +13,8 @@ type OAuthButtonsProps = {
   mode: OAuthMode;
 };
 
+const allProviders: OAuthProvider[] = ["google", "apple", "github", "azure"];
+
 const providerLabels: Record<OAuthProvider, string> = {
   google: "Google",
   apple: "Apple",
@@ -20,7 +22,14 @@ const providerLabels: Record<OAuthProvider, string> = {
   azure: "Microsoft",
 };
 
-const providers: OAuthProvider[] = ["google", "apple", "github", "azure"];
+const configuredProviders = (process.env.NEXT_PUBLIC_SUPABASE_OAUTH_PROVIDERS ?? "")
+  .split(",")
+  .map((provider) => provider.trim().toLowerCase())
+  .filter((provider): provider is OAuthProvider =>
+    allProviders.includes(provider as OAuthProvider),
+  );
+
+const providers: OAuthProvider[] = configuredProviders;
 
 const providerIcons: Record<OAuthProvider, ComponentType<SVGProps<SVGSVGElement>>> = {
   google: GoogleIcon,
@@ -57,6 +66,10 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
   };
 
   const actionText = mode === "signup" ? "Continue with" : "Sign in with";
+
+  if (providers.length === 0) {
+    return null;
+  }
 
   return (
     <div className="space-y-3">

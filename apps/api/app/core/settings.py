@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     INTEGRATIONS_ENCRYPTION_KEY: str | None = None
     SUPABASE_URL: str
     SUPABASE_ANON_KEY: str
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
     SUPABASE_ISSUER: str | None = None
     SUPABASE_JWKS_URL: str | None = None
     WORKER_SUPABASE_ACCESS_TOKEN: str | None = None
