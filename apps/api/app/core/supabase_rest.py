@@ -302,6 +302,52 @@ async def select_alerts(access_token: str, org_id: str) -> list[dict[str, Any]]:
     return _validated_list_payload(response.json(), "Invalid alerts response from Supabase.")
 
 
+async def select_alert_by_id(access_token: str, alert_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/alerts"
+    params = {
+        "select": "id,org_id,finding_id,status,owner_user_id,created_at,resolved_at",
+        "id": f"eq.{alert_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch alert from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid alert response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def select_finding_by_id(access_token: str, finding_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/findings"
+    params = {
+        "select": "id,org_id,source_id,run_id,title,summary,severity,detected_at,fingerprint,raw_url,raw_hash",
+        "id": f"eq.{finding_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch finding from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid finding response from Supabase.")
+    return rows[0] if rows else None
+
+
 async def select_audit_log(access_token: str, org_id: str) -> list[dict[str, Any]]:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/audit_log"
@@ -669,7 +715,7 @@ async def select_integrations(access_token: str, org_id: str) -> list[dict[str, 
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/integrations"
     params = {
-        "select": "id,org_id,type,status,config,created_at,updated_at",
+        "select": "id,org_id,type,status,config,updated_at",
         "org_id": f"eq.{org_id}",
         "order": "type.asc",
     }
@@ -691,7 +737,7 @@ async def select_integration(access_token: str, org_id: str, integration_type: s
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/integrations"
     params = {
-        "select": "id,org_id,type,status,config,created_at,updated_at",
+        "select": "id,org_id,type,status,config,updated_at",
         "org_id": f"eq.{org_id}",
         "type": f"eq.{integration_type}",
         "limit": "1",
@@ -733,6 +779,47 @@ async def rpc_upsert_integration(access_token: str, payload: dict[str, Any]) -> 
         )
 
     return response_payload
+
+
+async def rpc_disable_integration(access_token: str, payload: dict[str, Any]) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/disable_integration"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to disable integration in Supabase.",
+        ) from exc
+
+
+async def select_integration_secret(
+    access_token: str, org_id: str, integration_type: str
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/integrations"
+    params = {
+        "select": "id,org_id,type,status,config,secret_ciphertext,updated_at",
+        "org_id": f"eq.{org_id}",
+        "type": f"eq.{integration_type}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch integration secret from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid integration secret response from Supabase.")
+    return rows[0] if rows else None
 
 
 async def rpc_upsert_alert_for_finding(access_token: str, payload: dict[str, Any]) -> dict[str, Any]:

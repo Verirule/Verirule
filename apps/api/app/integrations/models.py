@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
-IntegrationType = Literal["slack", "jira", "github"]
+IntegrationType = Literal["slack", "jira"]
 
 
 @dataclass(frozen=True)

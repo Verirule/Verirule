@@ -1,11 +1,11 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-IntegrationType = Literal["slack", "jira", "github"]
-IntegrationStatus = Literal["enabled", "disabled"]
+IntegrationType = Literal["slack", "jira"]
+IntegrationStatus = Literal["connected", "disabled"]
 
 
 class IntegrationOut(BaseModel):
@@ -13,17 +13,32 @@ class IntegrationOut(BaseModel):
     org_id: UUID
     type: IntegrationType
     status: IntegrationStatus
-    has_secret: bool
-    created_at: datetime
+    config: dict[str, Any]
     updated_at: datetime
 
 
 class SlackConnectIn(BaseModel):
     org_id: UUID
     webhook_url: str = Field(min_length=1, max_length=4096)
-    status: IntegrationStatus = "enabled"
 
 
-class SlackTestIn(BaseModel):
+class JiraConnectIn(BaseModel):
     org_id: UUID
-    message: str | None = Field(default=None, max_length=2000)
+    base_url: str = Field(min_length=1, max_length=2048)
+    email: str = Field(min_length=3, max_length=320)
+    api_token: str = Field(min_length=1, max_length=2048)
+    project_key: str = Field(min_length=1, max_length=64)
+
+
+class OrgIntegrationIn(BaseModel):
+    org_id: UUID
+
+
+class SlackNotifyIn(BaseModel):
+    org_id: UUID
+    alert_id: UUID
+
+
+class JiraCreateIssueOut(BaseModel):
+    issueKey: str
+    url: str
