@@ -28,26 +28,35 @@ export function SignUpForm({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const passwordOk = password.length >= 8;
-  const submitDisabled = loading || !emailOk || !passwordOk;
+  const submitDisabled = loading;
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
-    setLoading(true);
     setError(null);
     setMessage(null);
+    const trimmedEmail = email.trim();
 
-    if (password !== repeatPassword) {
-      setError("Passwords do not match");
-      setLoading(false);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError("Enter a valid email address.");
       return;
     }
 
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (password !== repeatPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    const supabase = createClient();
+    setLoading(true);
+
     try {
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
+        email: trimmedEmail,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
@@ -118,7 +127,7 @@ export function SignUpForm({
             <span>or</span>
             <span className="h-px flex-1 bg-border/70" />
           </div>
-          <form onSubmit={handleSignUp}>
+          <form onSubmit={handleSignUp} noValidate>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
@@ -173,9 +182,16 @@ export function SignUpForm({
                   {message}
                 </div>
               ) : null}
-              <Button type="submit" className="w-full" disabled={submitDisabled}>
+              <Button
+                type="submit"
+                className="relative z-20 w-full pointer-events-auto"
+                disabled={submitDisabled}
+              >
                 {loading ? "Creating account..." : "Sign up"}
               </Button>
+              <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                Debug: emailLen={email.trim().length} passwordLen={password.length} loading={String(loading)}
+              </div>
               {message && email.trim() ? (
                 <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={handleResendConfirmation}>
                   {loading ? "Resending..." : "Resend confirmation email"}

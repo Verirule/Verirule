@@ -2,7 +2,9 @@
 
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import type { ComponentType, SVGProps } from "react";
 import { useState } from "react";
+import { AppleIcon, GitHubIcon, GoogleIcon, MicrosoftIcon } from "./ProviderIcons";
 
 type OAuthMode = "login" | "signup";
 type OAuthProvider = "google" | "apple" | "github" | "azure";
@@ -19,6 +21,13 @@ const providerLabels: Record<OAuthProvider, string> = {
 };
 
 const providers: OAuthProvider[] = ["google", "apple", "github", "azure"];
+
+const providerIcons: Record<OAuthProvider, ComponentType<SVGProps<SVGSVGElement>>> = {
+  google: GoogleIcon,
+  apple: AppleIcon,
+  github: GitHubIcon,
+  azure: MicrosoftIcon,
+};
 
 export function OAuthButtons({ mode }: OAuthButtonsProps) {
   const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(null);
@@ -51,20 +60,24 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
 
   return (
     <div className="space-y-3">
-      {providers.map((provider) => (
-        <Button
-          key={provider}
-          type="button"
-          variant="outline"
-          className="w-full justify-center border-border/70"
-          disabled={loadingProvider !== null}
-          onClick={() => handleOAuth(provider)}
-        >
-          {loadingProvider === provider
-            ? `Redirecting to ${providerLabels[provider]}...`
-            : `${actionText} ${providerLabels[provider]}`}
-        </Button>
-      ))}
+      {providers.map((provider) => {
+        const ProviderIcon = providerIcons[provider];
+        return (
+          <Button
+            key={provider}
+            type="button"
+            variant="outline"
+            className="relative z-20 w-full justify-center border-border/70 pointer-events-auto"
+            disabled={loadingProvider !== null}
+            onClick={() => handleOAuth(provider)}
+          >
+            <ProviderIcon className="size-4" />
+            {loadingProvider === provider
+              ? `Redirecting to ${providerLabels[provider]}...`
+              : `${actionText} ${providerLabels[provider]}`}
+          </Button>
+        );
+      })}
       {error ? (
         <div
           role="alert"
