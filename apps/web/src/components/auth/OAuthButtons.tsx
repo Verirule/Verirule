@@ -23,14 +23,7 @@ const providerLabels: Record<OAuthProvider, string> = {
   azure: "Microsoft",
 };
 
-const configuredProviders = (process.env.NEXT_PUBLIC_SUPABASE_OAUTH_PROVIDERS ?? "")
-  .split(",")
-  .map((provider) => provider.trim().toLowerCase())
-  .filter((provider): provider is OAuthProvider =>
-    allProviders.includes(provider as OAuthProvider),
-  );
-
-const providers: OAuthProvider[] = configuredProviders;
+const providers: OAuthProvider[] = allProviders;
 
 const providerIcons: Record<OAuthProvider, ComponentType<SVGProps<SVGSVGElement>>> = {
   google: GoogleIcon,
@@ -40,6 +33,7 @@ const providerIcons: Record<OAuthProvider, ComponentType<SVGProps<SVGSVGElement>
 };
 
 export function OAuthButtons({ mode }: OAuthButtonsProps) {
+  void mode;
   const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,7 +60,7 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
     }
   };
 
-  const actionText = mode === "signup" ? "Continue with" : "Sign in with";
+  const actionText = "Continue with";
 
   if (providers.length === 0) {
     return null;
@@ -81,7 +75,7 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
             key={provider}
             type="button"
             variant="outline"
-            className="relative z-20 w-full justify-center border-border/70 pointer-events-auto"
+            className="relative z-20 h-11 w-full justify-center border-slate-300 bg-transparent text-foreground hover:bg-slate-100/60 dark:border-slate-700 dark:hover:bg-slate-800/70 pointer-events-auto"
             disabled={loadingProvider !== null}
             onClick={() => handleOAuth(provider)}
           >
