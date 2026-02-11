@@ -85,7 +85,7 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
             key={provider}
             type="button"
             variant="outline"
-            className="relative z-20 h-11 w-full justify-center border border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-900 pointer-events-auto"
+            className="relative z-20 h-11 w-full justify-center border border-blue-200 bg-white text-blue-900 hover:bg-blue-50 pointer-events-auto"
             disabled={loadingProvider !== null}
             onClick={() => handleOAuth(provider)}
           >

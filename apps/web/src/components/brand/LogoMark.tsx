@@ -14,28 +14,23 @@ export function LogoMark({ className }: LogoMarkProps) {
       aria-hidden
     >
       <path
-        d="M128 18c34 22 70 26 94 30v72c0 64-44 108-94 118C78 228 34 184 34 120V48c24-4 60-8 94-30Z"
-        stroke="currentColor"
-        strokeWidth="14"
-        strokeLinejoin="round"
+        d="M128 20c34 22 64 28 84 32v90c0 47-30 80-84 94-54-14-84-47-84-94V52c20-4 50-10 84-32Z"
+        fill="currentColor"
       />
       <path
-        d="M128 84a44 44 0 1 1-44 44"
-        stroke="currentColor"
-        strokeWidth="14"
+        d="M72 86h112"
+        stroke="#FFFFFF"
+        strokeOpacity="0.35"
+        strokeWidth="12"
         strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.55"
       />
       <path
-        d="M58 138h32l16-26 22 52 18-34h52"
-        stroke="currentColor"
-        strokeWidth="14"
+        d="M76 132l34 34 70-70"
+        stroke="#FFFFFF"
+        strokeWidth="16"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx="198" cy="88" r="8" fill="currentColor" />
-      <circle cx="84" cy="138" r="6" fill="currentColor" opacity="0.9" />
     </svg>
   );
 }

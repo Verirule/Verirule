@@ -8,16 +8,16 @@ import {
 
 export default function Page() {
   return (
-    <div className="flex min-h-svh w-full items-center justify-center bg-[#081326] p-6 text-slate-100 md:p-10">
+    <div className="flex min-h-svh w-full items-center justify-center bg-gradient-to-br from-blue-100 via-white to-blue-50 p-6 text-blue-950 md:p-10">
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
-          <Card className="border-slate-800 bg-slate-900/90 text-slate-100">
+          <Card className="border-blue-200 bg-white text-blue-950">
             <CardHeader>
               <CardTitle className="text-2xl">Account verification required</CardTitle>
-              <CardDescription className="text-slate-300">Check your inbox for the verification link</CardDescription>
+              <CardDescription className="text-blue-800/80">Check your inbox for the verification link</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-slate-300">
+              <p className="text-sm text-blue-900/80">
                 Before signing in, confirm your account from the verification email sent during registration.
               </p>
             </CardContent>

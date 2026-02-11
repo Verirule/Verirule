@@ -124,19 +124,19 @@ export function SignUpForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card className="border-slate-800 bg-slate-900/90 text-slate-100">
+      <Card className="border-blue-200 bg-white text-blue-950">
         <CardHeader>
           <CardTitle className="text-2xl">Create account</CardTitle>
-          <CardDescription className="text-slate-300">
+          <CardDescription className="text-blue-800/80">
             Register a workspace account for your compliance team.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <OAuthButtons mode="signup" />
-          <div className="my-4 flex items-center gap-2 text-xs text-slate-400">
-            <span className="h-px flex-1 bg-slate-700" />
+          <div className="my-4 flex items-center gap-2 text-xs text-blue-700/80">
+            <span className="h-px flex-1 bg-blue-200" />
             <span>or</span>
-            <span className="h-px flex-1 bg-slate-700" />
+            <span className="h-px flex-1 bg-blue-200" />
           </div>
           <form onSubmit={handleSignUp} noValidate>
             <div className="flex flex-col gap-5">
@@ -153,7 +153,7 @@ export function SignUpForm({
                   onChange={(e) => setEmail(e.target.value)}
                   aria-invalid={Boolean(emailError)}
                   className={cn(
-                    "border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500",
+                    "border-blue-200 bg-white text-blue-950 placeholder:text-blue-400",
                     emailError ? "border-red-500 focus-visible:ring-red-500" : undefined,
                   )}
                 />
@@ -173,14 +173,14 @@ export function SignUpForm({
                   onChange={(e) => setPassword(e.target.value)}
                   aria-invalid={Boolean(passwordError)}
                   className={cn(
-                    "border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500",
+                    "border-blue-200 bg-white text-blue-950 placeholder:text-blue-400",
                     passwordError ? "border-red-500 focus-visible:ring-red-500" : undefined,
                   )}
                 />
                 {passwordError ? (
                   <p className="text-xs text-red-500">{passwordError}</p>
                 ) : (
-                  <p className="text-xs text-slate-400">Use at least 8 characters.</p>
+                  <p className="text-xs text-blue-700/80">Use at least 8 characters.</p>
                 )}
               </div>
 
@@ -196,7 +196,7 @@ export function SignUpForm({
                   onChange={(e) => setRepeatPassword(e.target.value)}
                   aria-invalid={Boolean(repeatPasswordError)}
                   className={cn(
-                    "border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500",
+                    "border-blue-200 bg-white text-blue-950 placeholder:text-blue-400",
                     repeatPasswordError ? "border-red-500 focus-visible:ring-red-500" : undefined,
                   )}
                 />
@@ -223,7 +223,7 @@ export function SignUpForm({
 
               <Button
                 type="submit"
-                className="relative z-20 w-full bg-slate-100 text-slate-950 hover:bg-white pointer-events-auto"
+                className="relative z-20 w-full bg-blue-700 text-white hover:bg-blue-800 pointer-events-auto"
                 disabled={submitDisabled}
               >
                 {loading ? "Creating account..." : "Create account"}
@@ -243,7 +243,7 @@ export function SignUpForm({
             </div>
             <div className="mt-4 text-center text-sm">
               Already have an account?{" "}
-              <Link href="/auth/login" className="text-slate-200 underline underline-offset-4 hover:text-white">
+              <Link href="/auth/login" className="text-blue-700 underline underline-offset-4 hover:text-blue-900">
                 Sign in
               </Link>
             </div>
