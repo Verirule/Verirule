@@ -8,6 +8,7 @@ import { usePlan } from "@/src/components/billing/usePlan";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 type SourceType = "rss" | "url";
+type SourceCadence = "manual" | "hourly" | "daily" | "weekly";
 
 type OrgRecord = {
   id: string;
@@ -22,6 +23,9 @@ type SourceRecord = {
   type: SourceType;
   url: string;
   is_enabled: boolean;
+  cadence: SourceCadence;
+  next_run_at: string | null;
+  last_run_at: string | null;
   created_at: string;
 };
 
@@ -54,6 +58,17 @@ function normalizeUrl(value: string): string {
   return value.trim();
 }
 
+function formatDateTime(value: string | null): string {
+  if (!value) {
+    return "Not scheduled";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "Invalid date";
+  }
+  return parsed.toLocaleString();
+}
+
 export default function DashboardSourcesPage() {
   const [orgs, setOrgs] = useState<OrgRecord[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState("");
@@ -68,6 +83,7 @@ export default function DashboardSourcesPage() {
   const [isLoadingSources, setIsLoadingSources] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [schedulingSourceId, setSchedulingSourceId] = useState<string | null>(null);
   const [runningSourceId, setRunningSourceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -320,6 +336,35 @@ export default function DashboardSourcesPage() {
     }
   };
 
+  const updateSourceSchedule = async (sourceId: string, cadence: SourceCadence) => {
+    setSchedulingSourceId(sourceId);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/sources/${sourceId}/schedule`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cadence }),
+      });
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      if (!response.ok) {
+        setError("Unable to update schedule right now.");
+        return;
+      }
+
+      await loadSourcesAndRuns(selectedOrgId);
+    } catch {
+      setError("Unable to update schedule right now.");
+    } finally {
+      setSchedulingSourceId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section>
@@ -403,8 +448,27 @@ export default function DashboardSourcesPage() {
                       <div className="text-xs text-muted-foreground">
                         Last run: {latestRunBySource.get(source.id)?.status ?? "never"}
                       </div>
+                      <div className="text-xs text-muted-foreground">
+                        Next run: {formatDateTime(source.next_run_at)}
+                      </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      {features.canUseScheduledRuns ? (
+                        <select
+                          value={source.cadence}
+                          onChange={(event) =>
+                            void updateSourceSchedule(source.id, event.target.value as SourceCadence)
+                          }
+                          disabled={schedulingSourceId === source.id}
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          aria-label={`Schedule cadence for ${source.name}`}
+                        >
+                          <option value="manual">Manual</option>
+                          <option value="hourly">Hourly</option>
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                        </select>
+                      ) : null}
                       <Button
                         type="button"
                         size="sm"
@@ -418,7 +482,7 @@ export default function DashboardSourcesPage() {
                           type="button"
                           variant={source.is_enabled ? "outline" : "default"}
                           size="sm"
-                          disabled={togglingId === source.id}
+                          disabled={togglingId === source.id || schedulingSourceId === source.id}
                           onClick={() => void toggleSource(source.id, !source.is_enabled)}
                         >
                           {togglingId === source.id
