@@ -26,10 +26,24 @@ type FindingRecord = {
   fingerprint: string;
   raw_url: string | null;
   raw_hash: string | null;
+  has_explanation: boolean;
 };
 
 type OrgsResponse = { orgs: OrgRecord[] };
 type FindingsResponse = { findings: FindingRecord[] };
+type FindingExplanationCitation = {
+  quote: string;
+  context: string;
+};
+type FindingExplanation = {
+  id: string;
+  org_id: string;
+  finding_id: string;
+  summary: string;
+  diff_preview: string | null;
+  citations: FindingExplanationCitation[];
+  created_at: string;
+};
 
 type SeverityFilter = "all" | FindingSeverity;
 
@@ -60,6 +74,10 @@ export default function DashboardFindingsPage() {
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedFinding, setSelectedFinding] = useState<FindingRecord | null>(null);
+  const [explanation, setExplanation] = useState<FindingExplanation | null>(null);
+  const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
+  const [explanationError, setExplanationError] = useState<string | null>(null);
+  const [showExplanation, setShowExplanation] = useState(false);
 
   const filteredFindings = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -160,6 +178,71 @@ export default function DashboardFindingsPage() {
     }
     void loadFindings(selectedOrgId);
   }, [selectedOrgId]);
+
+  const loadExplanation = async (findingId: string) => {
+    setIsLoadingExplanation(true);
+    setExplanationError(null);
+    try {
+      const response = await fetch(`/api/findings/${encodeURIComponent(findingId)}/explanation`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const body = (await response.json().catch(() => ({}))) as Partial<FindingExplanation>;
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      if (response.status === 404) {
+        setExplanation(null);
+        setExplanationError("No explanation is available for this finding yet.");
+        return;
+      }
+
+      if (
+        !response.ok ||
+        typeof body.id !== "string" ||
+        typeof body.summary !== "string" ||
+        !Array.isArray(body.citations)
+      ) {
+        setExplanation(null);
+        setExplanationError("Unable to load explanation right now.");
+        return;
+      }
+
+      setExplanation({
+        id: body.id,
+        org_id: typeof body.org_id === "string" ? body.org_id : "",
+        finding_id: typeof body.finding_id === "string" ? body.finding_id : findingId,
+        summary: body.summary,
+        diff_preview: typeof body.diff_preview === "string" ? body.diff_preview : null,
+        citations: body.citations
+          .filter(
+            (item): item is FindingExplanationCitation =>
+              typeof item === "object" &&
+              item !== null &&
+              typeof (item as { quote?: unknown }).quote === "string" &&
+              typeof (item as { context?: unknown }).context === "string",
+          )
+          .slice(0, 20),
+        created_at: typeof body.created_at === "string" ? body.created_at : "",
+      });
+    } catch {
+      setExplanation(null);
+      setExplanationError("Unable to load explanation right now.");
+    } finally {
+      setIsLoadingExplanation(false);
+    }
+  };
+
+  const openDetails = (finding: FindingRecord) => {
+    setSelectedFinding(finding);
+    setShowExplanation(false);
+    setExplanation(null);
+    setExplanationError(null);
+    setIsLoadingExplanation(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -265,7 +348,7 @@ export default function DashboardFindingsPage() {
                         </span>
                       </div>
                     </div>
-                    <Button type="button" size="sm" onClick={() => setSelectedFinding(finding)}>
+                    <Button type="button" size="sm" onClick={() => openDetails(finding)}>
                       Details
                     </Button>
                   </div>
@@ -313,6 +396,67 @@ export default function DashboardFindingsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Fingerprint</p>
                 <p className="break-all text-sm">{selectedFinding.fingerprint}</p>
+              </div>
+              <div className="space-y-3 border-t border-border/70 pt-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isLoadingExplanation}
+                  onClick={() => {
+                    setShowExplanation(true);
+                    if (explanation?.finding_id !== selectedFinding.id) {
+                      void loadExplanation(selectedFinding.id);
+                    }
+                  }}
+                >
+                  {isLoadingExplanation ? "Loading..." : "Why this was flagged"}
+                </Button>
+                {showExplanation ? (
+                  <div className="space-y-3 rounded-md border border-border/70 bg-background p-3">
+                    {explanationError ? (
+                      <p className="text-sm text-muted-foreground">{explanationError}</p>
+                    ) : null}
+                    {explanation && !explanationError ? (
+                      <>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Summary</p>
+                          <p className="text-sm">{explanation.summary}</p>
+                        </div>
+
+                        <details className="rounded-md border border-border/60 bg-card p-2">
+                          <summary className="cursor-pointer text-sm font-medium">
+                            Changed snippets ({explanation.citations.length})
+                          </summary>
+                          <ul className="mt-2 space-y-2">
+                            {explanation.citations.length === 0 ? (
+                              <li className="text-xs text-muted-foreground">
+                                No snippet citations were generated.
+                              </li>
+                            ) : (
+                              explanation.citations.map((citation, index) => (
+                                <li
+                                  key={`${citation.quote}-${index}`}
+                                  className="rounded border border-border/60 bg-background px-2 py-2"
+                                >
+                                  <p className="text-xs text-muted-foreground">{citation.context}</p>
+                                  <p className="text-sm">{citation.quote}</p>
+                                </li>
+                              ))
+                            )}
+                          </ul>
+                        </details>
+
+                        <div>
+                          <p className="text-sm text-muted-foreground">Diff preview</p>
+                          <pre className="max-h-72 overflow-auto rounded-md border border-border/60 bg-card p-2 font-mono text-xs">
+                            {explanation.diff_preview ?? "Diff preview unavailable for this source format."}
+                          </pre>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
