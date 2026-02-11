@@ -18,9 +18,9 @@ from app.core.supabase_rest import (
     rpc_upsert_integration,
     select_alert_by_id,
     select_finding_by_id,
-    select_org_billing,
     select_integration_secret,
     select_integrations,
+    select_org_billing,
 )
 from app.integrations.jira import create_issue, test_connection
 from app.integrations.slack import build_alert_payload, send_webhook
