@@ -79,7 +79,7 @@ async def select_sources(access_token: str, org_id: str) -> list[dict[str, Any]]
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/sources"
     params = {
-        "select": "id,org_id,name,type,url,is_enabled,created_at",
+        "select": "id,org_id,name,type,url,is_enabled,cadence,next_run_at,last_run_at,created_at",
         "org_id": f"eq.{org_id}",
     }
 
@@ -149,6 +149,36 @@ async def rpc_toggle_source(access_token: str, payload: dict[str, Any]) -> None:
         ) from exc
 
 
+async def rpc_set_source_cadence(access_token: str, payload: dict[str, Any]) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/set_source_cadence"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update source cadence in Supabase.",
+        ) from exc
+
+
+async def rpc_schedule_next_run(access_token: str, payload: dict[str, Any]) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/schedule_next_run"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to schedule next source run in Supabase.",
+        ) from exc
+
+
 def _validated_list_payload(payload: Any, error_message: str) -> list[dict[str, Any]]:
     if not isinstance(payload, list):
         raise HTTPException(
@@ -215,7 +245,7 @@ async def select_source_by_id(access_token: str, source_id: str) -> dict[str, An
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/sources"
     params = {
-        "select": "id,org_id,url,is_enabled",
+        "select": "id,org_id,url,is_enabled,cadence,next_run_at,last_run_at",
         "id": f"eq.{source_id}",
         "limit": "1",
     }
@@ -232,6 +262,63 @@ async def select_source_by_id(access_token: str, source_id: str) -> dict[str, An
 
     rows = _validated_list_payload(response.json(), "Invalid source response from Supabase.")
     return rows[0] if rows else None
+
+
+async def select_due_sources(access_token: str, org_id: str | None = None) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/sources"
+    params = {
+        "select": "id,org_id,name,type,url,is_enabled,cadence,next_run_at,last_run_at,created_at",
+        "cadence": "neq.manual",
+        "is_enabled": "eq.true",
+        "next_run_at": "lte.now()",
+        "order": "next_run_at.asc",
+    }
+    if org_id:
+        params["org_id"] = f"eq.{org_id}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch due sources from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid due sources response from Supabase.")
+
+
+async def select_recent_active_monitor_runs_for_source(
+    access_token: str,
+    source_id: str,
+    created_after_iso: str,
+) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/monitor_runs"
+    params = {
+        "select": "id,source_id,status,created_at",
+        "source_id": f"eq.{source_id}",
+        "status": "in.(queued,running)",
+        "created_at": f"gte.{created_after_iso}",
+        "order": "created_at.desc",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch recent active monitor runs from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(
+        response.json(), "Invalid recent active monitor runs response from Supabase."
+    )
 
 
 async def select_latest_snapshot(access_token: str, source_id: str) -> dict[str, Any] | None:

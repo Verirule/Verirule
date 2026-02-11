@@ -214,3 +214,58 @@ def test_process_run_uses_service_role_for_writes(monkeypatch) -> None:
     assert called_write_tokens
     assert all(token == read_token for token in called_read_tokens)
     assert all(token == write_token for token in called_write_tokens)
+
+
+def test_queue_due_sources_once_queues_single_run_with_safety_window(monkeypatch) -> None:
+    due_sources = [
+        {"id": SOURCE_ID, "org_id": ORG_ID, "next_run_at": "2026-02-11T00:00:00Z"},
+        {"id": "77777777-7777-7777-7777-777777777777", "org_id": ORG_ID, "next_run_at": "2026-02-11T00:00:00Z"},
+    ]
+    queued_payloads: list[dict[str, str]] = []
+    scheduled_payloads: list[dict[str, str]] = []
+
+    async def fake_select_due(access_token: str, org_id: str | None = None) -> list[dict[str, str]]:
+        assert access_token == "worker-token"
+        assert org_id is None
+        return due_sources
+
+    async def fake_select_recent_active(
+        access_token: str, source_id: str, created_after_iso: str
+    ) -> list[dict[str, str]]:
+        assert access_token == "worker-token"
+        assert created_after_iso.endswith("Z")
+        if source_id == SOURCE_ID:
+            return [{"id": RUN_ID, "source_id": SOURCE_ID, "status": "queued"}]
+        return []
+
+    async def fake_create_run(access_token: str, payload: dict[str, str]) -> str:
+        assert access_token == "worker-token"
+        queued_payloads.append(payload)
+        return "run-created"
+
+    async def fake_schedule_next(access_token: str, payload: dict[str, str]) -> None:
+        assert access_token == "worker-token"
+        scheduled_payloads.append(payload)
+
+    monkeypatch.setattr(run_processor, "select_due_sources", fake_select_due)
+    monkeypatch.setattr(
+        run_processor,
+        "select_recent_active_monitor_runs_for_source",
+        fake_select_recent_active,
+    )
+    monkeypatch.setattr(run_processor, "rpc_create_monitor_run", fake_create_run)
+    monkeypatch.setattr(run_processor, "rpc_schedule_next_run", fake_schedule_next)
+
+    processor = run_processor.MonitorRunProcessor(access_token="worker-token")
+    queued_count = asyncio.run(processor.queue_due_sources_once(limit=10))
+
+    assert queued_count == 1
+    assert queued_payloads == [
+        {
+            "p_org_id": ORG_ID,
+            "p_source_id": "77777777-7777-7777-7777-777777777777",
+        }
+    ]
+    assert scheduled_payloads == [
+        {"p_source_id": "77777777-7777-7777-7777-777777777777"}
+    ]

@@ -12,6 +12,9 @@ class SourceOut(BaseModel):
     type: Literal["rss", "url"]
     url: str
     is_enabled: bool
+    cadence: Literal["manual", "hourly", "daily", "weekly"] = "manual"
+    next_run_at: datetime | None = None
+    last_run_at: datetime | None = None
     created_at: datetime
 
 
@@ -24,3 +27,7 @@ class SourceCreateIn(BaseModel):
 
 class SourceToggleIn(BaseModel):
     is_enabled: bool
+
+
+class SourceScheduleIn(BaseModel):
+    cadence: Literal["manual", "hourly", "daily", "weekly"]

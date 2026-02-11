@@ -5,6 +5,7 @@ import hashlib
 import ipaddress
 import socket
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
 import httpx
@@ -13,12 +14,16 @@ from fastapi import HTTPException
 from app.core.settings import get_settings
 from app.core.supabase_rest import (
     rpc_append_audit,
+    rpc_create_monitor_run,
     rpc_insert_snapshot,
+    rpc_schedule_next_run,
     rpc_set_monitor_run_state,
     rpc_upsert_alert_for_finding,
     rpc_upsert_finding,
+    select_due_sources,
     select_latest_snapshot,
     select_queued_monitor_runs,
+    select_recent_active_monitor_runs_for_source,
     select_source_by_id,
 )
 
@@ -131,6 +136,37 @@ class MonitorRunProcessor:
     @property
     def write_token(self) -> str:
         return self.write_access_token or self.access_token
+
+    async def queue_due_sources_once(self, limit: int = 10) -> int:
+        due_sources = await select_due_sources(self.access_token)
+        queued_count = 0
+        created_after = (datetime.now(UTC) - timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
+
+        for source in due_sources:
+            if queued_count >= limit:
+                break
+
+            source_id = str(source.get("id") or "")
+            org_id = str(source.get("org_id") or "")
+            if not source_id or not org_id:
+                continue
+
+            active_runs = await select_recent_active_monitor_runs_for_source(
+                self.access_token,
+                source_id,
+                created_after,
+            )
+            if active_runs:
+                continue
+
+            await rpc_create_monitor_run(
+                self.write_token,
+                {"p_org_id": org_id, "p_source_id": source_id},
+            )
+            await rpc_schedule_next_run(self.write_token, {"p_source_id": source_id})
+            queued_count += 1
+
+        return queued_count
 
     async def process_queued_runs_once(self, limit: int = 5) -> int:
         runs = await select_queued_monitor_runs(self.access_token, limit=limit)
@@ -260,6 +296,7 @@ async def run_worker_loop() -> None:
 
     while True:
         try:
+            await processor.queue_due_sources_once(limit=10)
             processed = await processor.process_queued_runs_once(limit=settings.WORKER_BATCH_LIMIT)
         except Exception as exc:  # pragma: no cover - loop resiliency
             print(f"worker loop error: {exc}")

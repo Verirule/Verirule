@@ -36,7 +36,7 @@ def test_sources_returns_list_when_supabase_ok(monkeypatch) -> None:
         async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
             assert url == "https://example.supabase.co/rest/v1/sources"
             assert params == {
-                "select": "id,org_id,name,type,url,is_enabled,created_at",
+                "select": "id,org_id,name,type,url,is_enabled,cadence,next_run_at,last_run_at,created_at",
                 "org_id": "eq.11111111-1111-1111-1111-111111111111",
             }
             assert headers["Authorization"] == "Bearer token-123"
@@ -50,6 +50,9 @@ def test_sources_returns_list_when_supabase_ok(monkeypatch) -> None:
                         "type": "rss",
                         "url": "https://example.com/feed.xml",
                         "is_enabled": True,
+                        "cadence": "manual",
+                        "next_run_at": None,
+                        "last_run_at": None,
                         "created_at": "2026-02-09T00:00:00Z",
                     }
                 ]
@@ -80,6 +83,9 @@ def test_sources_returns_list_when_supabase_ok(monkeypatch) -> None:
                 "type": "rss",
                 "url": "https://example.com/feed.xml",
                 "is_enabled": True,
+                "cadence": "manual",
+                "next_run_at": None,
+                "last_run_at": None,
                 "created_at": "2026-02-09T00:00:00Z",
             }
         ]
@@ -190,6 +196,146 @@ def test_toggle_source_returns_ok_when_supabase_ok(monkeypatch) -> None:
         response = client.patch(
             "/api/v1/sources/22222222-2222-2222-2222-222222222222",
             json={"is_enabled": False},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
+def test_due_sources_returns_list_when_supabase_ok(monkeypatch) -> None:
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
+            assert url == "https://example.supabase.co/rest/v1/sources"
+            assert params == {
+                "select": "id,org_id,name,type,url,is_enabled,cadence,next_run_at,last_run_at,created_at",
+                "cadence": "neq.manual",
+                "is_enabled": "eq.true",
+                "next_run_at": "lte.now()",
+                "order": "next_run_at.asc",
+                "org_id": "eq.11111111-1111-1111-1111-111111111111",
+            }
+            assert headers["Authorization"] == "Bearer token-123"
+            return FakeResponse(
+                [
+                    {
+                        "id": "22222222-2222-2222-2222-222222222222",
+                        "org_id": "11111111-1111-1111-1111-111111111111",
+                        "name": "Security RSS",
+                        "type": "rss",
+                        "url": "https://example.com/feed.xml",
+                        "is_enabled": True,
+                        "cadence": "hourly",
+                        "next_run_at": "2026-02-11T00:00:00Z",
+                        "last_run_at": "2026-02-10T23:00:00Z",
+                        "created_at": "2026-02-09T00:00:00Z",
+                    }
+                ]
+            )
+
+        async def post(self, *args, **kwargs):  # pragma: no cover
+            raise AssertionError("POST should not be called in due_sources test")
+
+    app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
+        access_token="token-123",
+        claims={"sub": "user-1"},
+    )
+    monkeypatch.setattr(supabase_rest.httpx, "AsyncClient", FakeAsyncClient)
+
+    try:
+        client = TestClient(app)
+        response = client.get("/api/v1/sources/due", params={"org_id": "11111111-1111-1111-1111-111111111111"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "sources": [
+            {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "org_id": "11111111-1111-1111-1111-111111111111",
+                "name": "Security RSS",
+                "type": "rss",
+                "url": "https://example.com/feed.xml",
+                "is_enabled": True,
+                "cadence": "hourly",
+                "next_run_at": "2026-02-11T00:00:00Z",
+                "last_run_at": "2026-02-10T23:00:00Z",
+                "created_at": "2026-02-09T00:00:00Z",
+            }
+        ]
+    }
+
+
+def test_schedule_source_returns_ok_when_supabase_ok(monkeypatch) -> None:
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):  # pragma: no cover
+            return None
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url: str, json: dict[str, object], headers: dict[str, str]) -> FakeResponse:
+            assert headers["Authorization"] == "Bearer token-123"
+            if url == "https://example.supabase.co/rest/v1/rpc/set_source_cadence":
+                assert json == {
+                    "p_source_id": "22222222-2222-2222-2222-222222222222",
+                    "p_cadence": "hourly",
+                }
+                return FakeResponse()
+
+            if url == "https://example.supabase.co/rest/v1/rpc/schedule_next_run":
+                assert json == {"p_source_id": "22222222-2222-2222-2222-222222222222"}
+                return FakeResponse()
+
+            raise AssertionError(f"unexpected URL in schedule_source test: {url}")
+
+        async def get(self, *args, **kwargs):  # pragma: no cover
+            raise AssertionError("GET should not be called in schedule_source test")
+
+    app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
+        access_token="token-123",
+        claims={"sub": "user-1"},
+    )
+    monkeypatch.setattr(supabase_rest.httpx, "AsyncClient", FakeAsyncClient)
+
+    try:
+        client = TestClient(app)
+        response = client.patch(
+            "/api/v1/sources/22222222-2222-2222-2222-222222222222/schedule",
+            json={"cadence": "hourly"},
         )
     finally:
         app.dependency_overrides.clear()
