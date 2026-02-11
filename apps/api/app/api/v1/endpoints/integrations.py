@@ -18,6 +18,7 @@ from app.core.supabase_rest import (
     rpc_upsert_integration,
     select_alert_by_id,
     select_finding_by_id,
+    select_org_billing,
     select_integration_secret,
     select_integrations,
 )
@@ -83,6 +84,17 @@ async def _fetch_alert_and_finding(access_token: str, org_id: str, alert_id: str
     return alert, finding
 
 
+async def _require_paid_plan(access_token: str, org_id: str) -> None:
+    row = await select_org_billing(access_token, org_id)
+    plan = row.get("plan") if isinstance(row, dict) else None
+    if plan in {"pro", "business"}:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Upgrade required",
+    )
+
+
 @router.get("/integrations")
 async def integrations(
     org_id: UUID, auth: VerifiedSupabaseAuth = supabase_auth_dependency
@@ -109,6 +121,7 @@ async def integrations(
 async def connect_slack(
     payload: SlackConnectIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
 ) -> dict[str, bool]:
+    await _require_paid_plan(auth.access_token, str(payload.org_id))
     ciphertext = encrypt_json({"webhook_url": payload.webhook_url.strip()})
     await rpc_upsert_integration(
         auth.access_token,
@@ -127,6 +140,7 @@ async def connect_slack(
 async def connect_jira(
     payload: JiraConnectIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
 ) -> dict[str, bool]:
+    await _require_paid_plan(auth.access_token, str(payload.org_id))
     base_url = payload.base_url.strip().rstrip("/")
     email = payload.email.strip()
     api_token = payload.api_token.strip()
@@ -157,6 +171,7 @@ async def connect_jira(
 async def test_slack(
     payload: OrgIntegrationIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
 ) -> dict[str, bool]:
+    await _require_paid_plan(auth.access_token, str(payload.org_id))
     row = await select_integration_secret(auth.access_token, str(payload.org_id), "slack")
     _, ciphertext = _ensure_connected_secret(row, "Slack")
 
@@ -170,6 +185,7 @@ async def test_slack(
 async def test_jira(
     payload: OrgIntegrationIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
 ) -> dict[str, bool]:
+    await _require_paid_plan(auth.access_token, str(payload.org_id))
     row = await select_integration_secret(auth.access_token, str(payload.org_id), "jira")
     _, ciphertext = _ensure_connected_secret(row, "Jira")
 
@@ -185,6 +201,7 @@ async def test_jira(
 async def notify_slack(
     payload: SlackNotifyIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
 ) -> dict[str, bool]:
+    await _require_paid_plan(auth.access_token, str(payload.org_id))
     row = await select_integration_secret(auth.access_token, str(payload.org_id), "slack")
     _, ciphertext = _ensure_connected_secret(row, "Slack")
     secret = decrypt_json(ciphertext)
@@ -216,6 +233,7 @@ async def notify_slack(
 async def create_jira_issue(
     payload: SlackNotifyIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
 ) -> JiraCreateIssueOut:
+    await _require_paid_plan(auth.access_token, str(payload.org_id))
     row = await select_integration_secret(auth.access_token, str(payload.org_id), "jira")
     _, ciphertext = _ensure_connected_secret(row, "Jira")
     secret = decrypt_json(ciphertext)

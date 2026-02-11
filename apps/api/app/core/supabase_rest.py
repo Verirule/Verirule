@@ -822,6 +822,29 @@ async def select_integration_secret(
     return rows[0] if rows else None
 
 
+async def select_org_billing(access_token: str, org_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_billing"
+    params = {
+        "select": "org_id,plan,subscription_status,current_period_end",
+        "org_id": f"eq.{org_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch billing state from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid billing response from Supabase.")
+    return rows[0] if rows else None
+
+
 async def rpc_upsert_alert_for_finding(access_token: str, payload: dict[str, Any]) -> dict[str, Any]:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/upsert_alert_for_finding"
