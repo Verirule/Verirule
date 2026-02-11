@@ -124,17 +124,19 @@ export function SignUpForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
+      <Card className="border-slate-800 bg-slate-900/90 text-slate-100">
         <CardHeader>
-          <CardTitle className="text-2xl">Sign up</CardTitle>
-          <CardDescription>Create your account with email or continue with a provider.</CardDescription>
+          <CardTitle className="text-2xl">Create account</CardTitle>
+          <CardDescription className="text-slate-300">
+            Register a workspace account for your compliance team.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <OAuthButtons mode="signup" />
-          <div className="my-4 flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="h-px flex-1 bg-border/70" />
+          <div className="my-4 flex items-center gap-2 text-xs text-slate-400">
+            <span className="h-px flex-1 bg-slate-700" />
             <span>or</span>
-            <span className="h-px flex-1 bg-border/70" />
+            <span className="h-px flex-1 bg-slate-700" />
           </div>
           <form onSubmit={handleSignUp} noValidate>
             <div className="flex flex-col gap-5">
@@ -143,14 +145,17 @@ export function SignUpForm({
                 <Input
                   id="email"
                   type="email"
-                  placeholder="m@example.com"
+                  placeholder="name@company.com"
                   autoComplete="email"
                   required
                   value={email}
                   onBlur={() => setEmailTouched(true)}
                   onChange={(e) => setEmail(e.target.value)}
                   aria-invalid={Boolean(emailError)}
-                  className={emailError ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                  className={cn(
+                    "border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500",
+                    emailError ? "border-red-500 focus-visible:ring-red-500" : undefined,
+                  )}
                 />
                 {emailError ? <p className="text-xs text-red-500">{emailError}</p> : null}
               </div>
@@ -167,12 +172,15 @@ export function SignUpForm({
                   onBlur={() => setPasswordTouched(true)}
                   onChange={(e) => setPassword(e.target.value)}
                   aria-invalid={Boolean(passwordError)}
-                  className={passwordError ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                  className={cn(
+                    "border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500",
+                    passwordError ? "border-red-500 focus-visible:ring-red-500" : undefined,
+                  )}
                 />
                 {passwordError ? (
                   <p className="text-xs text-red-500">{passwordError}</p>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Use at least 8 characters.</p>
+                  <p className="text-xs text-slate-400">Use at least 8 characters.</p>
                 )}
               </div>
 
@@ -187,7 +195,10 @@ export function SignUpForm({
                   onBlur={() => setRepeatPasswordTouched(true)}
                   onChange={(e) => setRepeatPassword(e.target.value)}
                   aria-invalid={Boolean(repeatPasswordError)}
-                  className={repeatPasswordError ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                  className={cn(
+                    "border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500",
+                    repeatPasswordError ? "border-red-500 focus-visible:ring-red-500" : undefined,
+                  )}
                 />
                 {repeatPasswordError ? <p className="text-xs text-red-500">{repeatPasswordError}</p> : null}
               </div>
@@ -210,8 +221,12 @@ export function SignUpForm({
                 </div>
               ) : null}
 
-              <Button type="submit" className="relative z-20 w-full pointer-events-auto" disabled={submitDisabled}>
-                {loading ? "Creating account..." : "Sign up"}
+              <Button
+                type="submit"
+                className="relative z-20 w-full bg-slate-100 text-slate-950 hover:bg-white pointer-events-auto"
+                disabled={submitDisabled}
+              >
+                {loading ? "Creating account..." : "Create account"}
               </Button>
 
               {message && trimmedEmail ? (
@@ -228,8 +243,8 @@ export function SignUpForm({
             </div>
             <div className="mt-4 text-center text-sm">
               Already have an account?{" "}
-              <Link href="/auth/login" className="underline underline-offset-4">
-                Login
+              <Link href="/auth/login" className="text-slate-200 underline underline-offset-4 hover:text-white">
+                Sign in
               </Link>
             </div>
           </form>

@@ -13,7 +13,7 @@ const metadataBase = process.env.NEXT_PUBLIC_SITE_URL
 export const metadata: Metadata = {
   metadataBase,
   title: "Verirule",
-  description: "Vertical AI SaaS for compliance monitoring",
+  description: "Regulatory monitoring and audit evidence workflow platform",
 };
 
 const inter = Inter({
