@@ -49,21 +49,39 @@ export function Nav() {
           <Button asChild size="sm" variant="outline" className="border-blue-300 bg-white text-blue-800 hover:bg-blue-50">
             <Link href="/auth/login">Sign in</Link>
           </Button>
-          <button
-            type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-blue-300"
-            onClick={() => setIsOpen((value) => !value)}
-            aria-expanded={isOpen ? "true" : "false"}
-            aria-controls="mobile-nav-panel"
-            aria-label="Toggle navigation menu"
-          >
-            <span className="sr-only">Menu</span>
-            <span className="flex flex-col gap-1.5">
-              <span className="block h-0.5 w-4 bg-blue-800" />
-              <span className="block h-0.5 w-4 bg-blue-800" />
-              <span className="block h-0.5 w-4 bg-blue-800" />
-            </span>
-          </button>
+          {isOpen ? (
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-blue-300"
+              onClick={() => setIsOpen(false)}
+              aria-expanded="true"
+              aria-controls="mobile-nav-panel"
+              aria-label="Toggle navigation menu"
+            >
+              <span className="sr-only">Menu</span>
+              <span className="flex flex-col gap-1.5">
+                <span className="block h-0.5 w-4 bg-blue-800" />
+                <span className="block h-0.5 w-4 bg-blue-800" />
+                <span className="block h-0.5 w-4 bg-blue-800" />
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-blue-300"
+              onClick={() => setIsOpen(true)}
+              aria-expanded="false"
+              aria-controls="mobile-nav-panel"
+              aria-label="Toggle navigation menu"
+            >
+              <span className="sr-only">Menu</span>
+              <span className="flex flex-col gap-1.5">
+                <span className="block h-0.5 w-4 bg-blue-800" />
+                <span className="block h-0.5 w-4 bg-blue-800" />
+                <span className="block h-0.5 w-4 bg-blue-800" />
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
