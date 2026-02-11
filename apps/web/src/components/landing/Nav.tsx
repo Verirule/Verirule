@@ -53,7 +53,7 @@ export function Nav() {
             type="button"
             className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-blue-300"
             onClick={() => setIsOpen((value) => !value)}
-            aria-expanded={isOpen}
+            aria-expanded={isOpen ? "true" : "false"}
             aria-controls="mobile-nav-panel"
             aria-label="Toggle navigation menu"
           >
