@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePlan } from "@/src/components/billing/usePlan";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
@@ -110,6 +111,7 @@ export default function DashboardAlertsPage() {
     () => integrations.some((integration) => integration.type === "jira" && integration.status === "connected"),
     [integrations],
   );
+  const { features: planFeatures } = usePlan(selectedOrgId);
 
   const loadOrgs = async () => {
     setIsLoadingOrgs(true);
@@ -515,8 +517,12 @@ export default function DashboardAlertsPage() {
                           variant="outline"
                           size="sm"
                           disabled={
-                            actingAlertId === alert.id || alert.status !== "open" || !slackConnected
+                            actingAlertId === alert.id ||
+                            alert.status !== "open" ||
+                            !slackConnected ||
+                            !planFeatures.canUseIntegrations
                           }
+                          title={!planFeatures.canUseIntegrations ? "Upgrade to Pro to enable integrations." : undefined}
                           onClick={() => void sendToSlack(alert)}
                         >
                           {actingAlertId === alert.id ? "Sending..." : "Send to Slack"}
@@ -525,7 +531,13 @@ export default function DashboardAlertsPage() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={actingAlertId === alert.id || alert.status !== "open" || !jiraConnected}
+                          disabled={
+                            actingAlertId === alert.id ||
+                            alert.status !== "open" ||
+                            !jiraConnected ||
+                            !planFeatures.canUseIntegrations
+                          }
+                          title={!planFeatures.canUseIntegrations ? "Upgrade to Pro to enable integrations." : undefined}
                           onClick={() => void createJiraTicket(alert)}
                         >
                           {actingAlertId === alert.id ? "Creating..." : "Create Jira ticket"}
@@ -536,7 +548,12 @@ export default function DashboardAlertsPage() {
                           </Link>
                         </Button>
                       </div>
-                      {alert.status === "open" && (!slackConnected || !jiraConnected) ? (
+                      {alert.status === "open" && !planFeatures.canUseIntegrations ? (
+                        <p className="text-xs text-muted-foreground">Upgrade to Pro to enable integrations.</p>
+                      ) : null}
+                      {alert.status === "open" &&
+                      planFeatures.canUseIntegrations &&
+                      (!slackConnected || !jiraConnected) ? (
                         <p className="text-xs text-muted-foreground">
                           Connect {!slackConnected ? "Slack" : ""}
                           {!slackConnected && !jiraConnected ? " and " : ""}

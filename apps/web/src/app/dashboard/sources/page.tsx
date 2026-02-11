@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePlan } from "@/src/components/billing/usePlan";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 type SourceType = "rss" | "url";
@@ -72,6 +73,13 @@ export default function DashboardSourcesPage() {
 
   const trimmedName = useMemo(() => name.trim(), [name]);
   const trimmedUrl = useMemo(() => normalizeUrl(url), [url]);
+  const { plan, features } = usePlan(selectedOrgId);
+  const maxSourcesReached = useMemo(() => {
+    if (features.maxSources === null) {
+      return false;
+    }
+    return sources.length >= features.maxSources;
+  }, [features.maxSources, sources.length]);
   const latestRunBySource = useMemo(() => {
     const map = new Map<string, MonitorRunRecord>();
     for (const run of runs) {
@@ -201,6 +209,10 @@ export default function DashboardSourcesPage() {
     }
     if (!trimmedUrl) {
       setError("Source URL is required.");
+      return;
+    }
+    if (maxSourcesReached) {
+      setError("Free plan source limit reached. Upgrade to Pro for unlimited sources.");
       return;
     }
 
@@ -359,6 +371,11 @@ export default function DashboardSourcesPage() {
           {!isLoadingSources && selectedOrgId && sources.length === 0 ? (
             <p className="text-sm text-muted-foreground">No sources yet for this workspace.</p>
           ) : null}
+          {!isLoadingSources && selectedOrgId && !features.canUseScheduledRuns ? (
+            <p className="text-xs text-muted-foreground">
+              Scheduled monitoring controls are available on Pro and Business plans.
+            </p>
+          ) : null}
           {!isLoadingSources && sources.length > 0 ? (
             <ul className="space-y-2">
               {sources.map((source) => (
@@ -396,19 +413,21 @@ export default function DashboardSourcesPage() {
                       >
                         {runningSourceId === source.id ? "Queueing..." : "Run now"}
                       </Button>
-                      <Button
-                        type="button"
-                        variant={source.is_enabled ? "outline" : "default"}
-                        size="sm"
-                        disabled={togglingId === source.id}
-                        onClick={() => void toggleSource(source.id, !source.is_enabled)}
-                      >
-                        {togglingId === source.id
-                          ? "Saving..."
-                          : source.is_enabled
-                            ? "Disable"
-                            : "Enable"}
-                      </Button>
+                      {features.canUseScheduledRuns ? (
+                        <Button
+                          type="button"
+                          variant={source.is_enabled ? "outline" : "default"}
+                          size="sm"
+                          disabled={togglingId === source.id}
+                          onClick={() => void toggleSource(source.id, !source.is_enabled)}
+                        >
+                          {togglingId === source.id
+                            ? "Saving..."
+                            : source.is_enabled
+                              ? "Disable"
+                              : "Enable"}
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                 </li>
@@ -434,7 +453,7 @@ export default function DashboardSourcesPage() {
                 placeholder="Security Blog RSS"
                 autoComplete="off"
                 maxLength={120}
-                disabled={isCreating || !selectedOrgId}
+                disabled={isCreating || !selectedOrgId || maxSourcesReached}
               />
             </div>
             <div className="space-y-2">
@@ -444,7 +463,7 @@ export default function DashboardSourcesPage() {
                 value={type}
                 onChange={(event) => setType(event.target.value as SourceType)}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                disabled={isCreating || !selectedOrgId}
+                disabled={isCreating || !selectedOrgId || maxSourcesReached}
               >
                 <option value="rss">rss</option>
                 <option value="url">url</option>
@@ -459,11 +478,18 @@ export default function DashboardSourcesPage() {
                 placeholder="https://example.com/feed.xml"
                 autoComplete="off"
                 maxLength={2048}
-                disabled={isCreating || !selectedOrgId}
+                disabled={isCreating || !selectedOrgId || maxSourcesReached}
               />
             </div>
+            {maxSourcesReached && features.maxSources !== null ? (
+              <p className="text-xs text-muted-foreground">
+                {plan === "free"
+                  ? `Free plan allows up to ${features.maxSources} sources. Upgrade to Pro for unlimited sources.`
+                  : "Source limit reached."}
+              </p>
+            ) : null}
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            <Button type="submit" disabled={isCreating || !selectedOrgId}>
+            <Button type="submit" disabled={isCreating || !selectedOrgId || maxSourcesReached}>
               {isCreating ? "Creating..." : "Create source"}
             </Button>
           </form>

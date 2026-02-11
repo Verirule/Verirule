@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   Bell,
+  CircleDollarSign,
   ClipboardList,
   FlaskConical,
   LayoutDashboard,
@@ -56,6 +57,7 @@ const navigationSections: NavigationSection[] = [
     title: "Admin",
     links: [
       { href: "/dashboard/settings", label: "Settings", icon: Settings },
+      { href: "/dashboard/settings/billing", label: "Billing", icon: CircleDollarSign },
       { href: "/dashboard/settings/integrations", label: "Integrations", icon: Workflow },
     ],
   },

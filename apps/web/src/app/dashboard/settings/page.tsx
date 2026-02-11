@@ -15,6 +15,19 @@ export default function DashboardSettingsPage() {
       <AccentThemePicker />
 
       <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
+        <h2 className="text-lg font-semibold tracking-tight">Billing</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Manage subscription plan, checkout, and self-serve billing portal access.
+        </p>
+        <Link
+          href="/dashboard/settings/billing"
+          className="mt-4 inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-medium transition-colors hover:bg-accent"
+        >
+          Open Billing
+        </Link>
+      </section>
+
+      <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold tracking-tight">Integrations</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Configure outgoing connectors such as Slack and Jira for routing and escalation workflows.

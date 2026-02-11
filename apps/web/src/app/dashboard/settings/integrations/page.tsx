@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePlan } from "@/src/components/billing/usePlan";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
@@ -66,6 +67,7 @@ export default function DashboardIntegrationsPage() {
     () => integrations.find((integration) => integration.type === "jira") ?? null,
     [integrations],
   );
+  const { features: planFeatures } = usePlan(selectedOrgId);
 
   const loadOrgs = useCallback(async () => {
     setIsLoadingOrgs(true);
@@ -170,6 +172,11 @@ export default function DashboardIntegrationsPage() {
     setError(null);
     setSuccess(null);
 
+    if (!planFeatures.canUseIntegrations) {
+      setError("Upgrade to Pro to enable integrations.");
+      return;
+    }
+
     if (!selectedOrgId || !slackWebhookUrl.trim()) {
       setError("Slack webhook URL is required.");
       return;
@@ -207,6 +214,11 @@ export default function DashboardIntegrationsPage() {
     event.preventDefault();
     setError(null);
     setSuccess(null);
+
+    if (!planFeatures.canUseIntegrations) {
+      setError("Upgrade to Pro to enable integrations.");
+      return;
+    }
 
     if (!selectedOrgId || !jiraBaseUrl.trim() || !jiraEmail.trim() || !jiraApiToken.trim() || !jiraProjectKey.trim()) {
       setError("Jira base URL, email, API token, and project key are required.");
@@ -251,6 +263,11 @@ export default function DashboardIntegrationsPage() {
     setError(null);
     setSuccess(null);
 
+    if (!planFeatures.canUseIntegrations) {
+      setError("Upgrade to Pro to enable integrations.");
+      return;
+    }
+
     if (!selectedOrgId) {
       setError("Select an organization first.");
       return;
@@ -284,6 +301,11 @@ export default function DashboardIntegrationsPage() {
   const testJira = async () => {
     setError(null);
     setSuccess(null);
+
+    if (!planFeatures.canUseIntegrations) {
+      setError("Upgrade to Pro to enable integrations.");
+      return;
+    }
 
     if (!selectedOrgId) {
       setError("Select an organization first.");
@@ -387,18 +409,31 @@ export default function DashboardIntegrationsPage() {
               />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={isConnectingSlack || !selectedOrgId}>
+              <Button
+                type="submit"
+                disabled={isConnectingSlack || !selectedOrgId || !planFeatures.canUseIntegrations}
+                title={!planFeatures.canUseIntegrations ? "Upgrade to Pro to enable integrations." : undefined}
+              >
                 {isConnectingSlack ? "Connecting..." : "Connect"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                disabled={isTestingSlack || !selectedOrgId || slackIntegration?.status !== "connected"}
+                disabled={
+                  isTestingSlack ||
+                  !selectedOrgId ||
+                  slackIntegration?.status !== "connected" ||
+                  !planFeatures.canUseIntegrations
+                }
+                title={!planFeatures.canUseIntegrations ? "Upgrade to Pro to enable integrations." : undefined}
                 onClick={testSlack}
               >
                 {isTestingSlack ? "Testing..." : "Test"}
               </Button>
             </div>
+            {!planFeatures.canUseIntegrations ? (
+              <p className="text-xs text-muted-foreground">Upgrade to Pro to enable integrations.</p>
+            ) : null}
           </form>
         </CardContent>
       </Card>
@@ -462,18 +497,31 @@ export default function DashboardIntegrationsPage() {
               />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={isConnectingJira || !selectedOrgId}>
+              <Button
+                type="submit"
+                disabled={isConnectingJira || !selectedOrgId || !planFeatures.canUseIntegrations}
+                title={!planFeatures.canUseIntegrations ? "Upgrade to Pro to enable integrations." : undefined}
+              >
                 {isConnectingJira ? "Connecting..." : "Connect"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                disabled={isTestingJira || !selectedOrgId || jiraIntegration?.status !== "connected"}
+                disabled={
+                  isTestingJira ||
+                  !selectedOrgId ||
+                  jiraIntegration?.status !== "connected" ||
+                  !planFeatures.canUseIntegrations
+                }
+                title={!planFeatures.canUseIntegrations ? "Upgrade to Pro to enable integrations." : undefined}
                 onClick={testJira}
               >
                 {isTestingJira ? "Testing..." : "Test"}
               </Button>
             </div>
+            {!planFeatures.canUseIntegrations ? (
+              <p className="text-xs text-muted-foreground">Upgrade to Pro to enable integrations.</p>
+            ) : null}
           </form>
         </CardContent>
       </Card>
