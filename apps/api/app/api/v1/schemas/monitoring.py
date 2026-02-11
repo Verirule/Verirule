@@ -28,6 +28,17 @@ class FindingOut(BaseModel):
     fingerprint: str
     raw_url: str | None = None
     raw_hash: str | None = None
+    has_explanation: bool = False
+
+
+class FindingExplanationOut(BaseModel):
+    id: UUID
+    org_id: UUID
+    finding_id: UUID
+    summary: str
+    diff_preview: str | None = None
+    citations: list[dict[str, str]]
+    created_at: datetime
 
 
 class AlertOut(BaseModel):

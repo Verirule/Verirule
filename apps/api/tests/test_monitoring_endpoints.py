@@ -44,31 +44,41 @@ def test_findings_returns_list_when_supabase_ok(monkeypatch) -> None:
             return None
 
         async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
-            assert url == "https://example.supabase.co/rest/v1/findings"
-            assert params == {
-                "select": "id,org_id,source_id,run_id,title,summary,severity,detected_at,fingerprint,raw_url,raw_hash",
-                "org_id": f"eq.{ORG_ID}",
-                "order": "detected_at.desc",
-            }
             assert headers["Authorization"] == "Bearer token-123"
             assert headers["apikey"] == "test-anon-key"
-            return FakeResponse(
-                [
-                    {
-                        "id": FINDING_ID,
-                        "org_id": ORG_ID,
-                        "source_id": SOURCE_ID,
-                        "run_id": RUN_ID,
-                        "title": "TLS cert changed",
-                        "summary": "Certificate rotated outside maintenance window.",
-                        "severity": "high",
-                        "detected_at": "2026-02-09T00:00:00Z",
-                        "fingerprint": "sha256:abc",
-                        "raw_url": "https://example.com",
-                        "raw_hash": "abc123",
-                    }
-                ]
-            )
+
+            if url == "https://example.supabase.co/rest/v1/findings":
+                assert params == {
+                    "select": "id,org_id,source_id,run_id,title,summary,severity,detected_at,fingerprint,raw_url,raw_hash",
+                    "org_id": f"eq.{ORG_ID}",
+                    "order": "detected_at.desc",
+                }
+                return FakeResponse(
+                    [
+                        {
+                            "id": FINDING_ID,
+                            "org_id": ORG_ID,
+                            "source_id": SOURCE_ID,
+                            "run_id": RUN_ID,
+                            "title": "TLS cert changed",
+                            "summary": "Certificate rotated outside maintenance window.",
+                            "severity": "high",
+                            "detected_at": "2026-02-09T00:00:00Z",
+                            "fingerprint": "sha256:abc",
+                            "raw_url": "https://example.com",
+                            "raw_hash": "abc123",
+                        }
+                    ]
+                )
+
+            if url == "https://example.supabase.co/rest/v1/finding_explanations":
+                assert params == {
+                    "select": "finding_id",
+                    "org_id": f"eq.{ORG_ID}",
+                }
+                return FakeResponse([{"finding_id": FINDING_ID}])
+
+            raise AssertionError(f"unexpected URL: {url}")
 
         async def post(self, *args, **kwargs):  # pragma: no cover
             raise AssertionError("POST should not be called in findings GET test")
@@ -99,8 +109,81 @@ def test_findings_returns_list_when_supabase_ok(monkeypatch) -> None:
                 "fingerprint": "sha256:abc",
                 "raw_url": "https://example.com",
                 "raw_hash": "abc123",
+                "has_explanation": True,
             }
         ]
+    }
+
+
+def test_finding_explanation_returns_latest_record(monkeypatch) -> None:
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
+            assert url == "https://example.supabase.co/rest/v1/finding_explanations"
+            assert params == {
+                "select": "id,org_id,finding_id,summary,diff_preview,citations,created_at",
+                "finding_id": f"eq.{FINDING_ID}",
+                "order": "created_at.desc",
+                "limit": "1",
+            }
+            assert headers["Authorization"] == "Bearer token-123"
+            assert headers["apikey"] == "test-anon-key"
+            return FakeResponse(
+                [
+                    {
+                        "id": "77777777-7777-7777-7777-777777777777",
+                        "org_id": ORG_ID,
+                        "finding_id": FINDING_ID,
+                        "summary": "Source content changed in one section.",
+                        "diff_preview": "@@ -1,2 +1,2 @@",
+                        "citations": [{"quote": "new clause", "context": "@@ -1,2 +1,2 @@"}],
+                        "created_at": "2026-02-11T00:00:00Z",
+                    }
+                ]
+            )
+
+        async def post(self, *args, **kwargs):  # pragma: no cover
+            raise AssertionError("POST should not be called in finding explanation GET test")
+
+    app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
+        access_token="token-123", claims={"sub": USER_ID}
+    )
+    monkeypatch.setattr(supabase_rest.httpx, "AsyncClient", FakeAsyncClient)
+
+    try:
+        client = TestClient(app)
+        response = client.get(f"/api/v1/findings/{FINDING_ID}/explanation")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "77777777-7777-7777-7777-777777777777",
+        "org_id": ORG_ID,
+        "finding_id": FINDING_ID,
+        "summary": "Source content changed in one section.",
+        "diff_preview": "@@ -1,2 +1,2 @@",
+        "citations": [{"quote": "new clause", "context": "@@ -1,2 +1,2 @@"}],
+        "created_at": "2026-02-11T00:00:00Z",
     }
 
 

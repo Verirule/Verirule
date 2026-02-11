@@ -6,6 +6,7 @@ from app.api.v1.schemas.monitoring import (
     AlertOut,
     AlertUpdateIn,
     AuditOut,
+    FindingExplanationOut,
     FindingOut,
     MonitorRunCreateIn,
     MonitorRunOut,
@@ -19,7 +20,9 @@ from app.core.supabase_rest import (
     rpc_set_alert_status,
     select_alerts,
     select_audit_log,
+    select_finding_explanations_by_org,
     select_findings,
+    select_latest_finding_explanation,
     select_monitor_runs,
     select_task_evidence,
     select_tasks_for_alert,
@@ -34,7 +37,27 @@ async def findings(
     org_id: UUID, auth: VerifiedSupabaseAuth = supabase_auth_dependency
 ) -> dict[str, list[FindingOut]]:
     rows = await select_findings(auth.access_token, str(org_id))
-    return {"findings": [FindingOut.model_validate(row) for row in rows]}
+    explanation_rows = await select_finding_explanations_by_org(auth.access_token, str(org_id))
+    finding_ids_with_explanations = {
+        str(row.get("finding_id")) for row in explanation_rows if isinstance(row.get("finding_id"), str)
+    }
+
+    result: list[FindingOut] = []
+    for row in rows:
+        enriched = dict(row)
+        enriched["has_explanation"] = str(row.get("id")) in finding_ids_with_explanations
+        result.append(FindingOut.model_validate(enriched))
+    return {"findings": result}
+
+
+@router.get("/findings/{finding_id}/explanation")
+async def finding_explanation(
+    finding_id: UUID, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+) -> FindingExplanationOut:
+    row = await select_latest_finding_explanation(auth.access_token, str(finding_id))
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Explanation not found")
+    return FindingExplanationOut.model_validate(row)
 
 
 @router.get("/alerts")

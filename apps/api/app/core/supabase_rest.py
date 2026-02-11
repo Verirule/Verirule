@@ -245,7 +245,7 @@ async def select_source_by_id(access_token: str, source_id: str) -> dict[str, An
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/sources"
     params = {
-        "select": "id,org_id,url,is_enabled,cadence,next_run_at,last_run_at",
+        "select": "id,org_id,url,is_enabled,cadence,next_run_at,last_run_at,etag,last_modified,content_type",
         "id": f"eq.{source_id}",
         "limit": "1",
     }
@@ -325,7 +325,7 @@ async def select_latest_snapshot(access_token: str, source_id: str) -> dict[str,
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/snapshots"
     params = {
-        "select": "id,org_id,source_id,run_id,fetched_url,content_hash,content_type,content_len,fetched_at",
+        "select": "id,org_id,source_id,run_id,fetched_url,content_hash,content_type,content_len,http_status,etag,last_modified,text_preview,text_fingerprint,fetched_at",
         "source_id": f"eq.{source_id}",
         "order": "fetched_at.desc",
         "limit": "1",
@@ -365,6 +365,57 @@ async def select_findings(access_token: str, org_id: str) -> list[dict[str, Any]
         ) from exc
 
     return _validated_list_payload(response.json(), "Invalid findings response from Supabase.")
+
+
+async def select_finding_explanations_by_org(access_token: str, org_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/finding_explanations"
+    params = {
+        "select": "finding_id",
+        "org_id": f"eq.{org_id}",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch finding explanations from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(
+        response.json(), "Invalid finding explanations response from Supabase."
+    )
+
+
+async def select_latest_finding_explanation(
+    access_token: str, finding_id: str
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/finding_explanations"
+    params = {
+        "select": "id,org_id,finding_id,summary,diff_preview,citations,created_at",
+        "finding_id": f"eq.{finding_id}",
+        "order": "created_at.desc",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch finding explanation from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(
+        response.json(), "Invalid finding explanation response from Supabase."
+    )
+    return rows[0] if rows else None
 
 
 async def select_alerts(access_token: str, org_id: str) -> list[dict[str, Any]]:
@@ -520,6 +571,30 @@ async def rpc_insert_snapshot(access_token: str, payload: dict[str, Any]) -> str
     return response_payload
 
 
+async def rpc_insert_snapshot_v2(access_token: str, payload: dict[str, Any]) -> str:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/insert_snapshot_v2"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to insert snapshot in Supabase.",
+        ) from exc
+
+    response_payload = response.json()
+    if not isinstance(response_payload, str):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid insert snapshot response from Supabase.",
+        )
+
+    return response_payload
+
+
 async def rpc_upsert_finding(access_token: str, payload: dict[str, Any]) -> str:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/upsert_finding"
@@ -571,6 +646,45 @@ async def rpc_append_audit(access_token: str, payload: dict[str, Any]) -> None:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to write audit event in Supabase.",
+        ) from exc
+
+
+async def rpc_insert_finding_explanation(access_token: str, payload: dict[str, Any]) -> str:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/insert_finding_explanation"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to insert finding explanation in Supabase.",
+        ) from exc
+
+    response_payload = response.json()
+    if not isinstance(response_payload, str):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid finding explanation response from Supabase.",
+        )
+
+    return response_payload
+
+
+async def rpc_set_source_fetch_metadata(access_token: str, payload: dict[str, Any]) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/set_source_fetch_metadata"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update source fetch metadata in Supabase.",
         ) from exc
 
 

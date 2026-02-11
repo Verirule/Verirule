@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import ipaddress
-import socket
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from urllib.parse import urlparse
 
 import httpx
 from fastapi import HTTPException
@@ -15,9 +12,11 @@ from app.core.settings import get_settings
 from app.core.supabase_rest import (
     rpc_append_audit,
     rpc_create_monitor_run,
-    rpc_insert_snapshot,
+    rpc_insert_finding_explanation,
+    rpc_insert_snapshot_v2,
     rpc_schedule_next_run,
     rpc_set_monitor_run_state,
+    rpc_set_source_fetch_metadata,
     rpc_upsert_alert_for_finding,
     rpc_upsert_finding,
     select_due_sources,
@@ -26,104 +25,9 @@ from app.core.supabase_rest import (
     select_recent_active_monitor_runs_for_source,
     select_source_by_id,
 )
-
-
-class UnsafeUrlError(ValueError):
-    pass
-
-
-def _is_blocked_ip(ip: ipaddress._BaseAddress) -> bool:
-    return (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_reserved
-        or ip.is_unspecified
-    )
-
-
-def resolve_public_ips(host: str) -> list[ipaddress._BaseAddress]:
-    try:
-        results = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
-    except socket.gaierror as exc:
-        raise UnsafeUrlError("host resolution failed") from exc
-
-    ips: list[ipaddress._BaseAddress] = []
-    for result in results:
-        sockaddr = result[4]
-        if not sockaddr:
-            continue
-        ip = ipaddress.ip_address(sockaddr[0])
-        if _is_blocked_ip(ip):
-            raise UnsafeUrlError(f"blocked IP address: {ip}")
-        ips.append(ip)
-
-    if not ips:
-        raise UnsafeUrlError("host has no routable IP addresses")
-    return ips
-
-
-def validate_fetch_url(url: str) -> str:
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        raise UnsafeUrlError("only http/https URLs are allowed")
-    if not parsed.hostname:
-        raise UnsafeUrlError("missing URL host")
-    if parsed.username or parsed.password:
-        raise UnsafeUrlError("credentials in URL are not allowed")
-
-    host = parsed.hostname.strip().lower()
-    if host == "localhost" or host.endswith(".local"):
-        raise UnsafeUrlError("localhost and .local hosts are blocked")
-
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        resolve_public_ips(host)
-    else:
-        if _is_blocked_ip(ip):
-            raise UnsafeUrlError(f"blocked IP address: {ip}")
-
-    return url
-
-
-async def fetch_url_snapshot(
-    url: str, *, timeout_seconds: float = 10.0, max_bytes: int = 1_000_000
-) -> dict[str, object]:
-    safe_url = validate_fetch_url(url)
-    timeout = httpx.Timeout(timeout_seconds)
-    headers = {"User-Agent": "VeriruleMonitor/1.0"}
-
-    hasher = hashlib.sha256()
-    content_len = 0
-    content_type: str | None = None
-    fetched_url = safe_url
-
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
-        async with client.stream("GET", safe_url, headers=headers) as response:
-            if 300 <= response.status_code < 400:
-                raise UnsafeUrlError("redirects are not allowed")
-            response.raise_for_status()
-
-            fetched_url = str(response.url)
-            content_type = response.headers.get("content-type")
-            declared_len = response.headers.get("content-length")
-            if declared_len and declared_len.isdigit() and int(declared_len) > max_bytes:
-                raise UnsafeUrlError("response exceeds maximum size")
-
-            async for chunk in response.aiter_bytes():
-                content_len += len(chunk)
-                if content_len > max_bytes:
-                    raise UnsafeUrlError("response exceeds maximum size")
-                hasher.update(chunk)
-
-    return {
-        "fetched_url": fetched_url,
-        "content_hash": hasher.hexdigest(),
-        "content_type": content_type,
-        "content_len": content_len,
-    }
+from app.worker.explain import build_explanation
+from app.worker.fetcher import UnsafeUrlError, fetch_url
+from app.worker.normalize import normalize
 
 
 @dataclass
@@ -195,32 +99,86 @@ class MonitorRunProcessor:
             if not source_url:
                 raise ValueError("source URL is empty")
 
-            snapshot = await fetch_url_snapshot(
+            previous_snapshot = await select_latest_snapshot(self.access_token, source_id)
+            source_etag = str(source.get("etag") or "").strip() or None
+            source_last_modified = str(source.get("last_modified") or "").strip() or None
+            request_etag = source_etag or (
+                str(previous_snapshot.get("etag") or "").strip() if previous_snapshot else None
+            )
+            request_last_modified = source_last_modified or (
+                str(previous_snapshot.get("last_modified") or "").strip()
+                if previous_snapshot
+                else None
+            )
+
+            fetch_result = await fetch_url(
                 source_url,
+                etag=request_etag,
+                last_modified=request_last_modified,
                 timeout_seconds=self.fetch_timeout_seconds,
                 max_bytes=self.fetch_max_bytes,
             )
-            previous_snapshot = await select_latest_snapshot(self.access_token, source_id)
+            status_code = int(fetch_result.get("status") or 0)
+            response_etag = str(fetch_result.get("etag") or "").strip() or None
+            response_last_modified = str(fetch_result.get("last_modified") or "").strip() or None
+            response_content_type = str(fetch_result.get("content_type") or "").strip() or None
 
-            await rpc_insert_snapshot(
+            await rpc_set_source_fetch_metadata(
+                self.write_token,
+                {
+                    "p_source_id": source_id,
+                    "p_etag": response_etag,
+                    "p_last_modified": response_last_modified,
+                    "p_content_type": response_content_type,
+                },
+            )
+
+            if status_code == 304:
+                await rpc_set_monitor_run_state(
+                    self.write_token,
+                    {"p_run_id": run_id, "p_status": "succeeded", "p_error": None},
+                )
+                return
+
+            response_bytes = (
+                fetch_result["bytes"] if isinstance(fetch_result.get("bytes"), bytes) else b""
+            )
+            normalized = normalize(response_content_type, response_bytes)
+            current_fingerprint = str(normalized["text_fingerprint"])
+            previous_fingerprint = None
+            if previous_snapshot:
+                previous_fingerprint = str(
+                    previous_snapshot.get("text_fingerprint")
+                    or previous_snapshot.get("content_hash")
+                    or ""
+                ).strip() or None
+
+            await rpc_insert_snapshot_v2(
                 self.write_token,
                 {
                     "p_org_id": org_id,
                     "p_source_id": source_id,
                     "p_run_id": run_id,
-                    "p_fetched_url": snapshot["fetched_url"],
-                    "p_content_hash": snapshot["content_hash"],
-                    "p_content_type": snapshot["content_type"],
-                    "p_content_len": int(snapshot["content_len"]),
+                    "p_fetched_url": str(fetch_result.get("fetched_url") or source_url),
+                    "p_content_hash": current_fingerprint,
+                    "p_content_type": response_content_type,
+                    "p_content_len": len(response_bytes),
+                    "p_http_status": status_code,
+                    "p_etag": response_etag,
+                    "p_last_modified": response_last_modified,
+                    "p_text_preview": str(normalized.get("text_preview") or ""),
+                    "p_text_fingerprint": current_fingerprint,
                 },
             )
 
-            previous_hash = (
-                str(previous_snapshot.get("content_hash")) if previous_snapshot else None
-            )
-            current_hash = str(snapshot["content_hash"])
-            if previous_hash != current_hash:
-                fingerprint = hashlib.sha256(f"{source_id}:{current_hash}".encode()).hexdigest()
+            if previous_fingerprint != current_fingerprint:
+                finding_fingerprint = hashlib.sha256(
+                    f"{source_id}:{current_fingerprint}".encode()
+                ).hexdigest()
+                previous_text = (
+                    str(previous_snapshot.get("text_preview") or "") if previous_snapshot else ""
+                )
+                explanation = build_explanation(previous_text, str(normalized["normalized_text"]))
                 finding_id = await rpc_upsert_finding(
                     self.write_token,
                     {
@@ -228,11 +186,21 @@ class MonitorRunProcessor:
                         "p_source_id": source_id,
                         "p_run_id": run_id,
                         "p_title": "Source content changed",
-                        "p_summary": f"Detected content hash change for monitored source {source_id}.",
+                        "p_summary": str(explanation["summary"]),
                         "p_severity": "medium",
-                        "p_fingerprint": fingerprint,
-                        "p_raw_url": str(snapshot["fetched_url"]),
-                        "p_raw_hash": current_hash,
+                        "p_fingerprint": finding_fingerprint,
+                        "p_raw_url": str(fetch_result.get("fetched_url") or source_url),
+                        "p_raw_hash": current_fingerprint,
+                    },
+                )
+                await rpc_insert_finding_explanation(
+                    self.write_token,
+                    {
+                        "p_org_id": org_id,
+                        "p_finding_id": finding_id,
+                        "p_summary": str(explanation["summary"]),
+                        "p_diff_preview": explanation.get("diff_preview"),
+                        "p_citations": explanation.get("citations") or [],
                     },
                 )
                 alert_result = await rpc_upsert_alert_for_finding(
@@ -258,7 +226,7 @@ class MonitorRunProcessor:
                 self.write_token,
                 {"p_run_id": run_id, "p_status": "succeeded", "p_error": None},
             )
-        except (HTTPException, ValueError, httpx.HTTPError) as exc:
+        except (HTTPException, UnsafeUrlError, ValueError, httpx.HTTPError) as exc:
             await rpc_set_monitor_run_state(
                 self.write_token,
                 {
