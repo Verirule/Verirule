@@ -9,6 +9,7 @@ import {
   Bell,
   CircleDollarSign,
   ClipboardList,
+  FileOutput,
   FlaskConical,
   LayoutTemplate,
   LayoutDashboard,
@@ -53,6 +54,7 @@ const navigationSections: NavigationSection[] = [
       { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
       { href: "/dashboard/tasks", label: "Tasks", icon: ListChecks },
       { href: "/dashboard/audit", label: "Audit", icon: ClipboardList },
+      { href: "/dashboard/exports", label: "Exports", icon: FileOutput },
     ],
   },
   {
