@@ -18,10 +18,10 @@ export function getPublicSupabaseEnv() {
     );
   }
   if (key && key.includes('"')) {
-    problems.push("Supabase key contains quotes. Remove quotes in Vercel env vars.");
+    problems.push("Supabase key contains quotes. Remove quotes in deployment environment variables.");
   }
   if (url && url.includes('"')) {
-    problems.push("Supabase URL contains quotes. Remove quotes in Vercel env vars.");
+    problems.push("Supabase URL contains quotes. Remove quotes in deployment environment variables.");
   }
   if (process.env.POSTGRES_URL || process.env.DATABASE_URL) {
     problems.push("DB credentials must not be set in web env vars");

@@ -69,9 +69,9 @@ export function LoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card className="border-blue-200 bg-white text-blue-950">
         <CardHeader>
-          <Link href="/" className="inline-flex w-fit items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-            <LogoMark className="h-6 w-6 text-blue-700" />
-            <span className="text-sm font-semibold tracking-wide text-blue-900">Verirule</span>
+          <Link href="/" className="inline-flex w-fit items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006F34]">
+            <LogoMark className="h-6 w-6" />
+            <span className="text-sm font-semibold tracking-wide text-[#0B3A27]">Verirule</span>
           </Link>
           <CardTitle className="text-2xl">Sign in</CardTitle>
           <CardDescription className="text-blue-800/80">

@@ -6,14 +6,17 @@ import "./globals.css";
 
 const metadataBase = process.env.NEXT_PUBLIC_SITE_URL
   ? new URL(process.env.NEXT_PUBLIC_SITE_URL)
-  : process.env.VERCEL_URL
-    ? new URL(`https://${process.env.VERCEL_URL}`)
-    : new URL("https://www.verirule.xyz");
+  : new URL("https://www.verirule.xyz");
 
 export const metadata: Metadata = {
   metadataBase,
   title: "Verirule",
   description: "Regulatory monitoring and audit evidence workflow platform",
+  icons: {
+    icon: [{ url: "/brand/icon.svg", type: "image/svg+xml" }],
+    shortcut: "/brand/icon.svg",
+    apple: "/brand/icon.svg",
+  },
 };
 
 const inter = Inter({

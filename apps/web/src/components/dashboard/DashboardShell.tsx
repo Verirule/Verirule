@@ -138,7 +138,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               {mobileSidebarOpen ? <X /> : <Menu />}
             </Button>
             <Link href="/" className="flex items-center gap-2 font-semibold">
-              <LogoMark className="h-6 w-6 text-blue-700 dark:text-blue-300" />
+              <LogoMark className="h-6 w-6" />
               <span>Verirule</span>
             </Link>
           </div>

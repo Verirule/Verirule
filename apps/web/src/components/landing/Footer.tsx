@@ -5,14 +5,14 @@ import { SocialIcons } from "@/src/components/SocialIcons";
 
 export function Footer() {
   return (
-    <footer className="border-t border-blue-200 bg-[#0B3B8C] py-12 text-blue-100">
+    <footer className="border-t border-[#1E6B46] bg-[#0A3B27] py-12 text-[#D4F0E0]">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <LogoMark className="h-8 w-8 text-blue-200" />
+            <LogoMark className="h-8 w-8" />
             <span className="text-lg font-semibold text-white">Verirule</span>
           </div>
-          <p className="max-w-md text-sm text-blue-100/85">
+          <p className="max-w-md text-sm text-[#D4F0E0]/85">
             Regulatory monitoring and evidence workflows for teams operating in audited environments.
           </p>
           <SocialIcons />
@@ -24,32 +24,32 @@ export function Footer() {
               href="https://github.com/Verirule/Verirule/blob/main/docs/SECURITY.md"
               target="_blank"
               rel="noopener noreferrer"
-              className="transition-colors hover:text-blue-200"
+              className="transition-colors hover:text-white"
             >
               Security
             </Link>
-            <Link href="/privacy" className="transition-colors hover:text-blue-200">
+            <Link href="/privacy" className="transition-colors hover:text-white">
               Privacy
             </Link>
-            <Link href="/policy" className="transition-colors hover:text-blue-200">
+            <Link href="/policy" className="transition-colors hover:text-white">
               Policy
             </Link>
-            <Link href="/terms" className="transition-colors hover:text-blue-200">
+            <Link href="/terms" className="transition-colors hover:text-white">
               Terms
             </Link>
-            <Link href="/service" className="transition-colors hover:text-blue-200">
+            <Link href="/service" className="transition-colors hover:text-white">
               Service
             </Link>
             <Link
               href="https://www.gnu.org/licenses/agpl-3.0.en.html"
               target="_blank"
               rel="noopener noreferrer"
-              className="transition-colors hover:text-blue-200"
+              className="transition-colors hover:text-white"
             >
               License (GNU AGPLv3)
             </Link>
           </div>
-          <p className="text-blue-200/70">&copy; Verirule</p>
+          <p className="text-[#B6DEC9]/80">&copy; Verirule</p>
         </div>
       </div>
     </footer>

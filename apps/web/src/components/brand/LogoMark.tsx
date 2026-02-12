@@ -9,11 +9,10 @@ export function LogoMark({ className }: LogoMarkProps) {
   return (
     <Image
       src="/brand/logo.svg"
-      alt=""
+      alt="Verirule"
       width={256}
       height={256}
       className={cn("shrink-0", className)}
-      aria-hidden
     />
   );
 }

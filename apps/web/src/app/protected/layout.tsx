@@ -17,7 +17,7 @@ export default function ProtectedLayout({
         <nav className="vr-surface w-full flex justify-center border-b border-b-foreground/10 h-16">
           <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
             <Link href="/" className="flex items-center gap-3 font-semibold">
-              <LogoMark className="h-6 w-6 text-slate-900 dark:text-white" />
+              <LogoMark className="h-6 w-6" />
               <span>Verirule</span>
             </Link>
             {!hasEnvVars ? (

@@ -169,21 +169,21 @@ export default function DashboardTemplatesPage() {
   return (
     <div className="space-y-6">
       <section>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Framework Templates</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight text-[#0B3A27] sm:text-3xl">Framework Templates</h1>
+        <p className="mt-1 text-sm text-[#1D4A36]/80">
           Install vetted monitoring sources for common compliance frameworks in one click.
         </p>
       </section>
 
-      <Card className="border-border/70">
+      <Card className="border-[#C5E4D3] bg-white">
         <CardHeader>
-          <CardTitle>Organization</CardTitle>
-          <CardDescription>Select the workspace where template sources will be installed.</CardDescription>
+          <CardTitle className="text-[#0B3A27]">Organization</CardTitle>
+          <CardDescription className="text-[#1D4A36]/80">Select the workspace where template sources will be installed.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {isLoadingOrgs ? <p className="text-sm text-muted-foreground">Loading organizations...</p> : null}
+          {isLoadingOrgs ? <p className="text-sm text-[#1D4A36]/80">Loading organizations...</p> : null}
           {!isLoadingOrgs && orgs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-[#1D4A36]/80">
               No organizations found. Create one from the dashboard overview first.
             </p>
           ) : null}
@@ -194,7 +194,7 @@ export default function DashboardTemplatesPage() {
                 id="templates-org-selector"
                 value={selectedOrgId}
                 onChange={(event) => setSelectedOrgId(event.target.value)}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                className="h-10 w-full rounded-md border border-[#9CCCB2] bg-white px-3 text-sm"
               >
                 {orgs.map((org) => (
                   <option key={org.id} value={org.id}>
@@ -207,15 +207,15 @@ export default function DashboardTemplatesPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/70">
+      <Card className="border-[#C5E4D3] bg-white">
         <CardHeader>
-          <CardTitle>Templates</CardTitle>
-          <CardDescription>Global read-only framework catalog.</CardDescription>
+          <CardTitle className="text-[#0B3A27]">Templates</CardTitle>
+          <CardDescription className="text-[#1D4A36]/80">Global read-only framework catalog.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {isLoadingTemplates ? <p className="text-sm text-muted-foreground">Loading templates...</p> : null}
+          {isLoadingTemplates ? <p className="text-sm text-[#1D4A36]/80">Loading templates...</p> : null}
           {!isLoadingTemplates && templates.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No templates are currently available.</p>
+            <p className="text-sm text-[#1D4A36]/80">No templates are currently available.</p>
           ) : null}
 
           {!isLoadingTemplates && templates.length > 0 ? (
@@ -223,20 +223,20 @@ export default function DashboardTemplatesPage() {
               {templates.map((template) => (
                 <article
                   key={template.id}
-                  className="space-y-3 rounded-lg border border-border/70 bg-card p-4 shadow-sm"
+                  className="space-y-3 rounded-lg border border-[#C5E4D3] bg-[#F7FCF9] p-4 shadow-sm"
                 >
                   <div className="space-y-1">
-                    <h2 className="text-base font-semibold">{template.name}</h2>
-                    <p className="text-sm text-muted-foreground">{template.description}</p>
+                    <h2 className="text-base font-semibold text-[#0B3A27]">{template.name}</h2>
+                    <p className="text-sm text-[#1D4A36]/80">{template.description}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {template.tags.map((tag) => (
-                      <Badge key={`${template.slug}-${tag}`} variant="secondary">
+                      <Badge key={`${template.slug}-${tag}`} variant="secondary" className="border-[#9CCCB2] bg-[#E8F5EE] text-[#0D4C2F]">
                         {tag}
                       </Badge>
                     ))}
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-[#1D4A36]/80">
                     <p>Sources: {template.source_count}</p>
                     <p>Default cadence: {template.default_cadence}</p>
                   </div>
@@ -244,6 +244,7 @@ export default function DashboardTemplatesPage() {
                     type="button"
                     onClick={() => void installTemplate(template.slug)}
                     disabled={!selectedOrgId || installingSlug === template.slug}
+                    className="bg-[#006F34] text-white hover:bg-[#005E31]"
                   >
                     {installingSlug === template.slug ? "Installing..." : "Install"}
                   </Button>

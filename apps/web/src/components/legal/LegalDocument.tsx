@@ -20,7 +20,7 @@ export function LegalDocument({ title, summary, lastUpdated, sections }: LegalDo
       <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 sm:py-14">
         <header className="mb-8">
           <Link href="/" className="inline-flex items-center gap-2">
-            <LogoMark className="h-7 w-7 text-[#38BDF8]" />
+            <LogoMark className="h-7 w-7" />
             <span className="font-semibold text-white">Verirule</span>
           </Link>
           <h1 className="mt-6 text-3xl font-semibold tracking-tight text-white sm:text-4xl">{title}</h1>

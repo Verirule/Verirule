@@ -33,7 +33,7 @@ export function SocialIcons({ className, iconClassName }: SocialIconsProps) {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={item.name}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-blue-300/70 text-blue-100 transition-colors hover:border-white hover:text-white"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#7AB596]/70 text-[#D4F0E0] transition-colors hover:border-white hover:text-white"
         >
           <svg
             viewBox="0 0 24 24"
