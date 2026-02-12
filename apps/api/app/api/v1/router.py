@@ -8,9 +8,9 @@ from app.api.v1.endpoints import (
     monitoring,
     orgs,
     sources,
-    templates,
     task_files,
     tasks,
+    templates,
 )
 
 router = APIRouter()
