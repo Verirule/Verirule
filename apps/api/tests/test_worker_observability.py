@@ -267,6 +267,7 @@ def test_worker_heartbeat_upsert_called(monkeypatch) -> None:
             FakeMonitorProcessor(),  # type: ignore[arg-type]
             FakeExportProcessor(),  # type: ignore[arg-type]
             run_batch_limit=5,
+            heartbeat_enabled=True,
         )
     )
 

@@ -10,6 +10,7 @@ from app.core.logging import configure_logging, get_logger
 from app.core.settings import get_settings
 from app.core.supabase_rest import upsert_system_status
 from app.worker.export_processor import EXPORT_BATCH_LIMIT, ExportProcessor
+from app.worker.retry import sanitize_error
 from app.worker.run_processor import MonitorRunProcessor
 
 logger = get_logger("worker.supervisor")
@@ -19,18 +20,12 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _safe_error_message(exc: Exception) -> str:
-    message = str(exc).strip()
-    if not message:
-        message = "worker error"
-    return message[:500]
-
-
 async def run_worker_tick(
     monitor_processor: MonitorRunProcessor,
     export_processor: ExportProcessor,
     *,
     run_batch_limit: int,
+    heartbeat_enabled: bool,
 ) -> dict[str, object]:
     tick_started_at = _now_iso()
     errors = 0
@@ -45,7 +40,7 @@ async def run_worker_tick(
         errors += 1
         logger.error(
             "worker.tick_due_sources_error",
-            extra={"component": "worker", "error": _safe_error_message(exc)},
+            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
         )
 
     try:
@@ -54,7 +49,7 @@ async def run_worker_tick(
         errors += 1
         logger.error(
             "worker.tick_queue_runs_error",
-            extra={"component": "worker", "error": _safe_error_message(exc)},
+            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
         )
 
     try:
@@ -63,7 +58,7 @@ async def run_worker_tick(
         errors += 1
         logger.error(
             "worker.tick_process_runs_error",
-            extra={"component": "worker", "error": _safe_error_message(exc)},
+            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
         )
 
     try:
@@ -72,7 +67,7 @@ async def run_worker_tick(
         errors += 1
         logger.error(
             "worker.tick_process_exports_error",
-            extra={"component": "worker", "error": _safe_error_message(exc)},
+            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
         )
 
     tick_finished_at = _now_iso()
@@ -87,13 +82,17 @@ async def run_worker_tick(
         "errors": errors,
     }
 
-    try:
-        await upsert_system_status("worker", payload)
-    except Exception as exc:  # pragma: no cover - defensive guard
-        logger.error(
-            "worker.heartbeat_error",
-            extra={"component": "worker", "error": _safe_error_message(exc)},
-        )
+    if heartbeat_enabled:
+        try:
+            await upsert_system_status("worker", payload)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            logger.error(
+                "worker.heartbeat_error",
+                extra={
+                    "component": "worker",
+                    "error": sanitize_error(exc, default_message="worker heartbeat error"),
+                },
+            )
 
     return payload
 
@@ -104,6 +103,15 @@ async def run_worker_supervisor_loop() -> None:
     if not read_access_token:
         raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY must be configured for worker mode")
     write_access_token = settings.SUPABASE_SERVICE_ROLE_KEY or read_access_token
+    heartbeat_enabled = bool(settings.SUPABASE_SERVICE_ROLE_KEY)
+    if not heartbeat_enabled:
+        logger.error(
+            "worker.heartbeat_disabled",
+            extra={
+                "component": "worker",
+                "reason": "SUPABASE_SERVICE_ROLE_KEY missing; heartbeat skipped",
+            },
+        )
 
     monitor_processor = MonitorRunProcessor(
         access_token=read_access_token,
@@ -121,6 +129,7 @@ async def run_worker_supervisor_loop() -> None:
             monitor_processor,
             export_processor,
             run_batch_limit=settings.WORKER_BATCH_LIMIT,
+            heartbeat_enabled=heartbeat_enabled,
         )
 
         if (

@@ -20,10 +20,10 @@ from app.core.supabase_rest import (
 from app.core.supabase_storage_admin import download_bytes, upload_bytes
 from app.exports.generate import build_csv, build_export_bytes, build_pdf
 from app.exports.packet import build_zip
+from app.worker.retry import backoff_seconds, sanitize_error
 
 EXPORT_BATCH_LIMIT = 3
 MAX_EXPORT_ATTEMPTS = 5
-RETRY_BACKOFF_SECONDS = [60, 300, 900, 3600, 21600]
 logger = get_logger("worker.exports")
 
 
@@ -45,12 +45,7 @@ def _normalize_iso8601(value: object) -> str | None:
 
 
 def _sanitize_error_text(exc: Exception) -> str:
-    if isinstance(exc, HTTPException) and isinstance(exc.detail, str) and exc.detail.strip():
-        return exc.detail.strip()[:500]
-    message = str(exc).strip()
-    if not message:
-        message = "Export generation failed."
-    return message[:500]
+    return sanitize_error(exc, default_message="Export generation failed.")
 
 
 def _scope_include(scope: dict[str, Any]) -> list[str]:
@@ -112,8 +107,7 @@ def _safe_int(value: object | None) -> int:
 
 
 def _retry_at_iso(attempt_number: int) -> str:
-    index = max(0, min(attempt_number - 1, len(RETRY_BACKOFF_SECONDS) - 1))
-    return (datetime.now(UTC) + timedelta(seconds=RETRY_BACKOFF_SECONDS[index])).isoformat().replace(
+    return (datetime.now(UTC) + timedelta(seconds=backoff_seconds(attempt_number))).isoformat().replace(
         "+00:00", "Z"
     )
 

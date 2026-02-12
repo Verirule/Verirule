@@ -26,10 +26,11 @@ async def system_health(
 ) -> SystemHealthOut:
     settings = get_settings()
     rows = await select_system_status(auth.access_token)
+    stale_after_seconds = max(1, settings.WORKER_STALE_AFTER_SECONDS)
 
     worker_row = next((row for row in rows if str(row.get("id") or "") == "worker"), None)
     worker_last_seen_at: datetime | None = None
-    worker_status: Literal["ok", "stale"] = "stale"
+    worker_status: Literal["ok", "stale", "unknown"] = "unknown"
 
     if worker_row:
         updated_at = worker_row.get("updated_at")
@@ -47,13 +48,12 @@ async def system_health(
             ).astimezone(UTC)
 
     if worker_last_seen_at is not None:
-        stale_after = max(1, settings.WORKER_STALE_AFTER_SECONDS)
         age_seconds = (datetime.now(UTC) - worker_last_seen_at).total_seconds()
-        worker_status = "ok" if age_seconds <= stale_after else "stale"
+        worker_status = "ok" if age_seconds <= stale_after_seconds else "stale"
 
     return SystemHealthOut(
         api="ok",
         worker=worker_status,
         worker_last_seen_at=worker_last_seen_at,
-        worker_stale_after_seconds=max(1, settings.WORKER_STALE_AFTER_SECONDS),
+        stale_after_seconds=stale_after_seconds,
     )

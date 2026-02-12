@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import httpx
-from fastapi import HTTPException
 
 from app.core.logging import get_logger
 from app.core.settings import get_settings
@@ -33,9 +32,9 @@ from app.core.supabase_rest import (
 from app.worker.explain import build_explanation
 from app.worker.fetcher import UnsafeUrlError, fetch_url
 from app.worker.normalize import normalize
+from app.worker.retry import backoff_seconds, sanitize_error
 
 MAX_RUN_ATTEMPTS = 5
-RETRY_BACKOFF_SECONDS = [60, 300, 900, 3600, 21600]
 logger = get_logger("worker.runs")
 
 
@@ -244,8 +243,8 @@ class MonitorRunProcessor:
                 {"p_run_id": run_id, "p_status": "succeeded", "p_error": None},
             )
             await clear_monitor_run_error_state(run_id)
-        except (HTTPException, UnsafeUrlError, ValueError, httpx.HTTPError) as exc:
-            error_text = _sanitize_error_text(exc)
+        except (UnsafeUrlError, ValueError, httpx.HTTPError) as exc:
+            error_text = sanitize_error(exc, default_message="Monitor run failed.")
             if attempt_number < MAX_RUN_ATTEMPTS:
                 next_attempt_at = _retry_at_iso(attempt_number)
                 await mark_monitor_run_for_retry(run_id, attempt_number, next_attempt_at, error_text)
@@ -270,7 +269,7 @@ class MonitorRunProcessor:
                 },
             )
         except Exception as exc:  # pragma: no cover - catch-all safety
-            error_text = _sanitize_error_text(exc)
+            error_text = sanitize_error(exc, default_message="Monitor run failed.")
             if attempt_number < MAX_RUN_ATTEMPTS:
                 next_attempt_at = _retry_at_iso(attempt_number)
                 await mark_monitor_run_for_retry(run_id, attempt_number, next_attempt_at, error_text)
@@ -319,7 +318,10 @@ async def run_worker_loop() -> None:
         except Exception as exc:  # pragma: no cover - loop resiliency
             logger.error(
                 "run.worker_loop_error",
-                extra={"component": "worker", "error": _sanitize_error_text(exc)},
+                extra={
+                    "component": "worker",
+                    "error": sanitize_error(exc, default_message="Monitor run loop failed."),
+                },
             )
             await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))
             continue
@@ -345,18 +347,6 @@ def _now_iso() -> str:
 
 
 def _retry_at_iso(attempt_number: int) -> str:
-    index = max(0, min(attempt_number - 1, len(RETRY_BACKOFF_SECONDS) - 1))
-    return (datetime.now(UTC) + timedelta(seconds=RETRY_BACKOFF_SECONDS[index])).isoformat().replace(
+    return (datetime.now(UTC) + timedelta(seconds=backoff_seconds(attempt_number))).isoformat().replace(
         "+00:00", "Z"
     )
-
-
-def _sanitize_error_text(exc: Exception) -> str:
-    if isinstance(exc, HTTPException) and isinstance(exc.detail, str):
-        detail = exc.detail.strip()
-        if detail:
-            return detail[:500]
-    message = str(exc).strip()
-    if not message:
-        message = "Monitor run failed."
-    return message[:500]

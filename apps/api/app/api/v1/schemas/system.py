@@ -16,6 +16,6 @@ class SystemStatusListOut(BaseModel):
 
 class SystemHealthOut(BaseModel):
     api: Literal["ok"]
-    worker: Literal["ok", "stale"]
+    worker: Literal["ok", "stale", "unknown"]
     worker_last_seen_at: datetime | None = None
-    worker_stale_after_seconds: int
+    stale_after_seconds: int
