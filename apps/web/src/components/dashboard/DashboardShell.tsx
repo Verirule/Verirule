@@ -10,6 +10,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   FlaskConical,
+  LayoutTemplate,
   LayoutDashboard,
   ListChecks,
   Menu,
@@ -41,6 +42,7 @@ const navigationSections: NavigationSection[] = [
     links: [
       { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
       { href: "/dashboard/sources", label: "Sources", icon: RadioTower },
+      { href: "/dashboard/templates", label: "Templates", icon: LayoutTemplate },
       { href: "/dashboard/research", label: "Research", icon: FlaskConical },
     ],
   },
