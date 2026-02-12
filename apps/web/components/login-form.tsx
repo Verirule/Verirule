@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OAuthButtons } from "@/src/components/auth/OAuthButtons";
+import { LogoMark } from "@/src/components/brand/LogoMark";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -68,6 +69,10 @@ export function LoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card className="border-blue-200 bg-white text-blue-950">
         <CardHeader>
+          <Link href="/" className="inline-flex w-fit items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+            <LogoMark className="h-6 w-6 text-blue-700" />
+            <span className="text-sm font-semibold tracking-wide text-blue-900">Verirule</span>
+          </Link>
           <CardTitle className="text-2xl">Sign in</CardTitle>
           <CardDescription className="text-blue-800/80">
             Access your workspace with your registered credentials.

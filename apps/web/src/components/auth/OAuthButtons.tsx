@@ -44,6 +44,10 @@ function getEnabledOAuthProviders(): OAuthProvider[] {
   return Array.from(new Set(requested));
 }
 
+function oauthSetupHint(): string {
+  return "Set NEXT_PUBLIC_SUPABASE_OAUTH_PROVIDERS and enable the same providers in Supabase Auth.";
+}
+
 function normalizeOAuthErrorMessage(message: string, provider: OAuthProvider): string {
   try {
     const parsed = JSON.parse(message) as { msg?: unknown; error?: unknown };
@@ -98,7 +102,7 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
         role="alert"
         className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
       >
-        OAuth sign-in is not configured for this environment.
+        OAuth sign-in is not configured for this environment. {oauthSetupHint()}
       </div>
     );
   }
