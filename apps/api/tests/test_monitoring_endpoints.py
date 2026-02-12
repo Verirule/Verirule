@@ -447,7 +447,7 @@ def test_monitor_runs_returns_list_when_supabase_ok(monkeypatch) -> None:
         async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
             assert url == "https://example.supabase.co/rest/v1/monitor_runs"
             assert params == {
-                "select": "id,org_id,source_id,status,started_at,finished_at,error,created_at",
+                "select": "id,org_id,source_id,status,started_at,finished_at,error,created_at,attempts,next_attempt_at,last_error",
                 "org_id": f"eq.{ORG_ID}",
                 "order": "created_at.desc",
             }

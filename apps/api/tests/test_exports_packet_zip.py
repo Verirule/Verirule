@@ -76,6 +76,7 @@ def test_zip_export_processor_writes_audit_packet(monkeypatch) -> None:
                 "format": "zip",
                 "scope": {},
                 "status": "queued",
+                "attempts": 0,
             }
         ]
 
@@ -118,6 +119,10 @@ def test_zip_export_processor_writes_audit_packet(monkeypatch) -> None:
             assert error_text is None
             assert isinstance(completed_at, str)
 
+    async def fake_mark_started(export_id: str, attempts: int) -> None:
+        assert export_id == EXPORT_ID
+        assert attempts == 1
+
     async def fake_download_bytes(bucket: str, path: str) -> bytes:
         assert bucket == "evidence"
         assert path == f"org/{ORG_ID}/tasks/{TASK_ID}/proof.txt"
@@ -128,6 +133,7 @@ def test_zip_export_processor_writes_audit_packet(monkeypatch) -> None:
 
     monkeypatch.setattr(export_processor, "select_queued_audit_exports_service", fake_select_queued)
     monkeypatch.setattr(export_processor, "select_audit_packet_data", fake_select_packet)
+    monkeypatch.setattr(export_processor, "mark_audit_export_attempt_started", fake_mark_started)
     monkeypatch.setattr(export_processor, "update_audit_export_status", fake_update_status)
     monkeypatch.setattr(export_processor, "download_bytes", fake_download_bytes)
     monkeypatch.setattr(export_processor, "upload_bytes", fake_upload_bytes)
@@ -171,7 +177,16 @@ def test_zip_export_processor_skips_evidence_when_limits_exceeded(monkeypatch) -
     uploaded: list[bytes] = []
 
     async def fake_select_queued(limit: int = 3) -> list[dict[str, object]]:
-        return [{"id": EXPORT_ID, "org_id": ORG_ID, "format": "zip", "scope": {}, "status": "queued"}]
+        return [
+            {
+                "id": EXPORT_ID,
+                "org_id": ORG_ID,
+                "format": "zip",
+                "scope": {},
+                "status": "queued",
+                "attempts": 0,
+            }
+        ]
 
     async def fake_select_packet(
         access_token: str, org_id: str, from_ts: str | None, to_ts: str | None
@@ -206,11 +221,16 @@ def test_zip_export_processor_skips_evidence_when_limits_exceeded(monkeypatch) -
     async def fake_download_bytes(bucket: str, path: str) -> bytes:
         return b"12345678"
 
+    async def fake_mark_started(export_id: str, attempts: int) -> None:
+        assert export_id == EXPORT_ID
+        assert attempts == 1
+
     async def fake_upload_bytes(bucket: str, path: str, data: bytes, content_type: str) -> None:
         uploaded.append(data)
 
     monkeypatch.setattr(export_processor, "select_queued_audit_exports_service", fake_select_queued)
     monkeypatch.setattr(export_processor, "select_audit_packet_data", fake_select_packet)
+    monkeypatch.setattr(export_processor, "mark_audit_export_attempt_started", fake_mark_started)
     monkeypatch.setattr(export_processor, "update_audit_export_status", fake_update_status)
     monkeypatch.setattr(export_processor, "download_bytes", fake_download_bytes)
     monkeypatch.setattr(export_processor, "upload_bytes", fake_upload_bytes)

@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     monitoring,
     orgs,
     sources,
+    system,
     task_files,
     tasks,
     templates,
@@ -26,3 +27,4 @@ router.include_router(tasks.router)
 router.include_router(task_files.router)
 router.include_router(integrations.router)
 router.include_router(exports.router)
+router.include_router(system.router)

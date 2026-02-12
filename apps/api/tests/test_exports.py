@@ -132,6 +132,7 @@ def test_download_url_requires_succeeded(monkeypatch) -> None:
 
 
 def test_export_processor_uploads_and_updates_status(monkeypatch) -> None:
+    started_attempts: list[tuple[str, int]] = []
     status_updates: list[dict[str, object]] = []
     uploaded: list[tuple[str, str, bytes, str]] = []
 
@@ -146,6 +147,7 @@ def test_export_processor_uploads_and_updates_status(monkeypatch) -> None:
                 "scope": {"from": "2026-02-01T00:00:00Z", "to": "2026-02-10T00:00:00Z"},
                 "status": "queued",
                 "created_at": "2026-02-11T00:00:00Z",
+                "attempts": 0,
             }
         ]
 
@@ -191,6 +193,9 @@ def test_export_processor_uploads_and_updates_status(monkeypatch) -> None:
             }
         )
 
+    async def fake_mark_started(export_id: str, attempts: int) -> None:
+        started_attempts.append((export_id, attempts))
+
     def fake_build_export_bytes(export_format: str, packet: dict[str, object]) -> tuple[bytes, str]:
         assert export_format == "pdf"
         assert packet.get("export_id") == EXPORT_ID
@@ -201,6 +206,7 @@ def test_export_processor_uploads_and_updates_status(monkeypatch) -> None:
 
     monkeypatch.setattr(export_processor, "select_queued_audit_exports_service", fake_select_queued)
     monkeypatch.setattr(export_processor, "select_audit_packet_data", fake_select_packet)
+    monkeypatch.setattr(export_processor, "mark_audit_export_attempt_started", fake_mark_started)
     monkeypatch.setattr(export_processor, "update_audit_export_status", fake_update_status)
     monkeypatch.setattr(export_processor, "build_export_bytes", fake_build_export_bytes)
     monkeypatch.setattr(export_processor, "upload_bytes", fake_upload_bytes)
@@ -220,6 +226,6 @@ def test_export_processor_uploads_and_updates_status(monkeypatch) -> None:
             "application/pdf",
         )
     ]
-    assert status_updates[0]["status"] == "running"
+    assert started_attempts == [(EXPORT_ID, 1)]
     assert status_updates[-1]["status"] == "succeeded"
     assert status_updates[-1]["file_sha256"] == "sha-123"

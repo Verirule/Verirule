@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException
 
+from app.core.logging import get_logger
 from app.core.settings import get_settings
 from app.core.supabase_rest import (
+    mark_audit_export_attempt_started,
+    mark_audit_export_dead_letter,
+    mark_audit_export_for_retry,
     select_audit_packet_data,
     select_queued_audit_exports_service,
     update_audit_export_status,
@@ -18,6 +22,9 @@ from app.exports.generate import build_csv, build_export_bytes, build_pdf
 from app.exports.packet import build_zip
 
 EXPORT_BATCH_LIMIT = 3
+MAX_EXPORT_ATTEMPTS = 5
+RETRY_BACKOFF_SECONDS = [60, 300, 900, 3600, 21600]
+logger = get_logger("worker.exports")
 
 
 def _now_iso() -> str:
@@ -39,11 +46,11 @@ def _normalize_iso8601(value: object) -> str | None:
 
 def _sanitize_error_text(exc: Exception) -> str:
     if isinstance(exc, HTTPException) and isinstance(exc.detail, str) and exc.detail.strip():
-        return exc.detail.strip()[:1000]
+        return exc.detail.strip()[:500]
     message = str(exc).strip()
     if not message:
         message = "Export generation failed."
-    return message[:1000]
+    return message[:500]
 
 
 def _scope_include(scope: dict[str, Any]) -> list[str]:
@@ -91,6 +98,32 @@ def _apply_include_scope(packet: dict[str, Any], include: list[str]) -> dict[str
     return packet
 
 
+def _safe_int(value: object | None) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    return 0
+
+
+def _retry_at_iso(attempt_number: int) -> str:
+    index = max(0, min(attempt_number - 1, len(RETRY_BACKOFF_SECONDS) - 1))
+    return (datetime.now(UTC) + timedelta(seconds=RETRY_BACKOFF_SECONDS[index])).isoformat().replace(
+        "+00:00", "Z"
+    )
+
+
+def _safe_text(value: object | None) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
 class ExportProcessor:
     def __init__(self, *, access_token: str, bucket_name: str) -> None:
         self.access_token = access_token
@@ -108,18 +141,13 @@ class ExportProcessor:
         export_format = str(row.get("format") or "").lower()
         scope = row.get("scope") if isinstance(row.get("scope"), dict) else {}
         include = _scope_include(scope)
+        current_attempts = _safe_int(row.get("attempts"))
+        attempt_number = current_attempts + 1
 
         if not export_id or not org_id or export_format not in {"csv", "pdf", "zip"}:
             return
 
-        await update_audit_export_status(
-            export_id,
-            status_value="running",
-            file_path=None,
-            file_sha256=None,
-            error_text=None,
-            completed_at=None,
-        )
+        await mark_audit_export_attempt_started(export_id, attempt_number)
 
         try:
             from_ts = _normalize_iso8601(scope.get("from"))
@@ -147,15 +175,40 @@ class ExportProcessor:
                 completed_at=_now_iso(),
             )
         except Exception as exc:
-            await update_audit_export_status(
+            error_text = _sanitize_error_text(exc)
+            if attempt_number < MAX_EXPORT_ATTEMPTS:
+                next_attempt_at = _retry_at_iso(attempt_number)
+                await mark_audit_export_for_retry(
+                    export_id,
+                    attempts=attempt_number,
+                    next_attempt_at=next_attempt_at,
+                    last_error=error_text,
+                )
+                logger.warning(
+                    "export.retry_scheduled",
+                    extra={
+                        "component": "worker",
+                        "export_id": export_id,
+                        "attempts": attempt_number,
+                        "next_attempt_at": next_attempt_at,
+                    },
+                )
+                return
+            await mark_audit_export_dead_letter(
                 export_id,
-                status_value="failed",
-                file_path=None,
-                file_sha256=None,
-                error_text=_sanitize_error_text(exc),
+                attempts=attempt_number,
+                last_error=error_text,
                 completed_at=_now_iso(),
             )
-
+            logger.error(
+                "export.dead_letter",
+                extra={
+                    "component": "worker",
+                    "export_id": export_id,
+                    "attempts": attempt_number,
+                    "last_error": error_text,
+                },
+            )
 
     async def _build_export_content(
         self,
@@ -225,14 +278,20 @@ class ExportProcessor:
             try:
                 file_bytes = await download_bytes(settings.EVIDENCE_BUCKET_NAME, evidence_path)
             except HTTPException as exc:
-                if exc.status_code in {
-                    400,
-                    404,
-                    413,
-                }:
+                detail = _safe_text(exc.detail).lower()
+                if exc.status_code in {400, 404, 413} or (exc.status_code == 502 and "bucket" in detail):
                     evidence_record["skipped"] = True
                     evidence_record["reason"] = _safe_text(exc.detail) or "evidence unavailable"
                     evidence_items.append(evidence_record)
+                    logger.warning(
+                        "export.evidence_skipped",
+                        extra={
+                            "component": "worker",
+                            "evidence_id": evidence_id or None,
+                            "task_id": task_id or None,
+                            "reason": evidence_record["reason"],
+                        },
+                    )
                     continue
                 raise
 
@@ -252,17 +311,14 @@ class ExportProcessor:
         return evidence_items
 
 
-def _safe_text(value: object | None) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
 async def run_export_worker_loop() -> None:
     settings = get_settings()
     service_role_key = settings.SUPABASE_SERVICE_ROLE_KEY
     if not service_role_key:
-        print("export worker disabled: SUPABASE_SERVICE_ROLE_KEY is not configured")
+        logger.warning(
+            "export.worker_disabled",
+            extra={"component": "worker", "reason": "SUPABASE_SERVICE_ROLE_KEY missing"},
+        )
         while True:
             await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))
 
@@ -275,7 +331,10 @@ async def run_export_worker_loop() -> None:
         try:
             processed = await processor.process_queued_exports_once(limit=EXPORT_BATCH_LIMIT)
         except Exception as exc:  # pragma: no cover - loop resiliency
-            print(f"export worker loop error: {exc}")
+            logger.error(
+                "export.worker_loop_error",
+                extra={"component": "worker", "error": _sanitize_error_text(exc)},
+            )
             await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))
             continue
 

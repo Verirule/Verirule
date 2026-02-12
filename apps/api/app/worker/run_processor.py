@@ -8,8 +8,13 @@ from datetime import UTC, datetime, timedelta
 import httpx
 from fastapi import HTTPException
 
+from app.core.logging import get_logger
 from app.core.settings import get_settings
 from app.core.supabase_rest import (
+    clear_monitor_run_error_state,
+    mark_monitor_run_attempt_started,
+    mark_monitor_run_dead_letter,
+    mark_monitor_run_for_retry,
     rpc_append_audit,
     rpc_create_monitor_run,
     rpc_insert_finding_explanation,
@@ -29,6 +34,10 @@ from app.worker.explain import build_explanation
 from app.worker.fetcher import UnsafeUrlError, fetch_url
 from app.worker.normalize import normalize
 
+MAX_RUN_ATTEMPTS = 5
+RETRY_BACKOFF_SECONDS = [60, 300, 900, 3600, 21600]
+logger = get_logger("worker.runs")
+
 
 @dataclass
 class MonitorRunProcessor:
@@ -40,6 +49,10 @@ class MonitorRunProcessor:
     @property
     def write_token(self) -> str:
         return self.write_access_token or self.access_token
+
+    async def count_due_sources_once(self) -> int:
+        due_sources = await select_due_sources(self.access_token)
+        return len(due_sources)
 
     async def queue_due_sources_once(self, limit: int = 10) -> int:
         due_sources = await select_due_sources(self.access_token)
@@ -82,7 +95,10 @@ class MonitorRunProcessor:
         run_id = str(run["id"])
         org_id = str(run["org_id"])
         source_id = str(run["source_id"])
+        current_attempts = _safe_int(run.get("attempts"))
+        attempt_number = current_attempts + 1
 
+        await mark_monitor_run_attempt_started(run_id, attempt_number)
         await rpc_set_monitor_run_state(
             self.write_token,
             {"p_run_id": run_id, "p_status": "running", "p_error": None},
@@ -138,6 +154,7 @@ class MonitorRunProcessor:
                     self.write_token,
                     {"p_run_id": run_id, "p_status": "succeeded", "p_error": None},
                 )
+                await clear_monitor_run_error_state(run_id)
                 return
 
             response_bytes = (
@@ -226,22 +243,55 @@ class MonitorRunProcessor:
                 self.write_token,
                 {"p_run_id": run_id, "p_status": "succeeded", "p_error": None},
             )
+            await clear_monitor_run_error_state(run_id)
         except (HTTPException, UnsafeUrlError, ValueError, httpx.HTTPError) as exc:
-            await rpc_set_monitor_run_state(
-                self.write_token,
-                {
-                    "p_run_id": run_id,
-                    "p_status": "failed",
-                    "p_error": str(exc)[:1000],
+            error_text = _sanitize_error_text(exc)
+            if attempt_number < MAX_RUN_ATTEMPTS:
+                next_attempt_at = _retry_at_iso(attempt_number)
+                await mark_monitor_run_for_retry(run_id, attempt_number, next_attempt_at, error_text)
+                logger.warning(
+                    "run.retry_scheduled",
+                    extra={
+                        "component": "worker",
+                        "run_id": run_id,
+                        "attempts": attempt_number,
+                        "next_attempt_at": next_attempt_at,
+                    },
+                )
+                return
+            await mark_monitor_run_dead_letter(run_id, attempt_number, error_text, _now_iso())
+            logger.error(
+                "run.dead_letter",
+                extra={
+                    "component": "worker",
+                    "run_id": run_id,
+                    "attempts": attempt_number,
+                    "last_error": error_text,
                 },
             )
         except Exception as exc:  # pragma: no cover - catch-all safety
-            await rpc_set_monitor_run_state(
-                self.write_token,
-                {
-                    "p_run_id": run_id,
-                    "p_status": "failed",
-                    "p_error": f"unexpected worker error: {exc}"[:1000],
+            error_text = _sanitize_error_text(exc)
+            if attempt_number < MAX_RUN_ATTEMPTS:
+                next_attempt_at = _retry_at_iso(attempt_number)
+                await mark_monitor_run_for_retry(run_id, attempt_number, next_attempt_at, error_text)
+                logger.warning(
+                    "run.retry_scheduled",
+                    extra={
+                        "component": "worker",
+                        "run_id": run_id,
+                        "attempts": attempt_number,
+                        "next_attempt_at": next_attempt_at,
+                    },
+                )
+                return
+            await mark_monitor_run_dead_letter(run_id, attempt_number, error_text, _now_iso())
+            logger.error(
+                "run.dead_letter",
+                extra={
+                    "component": "worker",
+                    "run_id": run_id,
+                    "attempts": attempt_number,
+                    "last_error": error_text,
                 },
             )
 
@@ -267,8 +317,46 @@ async def run_worker_loop() -> None:
             await processor.queue_due_sources_once(limit=10)
             processed = await processor.process_queued_runs_once(limit=settings.WORKER_BATCH_LIMIT)
         except Exception as exc:  # pragma: no cover - loop resiliency
-            print(f"worker loop error: {exc}")
+            logger.error(
+                "run.worker_loop_error",
+                extra={"component": "worker", "error": _sanitize_error_text(exc)},
+            )
             await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))
             continue
         if processed == 0:
             await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))
+
+
+def _safe_int(value: object | None) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    return 0
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _retry_at_iso(attempt_number: int) -> str:
+    index = max(0, min(attempt_number - 1, len(RETRY_BACKOFF_SECONDS) - 1))
+    return (datetime.now(UTC) + timedelta(seconds=RETRY_BACKOFF_SECONDS[index])).isoformat().replace(
+        "+00:00", "Z"
+    )
+
+
+def _sanitize_error_text(exc: Exception) -> str:
+    if isinstance(exc, HTTPException) and isinstance(exc.detail, str):
+        detail = exc.detail.strip()
+        if detail:
+            return detail[:500]
+    message = str(exc).strip()
+    if not message:
+        message = "Monitor run failed."
+    return message[:500]

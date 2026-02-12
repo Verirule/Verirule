@@ -16,7 +16,9 @@ def test_process_run_creates_explanation_when_content_changes(monkeypatch) -> No
     async def fake_select_queued(access_token: str, limit: int) -> list[dict[str, str]]:
         assert access_token == "worker-token"
         assert limit == 5
-        return [{"id": RUN_ID, "org_id": ORG_ID, "source_id": SOURCE_ID, "status": "queued"}]
+        return [
+            {"id": RUN_ID, "org_id": ORG_ID, "source_id": SOURCE_ID, "status": "queued", "attempts": 0}
+        ]
 
     async def fake_set_state(access_token: str, payload: dict[str, str | None]) -> None:
         assert access_token == "worker-token"
@@ -116,7 +118,16 @@ def test_process_run_creates_explanation_when_content_changes(monkeypatch) -> No
         assert access_token == "worker-token"
         assert payload["p_org_id"] == ORG_ID
 
+    async def fake_mark_started(run_id: str, attempts: int) -> None:
+        assert run_id == RUN_ID
+        assert attempts == 1
+
+    async def fake_clear_retry_state(run_id: str) -> None:
+        assert run_id == RUN_ID
+
     monkeypatch.setattr(run_processor, "select_queued_monitor_runs", fake_select_queued)
+    monkeypatch.setattr(run_processor, "mark_monitor_run_attempt_started", fake_mark_started)
+    monkeypatch.setattr(run_processor, "clear_monitor_run_error_state", fake_clear_retry_state)
     monkeypatch.setattr(run_processor, "rpc_set_monitor_run_state", fake_set_state)
     monkeypatch.setattr(run_processor, "select_source_by_id", fake_select_source)
     monkeypatch.setattr(run_processor, "select_latest_snapshot", fake_select_latest_snapshot)
@@ -146,7 +157,9 @@ def test_process_run_handles_304_without_finding(monkeypatch) -> None:
     upsert_finding_calls = 0
 
     async def fake_select_queued(access_token: str, limit: int) -> list[dict[str, str]]:
-        return [{"id": RUN_ID, "org_id": ORG_ID, "source_id": SOURCE_ID, "status": "queued"}]
+        return [
+            {"id": RUN_ID, "org_id": ORG_ID, "source_id": SOURCE_ID, "status": "queued", "attempts": 0}
+        ]
 
     async def fake_set_state(access_token: str, payload: dict[str, str | None]) -> None:
         run_state_updates.append(payload)
@@ -194,7 +207,16 @@ def test_process_run_handles_304_without_finding(monkeypatch) -> None:
         upsert_finding_calls += 1
         return FINDING_ID
 
+    async def fake_mark_started(run_id: str, attempts: int) -> None:
+        assert run_id == RUN_ID
+        assert attempts == 1
+
+    async def fake_clear_retry_state(run_id: str) -> None:
+        assert run_id == RUN_ID
+
     monkeypatch.setattr(run_processor, "select_queued_monitor_runs", fake_select_queued)
+    monkeypatch.setattr(run_processor, "mark_monitor_run_attempt_started", fake_mark_started)
+    monkeypatch.setattr(run_processor, "clear_monitor_run_error_state", fake_clear_retry_state)
     monkeypatch.setattr(run_processor, "rpc_set_monitor_run_state", fake_set_state)
     monkeypatch.setattr(run_processor, "select_source_by_id", fake_select_source)
     monkeypatch.setattr(run_processor, "select_latest_snapshot", fake_select_latest_snapshot)
@@ -221,7 +243,9 @@ def test_process_run_uses_service_role_for_writes(monkeypatch) -> None:
 
     async def fake_select_queued(access_token: str, limit: int) -> list[dict[str, str]]:
         called_read_tokens.append(access_token)
-        return [{"id": RUN_ID, "org_id": ORG_ID, "source_id": SOURCE_ID, "status": "queued"}]
+        return [
+            {"id": RUN_ID, "org_id": ORG_ID, "source_id": SOURCE_ID, "status": "queued", "attempts": 0}
+        ]
 
     async def fake_set_state(access_token: str, payload: dict[str, str | None]) -> None:
         called_write_tokens.append(access_token)
@@ -272,7 +296,16 @@ def test_process_run_uses_service_role_for_writes(monkeypatch) -> None:
         called_write_tokens.append(access_token)
         return "snapshot-id"
 
+    async def fake_mark_started(run_id: str, attempts: int) -> None:
+        assert run_id == RUN_ID
+        assert attempts == 1
+
+    async def fake_clear_retry_state(run_id: str) -> None:
+        assert run_id == RUN_ID
+
     monkeypatch.setattr(run_processor, "select_queued_monitor_runs", fake_select_queued)
+    monkeypatch.setattr(run_processor, "mark_monitor_run_attempt_started", fake_mark_started)
+    monkeypatch.setattr(run_processor, "clear_monitor_run_error_state", fake_clear_retry_state)
     monkeypatch.setattr(run_processor, "rpc_set_monitor_run_state", fake_set_state)
     monkeypatch.setattr(run_processor, "select_source_by_id", fake_select_source)
     monkeypatch.setattr(run_processor, "select_latest_snapshot", fake_select_latest_snapshot)

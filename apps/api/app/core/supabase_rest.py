@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -59,6 +60,52 @@ def _supabase_error_detail(response: httpx.Response) -> str | None:
         return detail
 
     return None
+
+
+async def _service_role_patch(
+    table: str,
+    row_id: str,
+    payload: dict[str, Any],
+    *,
+    error_detail: str,
+) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{table}"
+    params = {"id": f"eq.{row_id}"}
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "return=minimal"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(url, params=params, json=payload, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=error_detail) from exc
+
+
+async def _service_role_upsert(
+    table: str,
+    payload: dict[str, Any],
+    *,
+    conflict_column: str,
+    error_detail: str,
+) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{table}"
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                url,
+                params={"on_conflict": conflict_column},
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=error_detail) from exc
 
 
 async def supabase_select_orgs(access_token: str) -> list[dict[str, Any]]:
@@ -271,7 +318,7 @@ async def select_monitor_runs(access_token: str, org_id: str) -> list[dict[str, 
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/monitor_runs"
     params = {
-        "select": "id,org_id,source_id,status,started_at,finished_at,error,created_at",
+        "select": "id,org_id,source_id,status,started_at,finished_at,error,created_at,attempts,next_attempt_at,last_error",
         "org_id": f"eq.{org_id}",
         "order": "created_at.desc",
     }
@@ -293,8 +340,9 @@ async def select_queued_monitor_runs(access_token: str, limit: int = 5) -> list[
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/monitor_runs"
     params = {
-        "select": "id,org_id,source_id,status",
+        "select": "id,org_id,source_id,status,attempts,next_attempt_at,last_error",
         "status": "eq.queued",
+        "or": "(next_attempt_at.is.null,next_attempt_at.lte.now())",
         "order": "created_at.asc",
         "limit": str(limit),
     }
@@ -624,7 +672,7 @@ async def select_audit_exports(access_token: str, org_id: str) -> list[dict[str,
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/audit_exports"
     params = {
-        "select": "id,org_id,requested_by_user_id,format,scope,status,file_path,file_sha256,error_text,created_at,completed_at",
+        "select": "id,org_id,requested_by_user_id,format,scope,status,file_path,file_sha256,error_text,created_at,completed_at,attempts,next_attempt_at,last_error",
         "org_id": f"eq.{org_id}",
         "order": "created_at.desc",
     }
@@ -646,7 +694,7 @@ async def select_audit_export_by_id(access_token: str, export_id: str) -> dict[s
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/audit_exports"
     params = {
-        "select": "id,org_id,requested_by_user_id,format,scope,status,file_path,file_sha256,error_text,created_at,completed_at",
+        "select": "id,org_id,requested_by_user_id,format,scope,status,file_path,file_sha256,error_text,created_at,completed_at,attempts,next_attempt_at,last_error",
         "id": f"eq.{export_id}",
         "limit": "1",
     }
@@ -669,8 +717,9 @@ async def select_queued_audit_exports_service(limit: int = 3) -> list[dict[str, 
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/audit_exports"
     params = {
-        "select": "id,org_id,requested_by_user_id,format,scope,status,created_at",
+        "select": "id,org_id,requested_by_user_id,format,scope,status,created_at,attempts,next_attempt_at,last_error",
         "status": "eq.queued",
+        "or": "(next_attempt_at.is.null,next_attempt_at.lte.now())",
         "order": "created_at.asc",
         "limit": str(limit),
     }
@@ -833,6 +882,167 @@ async def update_audit_export_status(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to update audit export status in Supabase.",
         ) from exc
+
+
+async def mark_audit_export_attempt_started(export_id: str, attempts: int) -> None:
+    await _service_role_patch(
+        "audit_exports",
+        export_id,
+        {
+            "status": "running",
+            "attempts": attempts,
+            "next_attempt_at": None,
+            "last_error": None,
+            "error_text": None,
+            "completed_at": None,
+        },
+        error_detail="Failed to mark audit export as running.",
+    )
+
+
+async def mark_audit_export_for_retry(
+    export_id: str,
+    attempts: int,
+    next_attempt_at: str,
+    last_error: str,
+) -> None:
+    await _service_role_patch(
+        "audit_exports",
+        export_id,
+        {
+            "status": "queued",
+            "attempts": attempts,
+            "next_attempt_at": next_attempt_at,
+            "last_error": last_error,
+            "error_text": last_error,
+            "completed_at": None,
+        },
+        error_detail="Failed to schedule audit export retry.",
+    )
+
+
+async def mark_audit_export_dead_letter(
+    export_id: str,
+    attempts: int,
+    last_error: str,
+    completed_at: str,
+) -> None:
+    await _service_role_patch(
+        "audit_exports",
+        export_id,
+        {
+            "status": "failed",
+            "attempts": attempts,
+            "next_attempt_at": None,
+            "last_error": last_error,
+            "error_text": last_error,
+            "completed_at": completed_at,
+        },
+        error_detail="Failed to mark audit export as failed.",
+    )
+
+
+async def mark_monitor_run_attempt_started(run_id: str, attempts: int) -> None:
+    await _service_role_patch(
+        "monitor_runs",
+        run_id,
+        {
+            "attempts": attempts,
+            "next_attempt_at": None,
+            "last_error": None,
+            "error": None,
+        },
+        error_detail="Failed to mark monitor run as running.",
+    )
+
+
+async def clear_monitor_run_error_state(run_id: str) -> None:
+    await _service_role_patch(
+        "monitor_runs",
+        run_id,
+        {
+            "next_attempt_at": None,
+            "last_error": None,
+            "error": None,
+        },
+        error_detail="Failed to clear monitor run retry fields.",
+    )
+
+
+async def mark_monitor_run_for_retry(
+    run_id: str,
+    attempts: int,
+    next_attempt_at: str,
+    last_error: str,
+) -> None:
+    await _service_role_patch(
+        "monitor_runs",
+        run_id,
+        {
+            "status": "queued",
+            "attempts": attempts,
+            "next_attempt_at": next_attempt_at,
+            "last_error": last_error,
+            "error": None,
+            "finished_at": None,
+        },
+        error_detail="Failed to schedule monitor run retry.",
+    )
+
+
+async def mark_monitor_run_dead_letter(
+    run_id: str,
+    attempts: int,
+    last_error: str,
+    failed_at: str,
+) -> None:
+    await _service_role_patch(
+        "monitor_runs",
+        run_id,
+        {
+            "status": "failed",
+            "attempts": attempts,
+            "next_attempt_at": None,
+            "last_error": last_error,
+            "error": last_error,
+            "finished_at": failed_at,
+        },
+        error_detail="Failed to mark monitor run as failed.",
+    )
+
+
+async def upsert_system_status(status_id: str, payload: dict[str, Any]) -> None:
+    await _service_role_upsert(
+        "system_status",
+        {
+            "id": status_id,
+            "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "payload": payload,
+        },
+        conflict_column="id",
+        error_detail="Failed to upsert system status.",
+    )
+
+
+async def select_system_status(access_token: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/system_status"
+    params = {
+        "select": "id,updated_at,payload",
+        "order": "id.asc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch system status from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid system status response from Supabase.")
 
 
 async def rpc_create_monitor_run(access_token: str, payload: dict[str, Any]) -> str:

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     VERIRULE_MODE: str = "api"
     API_HOST: str = "127.0.0.1"
     API_PORT: int = 8000
+    LOG_LEVEL: str = "INFO"
     API_CORS_ORIGINS: str = "http://localhost:3000"
     REQUIRE_ALERT_EVIDENCE_FOR_RESOLVE: bool = True
     ALERT_RESOLVE_MIN_EVIDENCE: int = 1
@@ -33,6 +34,7 @@ class Settings(BaseSettings):
     AUDIT_PACKET_MAX_EVIDENCE_FILES: int = 200
     AUDIT_PACKET_MAX_TOTAL_BYTES: int = 52_428_800
     AUDIT_PACKET_MAX_FILE_BYTES: int = 10_485_760
+    WORKER_STALE_AFTER_SECONDS: int = 180
 
     @model_validator(mode="after")
     def apply_supabase_defaults(self) -> "Settings":
