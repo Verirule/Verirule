@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePlan } from "@/src/components/billing/usePlan";
+import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 type SourceKind = "html" | "rss" | "pdf" | "github_releases";
@@ -450,7 +451,17 @@ export default function DashboardSourcesPage() {
         <CardContent className="space-y-4">
           {isLoadingSources ? <p className="text-sm text-muted-foreground">Loading sources...</p> : null}
           {!isLoadingSources && selectedOrgId && sources.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No sources yet for this workspace.</p>
+            <div className="space-y-3 rounded-lg border border-border/70 bg-card p-4">
+              <p className="text-sm text-muted-foreground">No sources yet for this workspace.</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" asChild size="sm">
+                  <Link href="/dashboard/templates">Start with a template</Link>
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Apply a framework template to provision a baseline source set.
+                </p>
+              </div>
+            </div>
           ) : null}
           {!isLoadingSources && selectedOrgId && !features.canUseScheduledRuns ? (
             <p className="text-xs text-muted-foreground">
