@@ -1677,6 +1677,181 @@ async def rpc_upsert_alert_for_finding(access_token: str, payload: dict[str, Any
     return response_payload
 
 
+async def list_framework_templates(access_token: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/framework_templates"
+    params = {
+        "select": "id,slug,name,description,category,is_public,created_at",
+        "is_public": "eq.true",
+        "order": "name.asc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch framework templates from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(
+        response.json(), "Invalid framework templates response from Supabase."
+    )
+
+
+async def get_framework_template_by_slug(
+    access_token: str, slug: str
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/framework_templates"
+    params = {
+        "select": "id,slug,name,description,category,is_public,created_at",
+        "is_public": "eq.true",
+        "slug": f"eq.{slug}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch framework template from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(
+        response.json(), "Invalid framework template response from Supabase."
+    )
+    return rows[0] if rows else None
+
+
+async def list_framework_template_sources(
+    access_token: str, template_id: str | None = None
+) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/framework_template_sources"
+    params = {
+        "select": "id,template_id,title,url,kind,cadence,tags,enabled_by_default,created_at",
+        "order": "title.asc",
+    }
+    if template_id:
+        params["template_id"] = f"eq.{template_id}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch framework template sources from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(
+        response.json(), "Invalid framework template sources response from Supabase."
+    )
+
+
+async def rpc_create_source_v3(access_token: str, payload: dict[str, Any]) -> str:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/create_source_v3"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to create source in Supabase."
+        normalized_detail = error_detail.lower()
+        if "not authenticated" in normalized_detail:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        if "not a member of org" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_detail) from exc
+        if exc.response.status_code == status.HTTP_400_BAD_REQUEST:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create source in Supabase.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create source in Supabase.",
+        ) from exc
+
+    response_payload = response.json()
+    if not isinstance(response_payload, str):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid create source response from Supabase.",
+        )
+    return response_payload
+
+
+async def list_sources_by_org(access_token: str, org_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/sources"
+    params = {
+        "select": "id,org_id,name,title,url,kind,cadence,is_enabled,tags",
+        "org_id": f"eq.{org_id}",
+        "order": "created_at.asc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch sources from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid sources response from Supabase.")
+
+
+async def insert_sources_bulk(
+    access_token: str, org_id: str, sources: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    inserted: list[dict[str, Any]] = []
+    for source in sources:
+        source_id = await rpc_create_source_v3(
+            access_token,
+            {
+                "p_org_id": org_id,
+                "p_name": source.get("name"),
+                "p_url": source.get("url"),
+                "p_kind": source.get("kind"),
+                "p_cadence": source.get("cadence"),
+                "p_tags": source.get("tags") or [],
+                "p_is_enabled": source.get("is_enabled"),
+                "p_title": source.get("title"),
+                "p_config": source.get("config") or {},
+            },
+        )
+        inserted.append(
+            {
+                "id": source_id,
+                "name": source.get("name"),
+                "title": source.get("title"),
+                "url": source.get("url"),
+                "kind": source.get("kind"),
+                "cadence": source.get("cadence"),
+                "is_enabled": source.get("is_enabled"),
+                "tags": source.get("tags") or [],
+            }
+        )
+    return inserted
+
+
 async def select_templates_public() -> list[dict[str, Any]]:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/templates"
