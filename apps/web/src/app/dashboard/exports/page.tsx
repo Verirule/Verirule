@@ -12,7 +12,7 @@ type OrgRecord = {
   created_at: string;
 };
 
-type ExportFormat = "pdf" | "csv";
+type ExportFormat = "pdf" | "csv" | "zip";
 type ExportStatus = "queued" | "running" | "succeeded" | "failed";
 
 type ExportRecord = {
@@ -272,7 +272,7 @@ export default function DashboardExportsPage() {
       <section>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Exports</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Generate formal audit exports in CSV or PDF with date range filtering.
+          Generate formal audit exports in CSV, PDF, or ZIP packet with date range filtering.
         </p>
       </section>
 
@@ -336,6 +336,7 @@ export default function DashboardExportsPage() {
                   >
                     <option value="pdf">PDF</option>
                     <option value="csv">CSV</option>
+                    <option value="zip">Audit Packet (ZIP)</option>
                   </select>
                 </div>
               </div>

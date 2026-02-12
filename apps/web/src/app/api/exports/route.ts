@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     ? payload?.include.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
     : null;
 
-  if (!orgId || (format !== "pdf" && format !== "csv")) {
+  if (!orgId || (format !== "pdf" && format !== "csv" && format !== "zip")) {
     return NextResponse.json({ message: "Invalid export payload" }, { status: 400 });
   }
 
