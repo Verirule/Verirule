@@ -15,6 +15,35 @@ def supabase_rest_headers(access_token: str) -> dict[str, str]:
     }
 
 
+def supabase_public_headers() -> dict[str, str]:
+    settings = get_settings()
+    return {
+        "apikey": settings.SUPABASE_ANON_KEY,
+        "Accept": "application/json",
+    }
+
+
+def _supabase_error_detail(response: httpx.Response) -> str | None:
+    payload: Any
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    detail = payload.get("message")
+    if isinstance(detail, str) and detail:
+        return detail
+
+    detail = payload.get("detail")
+    if isinstance(detail, str) and detail:
+        return detail
+
+    return None
+
+
 async def supabase_select_orgs(access_token: str) -> list[dict[str, Any]]:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/orgs"
@@ -1073,3 +1102,130 @@ async def rpc_upsert_alert_for_finding(access_token: str, payload: dict[str, Any
         )
 
     return response_payload
+
+
+async def select_templates_public() -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/templates"
+    params = {
+        "select": "id,slug,name,description,default_cadence,tags,created_at",
+        "order": "name.asc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_public_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch templates from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid templates response from Supabase.")
+
+
+async def select_template_by_slug_public(slug: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/templates"
+    params = {
+        "select": "id,slug,name,description,default_cadence,tags,created_at",
+        "slug": f"eq.{slug}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_public_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch template from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid template response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def select_template_sources_public(template_id: str | None = None) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/template_sources"
+    params = {
+        "select": "id,template_id,name,url,cadence,tags,created_at",
+        "order": "name.asc",
+    }
+    if template_id:
+        params["template_id"] = f"eq.{template_id}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_public_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch template sources from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid template sources response from Supabase.")
+
+
+async def rpc_install_template(access_token: str, payload: dict[str, Any]) -> int:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/install_template"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to install template in Supabase."
+        normalized_detail = error_detail.lower()
+
+        if "not authenticated" in normalized_detail:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        if "not a member of org" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_detail) from exc
+        if "template not found" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_detail) from exc
+        if exc.response.status_code == status.HTTP_400_BAD_REQUEST:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail) from exc
+
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to install template in Supabase.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to install template in Supabase.",
+        ) from exc
+
+    response_payload = response.json()
+    if isinstance(response_payload, bool):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid install template response from Supabase.",
+        )
+    if isinstance(response_payload, int):
+        return response_payload
+    if isinstance(response_payload, float) and response_payload.is_integer():
+        return int(response_payload)
+    if isinstance(response_payload, str):
+        try:
+            return int(response_payload)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Invalid install template response from Supabase.",
+            ) from exc
+
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Invalid install template response from Supabase.",
+    )
