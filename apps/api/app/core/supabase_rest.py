@@ -379,7 +379,7 @@ async def select_source_by_id(access_token: str, source_id: str) -> dict[str, An
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/sources"
     params = {
-        "select": "id,org_id,name,type,kind,config,title,url,is_enabled,cadence,next_run_at,last_run_at,etag,last_modified,content_type",
+        "select": "id,org_id,name,type,kind,config,title,url,is_enabled,cadence,next_run_at,last_run_at,etag,last_modified,content_type,tags",
         "id": f"eq.{source_id}",
         "limit": "1",
     }
@@ -1850,6 +1850,352 @@ async def insert_sources_bulk(
             }
         )
     return inserted
+
+
+def _in_filter(values: list[str]) -> str:
+    normalized = [value.strip() for value in values if value.strip()]
+    return f"in.({','.join(normalized)})"
+
+
+async def list_controls(access_token: str, framework_slug: str | None = None) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/controls"
+    params = {
+        "select": "id,framework_slug,control_key,title,description,severity_default,tags,created_at",
+        "order": "framework_slug.asc,control_key.asc",
+    }
+    if framework_slug:
+        params["framework_slug"] = f"eq.{framework_slug}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch controls from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid controls response from Supabase.")
+
+
+async def list_controls_by_ids(access_token: str, control_ids: list[str]) -> list[dict[str, Any]]:
+    normalized_ids = [control_id.strip() for control_id in control_ids if control_id.strip()]
+    if not normalized_ids:
+        return []
+
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/controls"
+    params = {
+        "select": "id,framework_slug,control_key,title,description,severity_default,tags,created_at",
+        "id": _in_filter(normalized_ids),
+        "order": "framework_slug.asc,control_key.asc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch controls from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid controls response from Supabase.")
+
+
+async def get_control_by_id(access_token: str, control_id: str) -> dict[str, Any] | None:
+    rows = await list_controls_by_ids(access_token, [control_id])
+    return rows[0] if rows else None
+
+
+async def list_control_evidence(access_token: str, control_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/control_evidence_items"
+    params = {
+        "select": "id,control_id,label,description,evidence_type,required,sort_order,created_at",
+        "control_id": f"eq.{control_id}",
+        "order": "sort_order.asc,label.asc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch control evidence from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid control evidence response from Supabase.")
+
+
+async def list_control_evidence_for_controls(
+    access_token: str, control_ids: list[str]
+) -> list[dict[str, Any]]:
+    normalized_ids = [control_id.strip() for control_id in control_ids if control_id.strip()]
+    if not normalized_ids:
+        return []
+
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/control_evidence_items"
+    params = {
+        "select": "id,control_id,label,description,evidence_type,required,sort_order,created_at",
+        "control_id": _in_filter(normalized_ids),
+        "order": "control_id.asc,sort_order.asc,label.asc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch control evidence from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid control evidence response from Supabase.")
+
+
+async def get_control_guidance(access_token: str, control_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/control_guidance"
+    params = {
+        "select": "id,control_id,guidance_markdown,created_at",
+        "control_id": f"eq.{control_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch control guidance from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid control guidance response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def list_org_controls(access_token: str, org_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_controls"
+    params = {
+        "select": "id,org_id,control_id,status,owner_user_id,notes,created_at",
+        "org_id": f"eq.{org_id}",
+        "order": "created_at.asc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch org controls from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid org controls response from Supabase.")
+
+
+async def patch_org_control_status(
+    access_token: str,
+    org_control_id: str,
+    status_value: str,
+    owner_user_id: str | None = None,
+    notes: str | None = None,
+    *,
+    include_owner_user_id: bool = False,
+    include_notes: bool = False,
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_controls"
+    params = {
+        "id": f"eq.{org_control_id}",
+        "select": "id,org_id,control_id,status,owner_user_id,notes,created_at",
+    }
+    headers = supabase_rest_headers(access_token)
+    headers["Prefer"] = "return=representation"
+    payload: dict[str, Any] = {"status": status_value}
+    if include_owner_user_id:
+        payload["owner_user_id"] = owner_user_id
+    if include_notes:
+        payload["notes"] = notes
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(url, params=params, json=payload, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update org control in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid org control update response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def rpc_install_controls_for_template(
+    access_token: str, org_id: str, template_slug: str
+) -> int:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/install_controls_for_template"
+    payload = {
+        "p_org_id": org_id,
+        "p_template_slug": template_slug,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to install controls in Supabase."
+        normalized_detail = error_detail.lower()
+        if "not authenticated" in normalized_detail:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        if "not a member of org" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_detail) from exc
+        if "template not found" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_detail) from exc
+        if exc.response.status_code == status.HTTP_400_BAD_REQUEST:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to install controls in Supabase.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to install controls in Supabase.",
+        ) from exc
+
+    response_payload = response.json()
+    if isinstance(response_payload, bool):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid install controls response from Supabase.",
+        )
+    if isinstance(response_payload, int):
+        return response_payload
+    if isinstance(response_payload, float) and response_payload.is_integer():
+        return int(response_payload)
+    if isinstance(response_payload, str):
+        try:
+            return int(response_payload)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Invalid install controls response from Supabase.",
+            ) from exc
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Invalid install controls response from Supabase.",
+    )
+
+
+async def list_finding_controls(access_token: str, org_id: str, finding_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/finding_controls"
+    params = {
+        "select": "id,org_id,finding_id,control_id,confidence,created_at",
+        "org_id": f"eq.{org_id}",
+        "finding_id": f"eq.{finding_id}",
+        "order": "created_at.desc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch finding control mappings from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(
+        response.json(), "Invalid finding control mappings response from Supabase."
+    )
+
+
+async def list_finding_controls_by_org(access_token: str, org_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/finding_controls"
+    params = {
+        "select": "id,org_id,finding_id,control_id,confidence,created_at",
+        "org_id": f"eq.{org_id}",
+        "order": "created_at.desc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch finding control mappings from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(
+        response.json(), "Invalid finding control mappings response from Supabase."
+    )
+
+
+async def rpc_link_finding_to_control(
+    access_token: str, org_id: str, finding_id: str, control_id: str, confidence: str
+) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/link_finding_to_control"
+    payload = {
+        "p_org_id": org_id,
+        "p_finding_id": finding_id,
+        "p_control_id": control_id,
+        "p_confidence": confidence,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to link finding to control in Supabase."
+        normalized_detail = error_detail.lower()
+        if "not authenticated" in normalized_detail:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        if "not a member of org" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_detail) from exc
+        if "not found" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_detail) from exc
+        if exc.response.status_code == status.HTTP_400_BAD_REQUEST:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to link finding to control in Supabase.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to link finding to control in Supabase.",
+        ) from exc
 
 
 async def select_templates_public() -> list[dict[str, Any]]:
