@@ -1,20 +1,56 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
-  <path
-    d="M128 20c34 22 64 28 84 32v90c0 47-30 80-84 94-54-14-84-47-84-94V52c20-4 50-10 84-32Z"
-    fill="#1D4ED8"
-  />
-  <path
-    d="M72 86h112"
-    stroke="#FFFFFF"
-    stroke-opacity="0.35"
-    stroke-width="12"
-    stroke-linecap="round"
-  />
-  <path
-    d="M76 132l34 34 70-70"
-    stroke="#FFFFFF"
-    stroke-width="16"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
+  <defs>
+    <linearGradient id="vrBlue" x1="38" y1="46" x2="152" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#19A6FF" />
+      <stop offset=".55" stop-color="#0C67CF" />
+      <stop offset="1" stop-color="#003B98" />
+    </linearGradient>
+    <linearGradient id="vrGreen" x1="124" y1="44" x2="226" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#76DD3C" />
+      <stop offset=".55" stop-color="#22A849" />
+      <stop offset="1" stop-color="#00773C" />
+    </linearGradient>
+    <linearGradient id="vrCircuit" x1="132" y1="143" x2="206" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#28B24A" />
+      <stop offset="1" stop-color="#62D955" />
+    </linearGradient>
+    <linearGradient id="vrBlueBevel" x1="75" y1="120" x2="138" y2="175" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B67C7" />
+      <stop offset="1" stop-color="#073C94" />
+    </linearGradient>
+    <linearGradient id="vrGreenBevel" x1="132" y1="143" x2="210" y2="188" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#18A94A" />
+      <stop offset="1" stop-color="#086B37" />
+    </linearGradient>
+    <clipPath id="vrShieldClip">
+      <path d="M128 18C159 36 189 43 214 48V136C214 184 184 218 128 238C72 218 42 184 42 136V48C67 43 97 36 128 18Z" />
+    </clipPath>
+    <mask id="vrShieldMask" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">
+      <rect width="256" height="256" fill="#fff" />
+      <path d="M82 144 108 119 133 143 206 70" stroke="#000" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" />
+    </mask>
+  </defs>
+
+  <g clip-path="url(#vrShieldClip)" mask="url(#vrShieldMask)">
+    <rect x="0" y="0" width="128" height="256" fill="url(#vrBlue)" />
+    <rect x="128" y="0" width="128" height="256" fill="url(#vrGreen)" />
+  </g>
+
+  <g clip-path="url(#vrShieldClip)">
+    <path d="M83 143 107 120 132 143V168L106 142 90 158 73 142Z" fill="url(#vrBlueBevel)" opacity=".95" />
+    <path d="M132 143 206 70V98L132 171Z" fill="url(#vrGreenBevel)" opacity=".92" />
+  </g>
+
+  <path d="M128 18C159 36 189 43 214 48V136C214 184 184 218 128 238C72 218 42 184 42 136V48C67 43 97 36 128 18Z" stroke="#032534" stroke-opacity=".45" stroke-width="1.4" />
+
+  <path d="M132 143 163 112V86" stroke="url(#vrCircuit)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M132 143 182 93V68" stroke="url(#vrCircuit)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M132 143 206 69V44" stroke="url(#vrCircuit)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+
+  <circle cx="163" cy="79" r="8" fill="none" stroke="#67DD58" stroke-width="4" />
+  <circle cx="182" cy="61" r="8" fill="none" stroke="#67DD58" stroke-width="4" />
+  <circle cx="206" cy="37" r="8" fill="none" stroke="#67DD58" stroke-width="4" />
+  <circle cx="163" cy="79" r="3.6" fill="#81EA6A" />
+  <circle cx="182" cy="61" r="3.6" fill="#81EA6A" />
+  <circle cx="206" cy="37" r="3.6" fill="#81EA6A" />
 </svg>
