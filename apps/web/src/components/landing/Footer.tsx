@@ -41,7 +41,7 @@ export function Footer() {
               Service
             </Link>
             <Link
-              href="https://www.linkedin.com/company/verirule-xyz-0684273b0"
+              href="https://linkedin.com/in/verirule-xyz-0684273b0"
               target="_blank"
               rel="noopener noreferrer"
               className="transition-colors hover:text-white"

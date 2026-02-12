@@ -38,7 +38,7 @@ export function Nav() {
             Dashboard
           </Link>
           <Link
-            href="https://www.linkedin.com/company/verirule-xyz-0684273b0"
+            href="https://linkedin.com/in/verirule-xyz-0684273b0"
             target="_blank"
             rel="noopener noreferrer"
             className="text-[#0D4C2F] transition-colors hover:text-[#006532]"
@@ -114,7 +114,7 @@ export function Nav() {
               Dashboard
             </Link>
             <Link
-              href="https://www.linkedin.com/company/verirule-xyz-0684273b0"
+              href="https://linkedin.com/in/verirule-xyz-0684273b0"
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-md px-2 py-1 text-sm text-[#0D4C2F] transition-colors hover:text-[#006532]"

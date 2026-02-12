@@ -8,7 +8,7 @@ type SocialIconsProps = {
 const links = [
   {
     name: "LinkedIn",
-    href: "https://www.linkedin.com/company/verirule-xyz-0684273b0",
+    href: "https://linkedin.com/in/verirule-xyz-0684273b0",
     path: "M6.94 8.5H3.56V20h3.38V8.5ZM5.25 3A1.96 1.96 0 1 0 5.25 6.92 1.96 1.96 0 0 0 5.25 3ZM20.44 13.42c0-3.07-1.64-4.5-3.83-4.5-1.77 0-2.56.98-3 1.66V8.5h-3.38V20h3.38v-6.38c0-1.68.32-3.31 2.4-3.31 2.06 0 2.08 1.93 2.08 3.42V20h3.35v-6.58Z",
   },
   {
