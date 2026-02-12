@@ -5,9 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 
 type SystemHealthResponse = {
   api: "ok";
-  worker: "ok" | "stale";
+  worker: "ok" | "stale" | "unknown";
   worker_last_seen_at: string | null;
-  worker_stale_after_seconds: number;
+  stale_after_seconds: number;
 };
 
 type SystemStatusRow = {
@@ -86,7 +86,7 @@ export default function DashboardSystemPage() {
       if (
         !healthResponse.ok ||
         healthData.api !== "ok" ||
-        (healthData.worker !== "ok" && healthData.worker !== "stale")
+        (healthData.worker !== "ok" && healthData.worker !== "stale" && healthData.worker !== "unknown")
       ) {
         const message =
           typeof (healthBody as { message?: unknown }).message === "string"
@@ -111,9 +111,9 @@ export default function DashboardSystemPage() {
         worker: healthData.worker,
         worker_last_seen_at:
           typeof healthData.worker_last_seen_at === "string" ? healthData.worker_last_seen_at : null,
-        worker_stale_after_seconds:
-          typeof healthData.worker_stale_after_seconds === "number"
-            ? healthData.worker_stale_after_seconds
+        stale_after_seconds:
+          typeof healthData.stale_after_seconds === "number"
+            ? healthData.stale_after_seconds
             : 180,
       });
       setStatusRows(statusData.status as SystemStatusRow[]);
@@ -186,7 +186,11 @@ export default function DashboardSystemPage() {
                 <p className="mt-2">
                   <span
                     className={`rounded px-2 py-1 text-xs font-medium ${
-                      health.worker === "ok" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"
+                      health.worker === "ok"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : health.worker === "stale"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-slate-100 text-slate-700"
                     }`}
                   >
                     {health.worker}
@@ -202,7 +206,7 @@ export default function DashboardSystemPage() {
 
               <div className="rounded-lg border border-border/70 p-3">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Stale Threshold</p>
-                <p className="mt-2 text-sm font-medium">{health.worker_stale_after_seconds}s</p>
+                <p className="mt-2 text-sm font-medium">{health.stale_after_seconds}s</p>
               </div>
             </div>
           ) : null}
@@ -255,17 +259,19 @@ export default function DashboardSystemPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/70">
-        <CardHeader>
-          <CardTitle>If Worker Is Stale</CardTitle>
-          <CardDescription>Immediate actions to restore processing.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>Check Fly worker instance status and ensure it is running.</p>
-          <p>Review Fly worker logs for recent retry loops, auth failures, or upstream errors.</p>
-          <p>Confirm `SUPABASE_SERVICE_ROLE_KEY` is set for the worker deployment.</p>
-        </CardContent>
-      </Card>
+      {health?.worker === "stale" ? (
+        <Card className="border-border/70">
+          <CardHeader>
+            <CardTitle>If Worker Is Stale</CardTitle>
+            <CardDescription>Immediate actions to restore processing.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>Check Fly worker instance status and ensure it is running.</p>
+            <p>Review Fly worker logs for recent retry loops, auth failures, or upstream errors.</p>
+            <p>Confirm `SUPABASE_SERVICE_ROLE_KEY` and `VERIRULE_SECRETS_KEY` are set for deployment.</p>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }
