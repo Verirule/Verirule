@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { usePlan } from "@/src/components/billing/usePlan";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
-type SourceType = "rss" | "url";
+type SourceKind = "html" | "rss" | "pdf" | "github_releases";
+type LegacySourceType = "rss" | "url";
 type SourceCadence = "manual" | "hourly" | "daily" | "weekly";
 
 type OrgRecord = {
@@ -20,7 +21,10 @@ type SourceRecord = {
   id: string;
   org_id: string;
   name: string;
-  type: SourceType;
+  type: LegacySourceType;
+  kind: SourceKind;
+  config: Record<string, unknown>;
+  title: string | null;
   url: string;
   is_enabled: boolean;
   cadence: SourceCadence;
@@ -69,6 +73,28 @@ function formatDateTime(value: string | null): string {
   return parsed.toLocaleString();
 }
 
+function kindLabel(kind: SourceKind): string {
+  if (kind === "github_releases") return "GitHub Releases";
+  return kind.toUpperCase();
+}
+
+function isValidGitHubRepo(value: string): boolean {
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value);
+}
+
+function sourceUrlPlaceholder(kind: SourceKind): string {
+  if (kind === "rss") {
+    return "https://example.com/feed.xml";
+  }
+  if (kind === "pdf") {
+    return "https://example.com/policy.pdf";
+  }
+  if (kind === "github_releases") {
+    return "https://github.com/owner/repo/releases";
+  }
+  return "https://example.com";
+}
+
 export default function DashboardSourcesPage() {
   const [orgs, setOrgs] = useState<OrgRecord[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState("");
@@ -76,8 +102,9 @@ export default function DashboardSourcesPage() {
   const [runs, setRuns] = useState<MonitorRunRecord[]>([]);
 
   const [name, setName] = useState("");
-  const [type, setType] = useState<SourceType>("rss");
+  const [kind, setKind] = useState<SourceKind>("html");
   const [url, setUrl] = useState("");
+  const [repo, setRepo] = useState("");
 
   const [isLoadingOrgs, setIsLoadingOrgs] = useState(true);
   const [isLoadingSources, setIsLoadingSources] = useState(false);
@@ -89,6 +116,7 @@ export default function DashboardSourcesPage() {
 
   const trimmedName = useMemo(() => name.trim(), [name]);
   const trimmedUrl = useMemo(() => normalizeUrl(url), [url]);
+  const trimmedRepo = useMemo(() => repo.trim(), [repo]);
   const { plan, features } = usePlan(selectedOrgId);
   const maxSourcesReached = useMemo(() => {
     if (features.maxSources === null) {
@@ -227,10 +255,16 @@ export default function DashboardSourcesPage() {
       setError("Source URL is required.");
       return;
     }
+    if (kind === "github_releases" && !isValidGitHubRepo(trimmedRepo)) {
+      setError("GitHub repo must use owner/name format.");
+      return;
+    }
     if (maxSourcesReached) {
       setError("Free plan source limit reached. Upgrade to Pro for unlimited sources.");
       return;
     }
+
+    const config = kind === "github_releases" ? { repo: trimmedRepo } : {};
 
     setIsCreating(true);
     try {
@@ -240,8 +274,9 @@ export default function DashboardSourcesPage() {
         body: JSON.stringify({
           org_id: selectedOrgId,
           name: trimmedName,
-          type,
+          kind,
           url: trimmedUrl,
+          config,
         }),
       });
 
@@ -256,8 +291,9 @@ export default function DashboardSourcesPage() {
       }
 
       setName("");
-      setType("rss");
+      setKind("html");
       setUrl("");
+      setRepo("");
       await loadSourcesAndRuns(selectedOrgId);
     } catch {
       setError("Unable to create source right now.");
@@ -423,79 +459,89 @@ export default function DashboardSourcesPage() {
           ) : null}
           {!isLoadingSources && sources.length > 0 ? (
             <ul className="space-y-2">
-              {sources.map((source) => (
-                <li
-                  key={source.id}
-                  className="rounded-lg border border-border/70 bg-card px-3 py-3 text-sm shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 space-y-1">
-                      <div className="font-medium">{source.name}</div>
-                      <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                        {source.type}
-                      </div>
-                      <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block truncate text-xs text-primary hover:underline"
-                      >
-                        {source.url}
-                      </a>
-                      <div className="text-xs text-muted-foreground">
-                        Added {formatCreatedAt(source.created_at)}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Last run: {latestRunBySource.get(source.id)?.status ?? "never"}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Next run: {formatDateTime(source.next_run_at)}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                      {features.canUseScheduledRuns ? (
-                        <select
-                          value={source.cadence}
-                          onChange={(event) =>
-                            void updateSourceSchedule(source.id, event.target.value as SourceCadence)
-                          }
-                          disabled={schedulingSourceId === source.id}
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                          aria-label={`Schedule cadence for ${source.name}`}
+              {sources.map((source) => {
+                const configuredRepo =
+                  source.kind === "github_releases" && typeof source.config.repo === "string"
+                    ? source.config.repo
+                    : null;
+
+                return (
+                  <li
+                    key={source.id}
+                    className="rounded-lg border border-border/70 bg-card px-3 py-3 text-sm shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <div className="font-medium">{source.name}</div>
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                          {kindLabel(source.kind)}
+                        </div>
+                        {configuredRepo ? (
+                          <div className="text-xs text-muted-foreground">Repo: {configuredRepo}</div>
+                        ) : null}
+                        <a
+                          href={source.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block truncate text-xs text-primary hover:underline"
                         >
-                          <option value="manual">Manual</option>
-                          <option value="hourly">Hourly</option>
-                          <option value="daily">Daily</option>
-                          <option value="weekly">Weekly</option>
-                        </select>
-                      ) : null}
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={runningSourceId === source.id}
-                        onClick={() => void runNow(source.id)}
-                      >
-                        {runningSourceId === source.id ? "Queueing..." : "Run now"}
-                      </Button>
-                      {features.canUseScheduledRuns ? (
+                          {source.url}
+                        </a>
+                        <div className="text-xs text-muted-foreground">
+                          Added {formatCreatedAt(source.created_at)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Last run: {latestRunBySource.get(source.id)?.status ?? "never"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Next run: {formatDateTime(source.next_run_at)}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                        {features.canUseScheduledRuns ? (
+                          <select
+                            value={source.cadence}
+                            onChange={(event) =>
+                              void updateSourceSchedule(source.id, event.target.value as SourceCadence)
+                            }
+                            disabled={schedulingSourceId === source.id}
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            aria-label={`Schedule cadence for ${source.name}`}
+                          >
+                            <option value="manual">Manual</option>
+                            <option value="hourly">Hourly</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                          </select>
+                        ) : null}
                         <Button
                           type="button"
-                          variant={source.is_enabled ? "outline" : "default"}
                           size="sm"
-                          disabled={togglingId === source.id || schedulingSourceId === source.id}
-                          onClick={() => void toggleSource(source.id, !source.is_enabled)}
+                          disabled={runningSourceId === source.id}
+                          onClick={() => void runNow(source.id)}
                         >
-                          {togglingId === source.id
-                            ? "Saving..."
-                            : source.is_enabled
-                              ? "Disable"
-                              : "Enable"}
+                          {runningSourceId === source.id ? "Queueing..." : "Run now"}
                         </Button>
-                      ) : null}
+                        {features.canUseScheduledRuns ? (
+                          <Button
+                            type="button"
+                            variant={source.is_enabled ? "outline" : "default"}
+                            size="sm"
+                            disabled={togglingId === source.id || schedulingSourceId === source.id}
+                            onClick={() => void toggleSource(source.id, !source.is_enabled)}
+                          >
+                            {togglingId === source.id
+                              ? "Saving..."
+                              : source.is_enabled
+                                ? "Disable"
+                                : "Enable"}
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
         </CardContent>
@@ -504,7 +550,7 @@ export default function DashboardSourcesPage() {
       <Card className="border-border/70">
         <CardHeader>
           <CardTitle>Add Source</CardTitle>
-          <CardDescription>Create a new RSS or URL source for the selected workspace.</CardDescription>
+          <CardDescription>Create a new HTML, RSS, PDF, or GitHub Releases source.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={createSource} className="space-y-3">
@@ -514,23 +560,31 @@ export default function DashboardSourcesPage() {
                 id="source-name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="Security Blog RSS"
+                placeholder="Security Update Feed"
                 autoComplete="off"
                 maxLength={120}
                 disabled={isCreating || !selectedOrgId || maxSourcesReached}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="source-type">Type</Label>
+              <Label htmlFor="source-kind">Type</Label>
               <select
-                id="source-type"
-                value={type}
-                onChange={(event) => setType(event.target.value as SourceType)}
+                id="source-kind"
+                value={kind}
+                onChange={(event) => {
+                  const nextKind = event.target.value as SourceKind;
+                  setKind(nextKind);
+                  if (nextKind !== "github_releases") {
+                    setRepo("");
+                  }
+                }}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 disabled={isCreating || !selectedOrgId || maxSourcesReached}
               >
-                <option value="rss">rss</option>
-                <option value="url">url</option>
+                <option value="html">HTML</option>
+                <option value="rss">RSS / Atom</option>
+                <option value="pdf">PDF</option>
+                <option value="github_releases">GitHub Releases</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -539,12 +593,26 @@ export default function DashboardSourcesPage() {
                 id="source-url"
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
-                placeholder="https://example.com/feed.xml"
+                placeholder={sourceUrlPlaceholder(kind)}
                 autoComplete="off"
                 maxLength={2048}
                 disabled={isCreating || !selectedOrgId || maxSourcesReached}
               />
             </div>
+            {kind === "github_releases" ? (
+              <div className="space-y-2">
+                <Label htmlFor="source-github-repo">Repo</Label>
+                <Input
+                  id="source-github-repo"
+                  value={repo}
+                  onChange={(event) => setRepo(event.target.value)}
+                  placeholder="owner/name"
+                  autoComplete="off"
+                  maxLength={200}
+                  disabled={isCreating || !selectedOrgId || maxSourcesReached}
+                />
+              </div>
+            ) : null}
             {maxSourcesReached && features.maxSources !== null ? (
               <p className="text-xs text-muted-foreground">
                 {plan === "free"

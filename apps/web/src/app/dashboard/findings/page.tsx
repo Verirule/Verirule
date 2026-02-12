@@ -26,6 +26,8 @@ type FindingRecord = {
   fingerprint: string;
   raw_url: string | null;
   raw_hash: string | null;
+  canonical_title: string | null;
+  item_published_at: string | null;
   has_explanation: boolean;
 };
 
@@ -364,7 +366,9 @@ export default function DashboardFindingsPage() {
         <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
           <div className="h-full w-full max-w-xl overflow-y-auto bg-background p-4 sm:p-6">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold">Finding Details</h2>
+              <h2 className="text-lg font-semibold">
+                {selectedFinding.canonical_title || "Finding Details"}
+              </h2>
               <Button type="button" variant="outline" size="sm" onClick={() => setSelectedFinding(null)}>
                 Close
               </Button>
@@ -389,6 +393,12 @@ export default function DashboardFindingsPage() {
                   <p className="text-sm">{formatTime(selectedFinding.detected_at)}</p>
                 </div>
               </div>
+              {selectedFinding.item_published_at ? (
+                <div>
+                  <p className="text-sm text-muted-foreground">Item Published</p>
+                  <p className="text-sm">{formatTime(selectedFinding.item_published_at)}</p>
+                </div>
+              ) : null}
               <div>
                 <p className="text-sm text-muted-foreground">Raw URL</p>
                 <p className="break-all text-sm">{selectedFinding.raw_url ?? "n/a"}</p>
