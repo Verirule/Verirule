@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-ExportFormat = Literal["pdf", "csv"]
+ExportFormat = Literal["pdf", "csv", "zip"]
 ExportStatus = Literal["queued", "running", "succeeded", "failed"]
 
 

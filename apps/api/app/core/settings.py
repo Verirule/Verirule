@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     WORKER_FETCH_MAX_BYTES: int = 1_000_000
     EXPORTS_BUCKET_NAME: str = "exports"
     EXPORT_SIGNED_URL_SECONDS: int = 300
+    EVIDENCE_BUCKET_NAME: str = "evidence"
+    AUDIT_PACKET_MAX_EVIDENCE_FILES: int = 200
+    AUDIT_PACKET_MAX_TOTAL_BYTES: int = 52_428_800
+    AUDIT_PACKET_MAX_FILE_BYTES: int = 10_485_760
 
     @model_validator(mode="after")
     def apply_supabase_defaults(self) -> "Settings":

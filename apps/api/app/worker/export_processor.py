@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from datetime import UTC, datetime
 from typing import Any
 
@@ -12,8 +13,9 @@ from app.core.supabase_rest import (
     select_queued_audit_exports_service,
     update_audit_export_status,
 )
-from app.core.supabase_storage_admin import upload_bytes
-from app.exports.generate import build_export_bytes
+from app.core.supabase_storage_admin import download_bytes, upload_bytes
+from app.exports.generate import build_csv, build_export_bytes, build_pdf
+from app.exports.packet import build_zip
 
 EXPORT_BATCH_LIMIT = 3
 
@@ -107,7 +109,7 @@ class ExportProcessor:
         scope = row.get("scope") if isinstance(row.get("scope"), dict) else {}
         include = _scope_include(scope)
 
-        if not export_id or not org_id or export_format not in {"csv", "pdf"}:
+        if not export_id or not org_id or export_format not in {"csv", "pdf", "zip"}:
             return
 
         await update_audit_export_status(
@@ -125,11 +127,15 @@ class ExportProcessor:
             packet = await select_audit_packet_data(self.access_token, org_id, from_ts, to_ts)
             packet["export_id"] = export_id
             packet["generated_at"] = _now_iso()
+            packet["scope"] = scope
+            packet["include"] = include
             packet = _apply_include_scope(packet, include)
 
-            content, sha256 = build_export_bytes(export_format, packet)
-            content_type = "text/csv; charset=utf-8" if export_format == "csv" else "application/pdf"
-            file_path = f"org/{org_id}/exports/{export_id}.{export_format}"
+            content, sha256, extension, content_type = await self._build_export_content(
+                export_format=export_format,
+                packet=packet,
+            )
+            file_path = f"org/{org_id}/exports/{export_id}.{extension}"
             await upload_bytes(self.bucket_name, file_path, content, content_type)
 
             await update_audit_export_status(
@@ -149,6 +155,107 @@ class ExportProcessor:
                 error_text=_sanitize_error_text(exc),
                 completed_at=_now_iso(),
             )
+
+
+    async def _build_export_content(
+        self,
+        *,
+        export_format: str,
+        packet: dict[str, Any],
+    ) -> tuple[bytes, str, str, str]:
+        if export_format in {"csv", "pdf"}:
+            content, sha256 = build_export_bytes(export_format, packet)
+            content_type = (
+                "text/csv; charset=utf-8" if export_format == "csv" else "application/pdf"
+            )
+            return content, sha256, export_format, content_type
+
+        if export_format == "zip":
+            pdf_bytes = build_pdf(packet)
+            csv_bytes = build_csv(packet)
+            evidence_items = await self._collect_evidence_items(packet)
+            content = build_zip(packet, pdf_bytes, csv_bytes, evidence_items)
+            sha256 = hashlib.sha256(content).hexdigest()
+            return content, sha256, "zip", "application/zip"
+
+        raise ValueError("Unsupported export format")
+
+    async def _collect_evidence_items(self, packet: dict[str, Any]) -> list[dict[str, Any]]:
+        settings = get_settings()
+        evidence_rows = packet.get("task_evidence")
+        if not isinstance(evidence_rows, list):
+            return []
+
+        max_files = settings.AUDIT_PACKET_MAX_EVIDENCE_FILES
+        max_total_bytes = settings.AUDIT_PACKET_MAX_TOTAL_BYTES
+        total_evidence_bytes = 0
+        included_files = 0
+        total_limit_reached = False
+        evidence_items: list[dict[str, Any]] = []
+
+        for item in evidence_rows:
+            if not isinstance(item, dict):
+                continue
+
+            evidence_type = str(item.get("type") or "").strip().lower()
+            evidence_path = str(item.get("ref") or "").strip()
+            evidence_id = str(item.get("id") or "").strip()
+            task_id = str(item.get("task_id") or "").strip()
+            evidence_record: dict[str, Any] = {
+                "evidence_id": evidence_id or None,
+                "task_id": task_id or None,
+                "path": evidence_path or None,
+            }
+
+            if evidence_type != "file" or not evidence_path:
+                continue
+
+            if total_limit_reached:
+                evidence_record["skipped"] = True
+                evidence_record["reason"] = "max total evidence bytes reached"
+                evidence_items.append(evidence_record)
+                continue
+
+            if included_files >= max_files:
+                evidence_record["skipped"] = True
+                evidence_record["reason"] = "max evidence file count reached"
+                evidence_items.append(evidence_record)
+                continue
+
+            try:
+                file_bytes = await download_bytes(settings.EVIDENCE_BUCKET_NAME, evidence_path)
+            except HTTPException as exc:
+                if exc.status_code in {
+                    400,
+                    404,
+                    413,
+                }:
+                    evidence_record["skipped"] = True
+                    evidence_record["reason"] = _safe_text(exc.detail) or "evidence unavailable"
+                    evidence_items.append(evidence_record)
+                    continue
+                raise
+
+            if total_evidence_bytes + len(file_bytes) > max_total_bytes:
+                evidence_record["skipped"] = True
+                evidence_record["reason"] = "max total evidence bytes reached"
+                evidence_items.append(evidence_record)
+                total_limit_reached = True
+                continue
+
+            evidence_record["filename"] = evidence_path.rsplit("/", 1)[-1]
+            evidence_record["bytes"] = file_bytes
+            evidence_items.append(evidence_record)
+            included_files += 1
+            total_evidence_bytes += len(file_bytes)
+
+        return evidence_items
+
+
+def _safe_text(value: object | None) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
 
 
 async def run_export_worker_loop() -> None:
