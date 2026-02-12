@@ -5,32 +5,28 @@ import { getSiteUrl } from "@/lib/env";
 import { createClient } from "@/lib/supabase/client";
 import type { ComponentType, SVGProps } from "react";
 import { useState } from "react";
-import { AppleIcon, GitHubIcon, GoogleIcon, MicrosoftIcon } from "./ProviderIcons";
+import { GitHubIcon, GoogleIcon } from "./ProviderIcons";
 
 type OAuthMode = "login" | "signup";
-type OAuthProvider = "google" | "apple" | "github" | "azure";
+type OAuthProvider = "google" | "github";
 
 type OAuthButtonsProps = {
   mode: OAuthMode;
 };
 
-const allProviders: OAuthProvider[] = ["google", "apple", "github", "azure"];
+const allProviders: OAuthProvider[] = ["google", "github"];
 
 const providerLabels: Record<OAuthProvider, string> = {
   google: "Google",
-  apple: "Apple",
   github: "GitHub",
-  azure: "Microsoft",
 };
 
 const providerIcons: Record<OAuthProvider, ComponentType<SVGProps<SVGSVGElement>>> = {
   google: GoogleIcon,
-  apple: AppleIcon,
   github: GitHubIcon,
-  azure: MicrosoftIcon,
 };
 
-function getEnabledOAuthProviders(): OAuthProvider[] {
+export function getEnabledOAuthProviders(): OAuthProvider[] {
   const raw = process.env.NEXT_PUBLIC_SUPABASE_OAUTH_PROVIDERS?.trim();
   if (!raw) {
     return [];
@@ -42,10 +38,6 @@ function getEnabledOAuthProviders(): OAuthProvider[] {
     .filter((item): item is OAuthProvider => allProviders.includes(item as OAuthProvider));
 
   return Array.from(new Set(requested));
-}
-
-function oauthSetupHint(): string {
-  return "Set NEXT_PUBLIC_SUPABASE_OAUTH_PROVIDERS and enable the same providers in Supabase Auth.";
 }
 
 function normalizeOAuthErrorMessage(message: string, provider: OAuthProvider): string {
@@ -94,17 +86,10 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
     }
   };
 
-  const actionText = mode === "signup" ? "Use" : "Use";
+  const actionText = mode === "signup" ? "Continue with" : "Continue with";
 
   if (providers.length === 0) {
-    return (
-      <div
-        role="alert"
-        className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
-      >
-        OAuth sign-in is not configured for this environment. {oauthSetupHint()}
-      </div>
-    );
+    return null;
   }
 
   return (

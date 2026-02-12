@@ -37,6 +37,14 @@ export function Nav() {
           <Link href="/dashboard" className="text-[#0D4C2F] transition-colors hover:text-[#006532]">
             Dashboard
           </Link>
+          <Link
+            href="https://www.linkedin.com/company/verirule-xyz-0684273b0"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#0D4C2F] transition-colors hover:text-[#006532]"
+          >
+            LinkedIn
+          </Link>
           <Link href="/auth/login" className="text-[#0D4C2F] transition-colors hover:text-[#006532]">
             Sign in
           </Link>
@@ -104,6 +112,15 @@ export function Nav() {
               onClick={() => setIsOpen(false)}
             >
               Dashboard
+            </Link>
+            <Link
+              href="https://www.linkedin.com/company/verirule-xyz-0684273b0"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md px-2 py-1 text-sm text-[#0D4C2F] transition-colors hover:text-[#006532]"
+              onClick={() => setIsOpen(false)}
+            >
+              LinkedIn
             </Link>
             <Link
               href="/auth/login"

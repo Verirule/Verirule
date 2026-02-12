@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { OAuthButtons } from "@/src/components/auth/OAuthButtons";
+import { OAuthButtons, getEnabledOAuthProviders } from "@/src/components/auth/OAuthButtons";
 import { LogoMark } from "@/src/components/brand/LogoMark";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -45,6 +45,7 @@ export function SignUpForm({
   const passwordError = passwordTouched || submitAttempted ? rawPasswordError : null;
   const repeatPasswordError = repeatPasswordTouched || submitAttempted ? rawRepeatPasswordError : null;
   const submitDisabled = loading || Boolean(rawEmailError || rawPasswordError || rawRepeatPasswordError);
+  const hasOAuthProviders = useMemo(() => getEnabledOAuthProviders().length > 0, []);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,12 +138,16 @@ export function SignUpForm({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <OAuthButtons mode="signup" />
-          <div className="my-4 flex items-center gap-2 text-xs text-blue-700/80">
-            <span className="h-px flex-1 bg-blue-200" />
-            <span>or</span>
-            <span className="h-px flex-1 bg-blue-200" />
-          </div>
+          {hasOAuthProviders ? (
+            <>
+              <OAuthButtons mode="signup" />
+              <div className="my-4 flex items-center gap-2 text-xs text-blue-700/80">
+                <span className="h-px flex-1 bg-blue-200" />
+                <span>or</span>
+                <span className="h-px flex-1 bg-blue-200" />
+              </div>
+            </>
+          ) : null}
           <form onSubmit={handleSignUp} noValidate>
             <div className="flex flex-col gap-5">
               <div className="grid gap-2">

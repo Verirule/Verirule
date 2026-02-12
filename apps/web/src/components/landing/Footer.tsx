@@ -41,6 +41,14 @@ export function Footer() {
               Service
             </Link>
             <Link
+              href="https://www.linkedin.com/company/verirule-xyz-0684273b0"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-white"
+            >
+              LinkedIn
+            </Link>
+            <Link
               href="https://www.gnu.org/licenses/agpl-3.0.en.html"
               target="_blank"
               rel="noopener noreferrer"
