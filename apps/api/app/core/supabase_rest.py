@@ -172,7 +172,7 @@ async def select_sources(access_token: str, org_id: str) -> list[dict[str, Any]]
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/sources"
     params = {
-        "select": "id,org_id,name,type,url,is_enabled,cadence,next_run_at,last_run_at,created_at",
+        "select": "id,org_id,name,type,kind,config,title,url,is_enabled,cadence,next_run_at,last_run_at,created_at",
         "org_id": f"eq.{org_id}",
     }
 
@@ -205,7 +205,7 @@ async def select_sources(access_token: str, org_id: str) -> list[dict[str, Any]]
 
 async def rpc_create_source(access_token: str, payload: dict[str, Any]) -> str:
     settings = get_settings()
-    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/create_source"
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/create_source_v2"
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -239,6 +239,21 @@ async def rpc_toggle_source(access_token: str, payload: dict[str, Any]) -> None:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to toggle source in Supabase.",
+        ) from exc
+
+
+async def rpc_update_source(access_token: str, payload: dict[str, Any]) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/update_source"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update source in Supabase.",
         ) from exc
 
 
@@ -364,7 +379,7 @@ async def select_source_by_id(access_token: str, source_id: str) -> dict[str, An
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/sources"
     params = {
-        "select": "id,org_id,url,is_enabled,cadence,next_run_at,last_run_at,etag,last_modified,content_type",
+        "select": "id,org_id,name,type,kind,config,title,url,is_enabled,cadence,next_run_at,last_run_at,etag,last_modified,content_type",
         "id": f"eq.{source_id}",
         "limit": "1",
     }
@@ -387,7 +402,7 @@ async def select_due_sources(access_token: str, org_id: str | None = None) -> li
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/sources"
     params = {
-        "select": "id,org_id,name,type,url,is_enabled,cadence,next_run_at,last_run_at,created_at",
+        "select": "id,org_id,name,type,kind,config,title,url,is_enabled,cadence,next_run_at,last_run_at,created_at",
         "cadence": "neq.manual",
         "is_enabled": "eq.true",
         "next_run_at": "lte.now()",
@@ -444,9 +459,9 @@ async def select_latest_snapshot(access_token: str, source_id: str) -> dict[str,
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/snapshots"
     params = {
-        "select": "id,org_id,source_id,run_id,fetched_url,content_hash,content_type,content_len,http_status,etag,last_modified,text_preview,text_fingerprint,fetched_at",
+        "select": "id,org_id,source_id,run_id,fetched_url,content_hash,content_type,content_len,http_status,etag,last_modified,text_preview,text_fingerprint,canonical_title,canonical_text,item_id,item_published_at,fetched_at,created_at",
         "source_id": f"eq.{source_id}",
-        "order": "fetched_at.desc",
+        "order": "created_at.desc",
         "limit": "1",
     }
 
@@ -461,6 +476,32 @@ async def select_latest_snapshot(access_token: str, source_id: str) -> dict[str,
         ) from exc
 
     rows = _validated_list_payload(response.json(), "Invalid latest snapshot response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def select_latest_snapshot_for_run(access_token: str, run_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/snapshots"
+    params = {
+        "select": "id,run_id,canonical_title,item_published_at,created_at",
+        "run_id": f"eq.{run_id}",
+        "order": "created_at.desc",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch latest snapshot for run from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(
+        response.json(), "Invalid latest snapshot for run response from Supabase."
+    )
     return rows[0] if rows else None
 
 
@@ -1111,6 +1152,30 @@ async def rpc_insert_snapshot(access_token: str, payload: dict[str, Any]) -> str
 async def rpc_insert_snapshot_v2(access_token: str, payload: dict[str, Any]) -> str:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/insert_snapshot_v2"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to insert snapshot in Supabase.",
+        ) from exc
+
+    response_payload = response.json()
+    if not isinstance(response_payload, str):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid insert snapshot response from Supabase.",
+        )
+
+    return response_payload
+
+
+async def rpc_insert_snapshot_v3(access_token: str, payload: dict[str, Any]) -> str:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/insert_snapshot_v3"
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:

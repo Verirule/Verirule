@@ -23,6 +23,7 @@ from app.core.supabase_rest import (
     select_finding_explanations_by_org,
     select_findings,
     select_latest_finding_explanation,
+    select_latest_snapshot_for_run,
     select_monitor_runs,
     select_task_evidence,
     select_tasks_for_alert,
@@ -45,6 +46,12 @@ async def findings(
     result: list[FindingOut] = []
     for row in rows:
         enriched = dict(row)
+        run_id = row.get("run_id")
+        if isinstance(run_id, str):
+            snapshot = await select_latest_snapshot_for_run(auth.access_token, run_id)
+            if snapshot:
+                enriched["canonical_title"] = snapshot.get("canonical_title")
+                enriched["item_published_at"] = snapshot.get("item_published_at")
         enriched["has_explanation"] = str(row.get("id")) in finding_ids_with_explanations
         result.append(FindingOut.model_validate(enriched))
     return {"findings": result}

@@ -1,6 +1,9 @@
 import asyncio
+import hashlib
+from datetime import UTC, datetime
 
 from app.worker import run_processor
+from app.worker.adapters.base import AdapterResult
 
 ORG_ID = "11111111-1111-1111-1111-111111111111"
 SOURCE_ID = "22222222-2222-2222-2222-222222222222"
@@ -30,6 +33,8 @@ def test_process_run_creates_explanation_when_content_changes(monkeypatch) -> No
         return {
             "id": SOURCE_ID,
             "org_id": ORG_ID,
+            "kind": "html",
+            "config": {},
             "url": "https://example.com/policy",
             "is_enabled": True,
             "etag": '"old-etag"',
@@ -43,40 +48,29 @@ def test_process_run_creates_explanation_when_content_changes(monkeypatch) -> No
             "content_hash": "old-fingerprint",
             "text_fingerprint": "old-fingerprint",
             "text_preview": "old text preview",
+            "canonical_text": "old text preview",
             "etag": '"old-etag"',
             "last_modified": "Wed, 10 Feb 2026 00:00:00 GMT",
         }
 
-    async def fake_fetch(
-        url: str,
-        etag: str | None = None,
-        last_modified: str | None = None,
-        *,
-        timeout_seconds: float,
-        max_bytes: int,
-    ) -> dict[str, object]:
-        assert url == "https://example.com/policy"
-        assert etag == '"old-etag"'
-        assert last_modified == "Wed, 10 Feb 2026 00:00:00 GMT"
-        assert timeout_seconds == 10.0
-        assert max_bytes == 1_000_000
-        return {
-            "status": 200,
-            "bytes": b"<html><body>new text</body></html>",
-            "content_type": "text/html",
-            "etag": '"new-etag"',
-            "last_modified": "Thu, 11 Feb 2026 00:00:00 GMT",
-            "fetched_url": "https://example.com/policy",
-        }
+    class FakeAdapter:
+        async def fetch(self, source, prev_snapshot):
+            assert source.url == "https://example.com/policy"
+            assert prev_snapshot is not None
+            return AdapterResult(
+                canonical_title="Policy",
+                canonical_text="new text preview",
+                content_type="text/html",
+                etag='"new-etag"',
+                last_modified="Thu, 11 Feb 2026 00:00:00 GMT",
+                http_status=200,
+                fetched_url=source.url,
+                content_len=123,
+            )
 
-    def fake_normalize(content_type: str | None, content: bytes) -> dict[str, str]:
-        assert content_type == "text/html"
-        assert content
-        return {
-            "normalized_text": "new text preview",
-            "text_preview": "new text preview",
-            "text_fingerprint": "new-fingerprint",
-        }
+    def fake_get_adapter(kind: str):
+        assert kind == "html"
+        return FakeAdapter()
 
     def fake_build_explanation(prev_text: str, new_text: str) -> dict[str, object]:
         assert prev_text == "old text preview"
@@ -96,12 +90,13 @@ def test_process_run_creates_explanation_when_content_changes(monkeypatch) -> No
         assert access_token == "worker-token"
         assert payload["p_run_id"] == RUN_ID
         assert payload["p_http_status"] == 200
-        assert payload["p_text_fingerprint"] == "new-fingerprint"
+        assert payload["p_canonical_text"] == "new text preview"
+        assert payload["p_canonical_title"] == "Policy"
         return "snapshot-id"
 
     async def fake_upsert_finding(access_token: str, payload: dict[str, object]) -> str:
         assert access_token == "worker-token"
-        assert payload["p_raw_hash"] == "new-fingerprint"
+        assert payload["p_raw_hash"]
         return FINDING_ID
 
     async def fake_insert_explanation(access_token: str, payload: dict[str, object]) -> str:
@@ -131,11 +126,10 @@ def test_process_run_creates_explanation_when_content_changes(monkeypatch) -> No
     monkeypatch.setattr(run_processor, "rpc_set_monitor_run_state", fake_set_state)
     monkeypatch.setattr(run_processor, "select_source_by_id", fake_select_source)
     monkeypatch.setattr(run_processor, "select_latest_snapshot", fake_select_latest_snapshot)
-    monkeypatch.setattr(run_processor, "fetch_url", fake_fetch)
-    monkeypatch.setattr(run_processor, "normalize", fake_normalize)
+    monkeypatch.setattr(run_processor, "get_adapter", fake_get_adapter)
     monkeypatch.setattr(run_processor, "build_explanation", fake_build_explanation)
     monkeypatch.setattr(run_processor, "rpc_set_source_fetch_metadata", fake_set_source_metadata)
-    monkeypatch.setattr(run_processor, "rpc_insert_snapshot_v2", fake_insert_snapshot)
+    monkeypatch.setattr(run_processor, "rpc_insert_snapshot_v3", fake_insert_snapshot)
     monkeypatch.setattr(run_processor, "rpc_upsert_finding", fake_upsert_finding)
     monkeypatch.setattr(run_processor, "rpc_insert_finding_explanation", fake_insert_explanation)
     monkeypatch.setattr(run_processor, "rpc_upsert_alert_for_finding", fake_upsert_alert)
@@ -168,6 +162,8 @@ def test_process_run_handles_304_without_finding(monkeypatch) -> None:
         return {
             "id": SOURCE_ID,
             "org_id": ORG_ID,
+            "kind": "html",
+            "config": {},
             "url": "https://example.com/policy",
             "is_enabled": True,
             "etag": '"old-etag"',
@@ -177,22 +173,20 @@ def test_process_run_handles_304_without_finding(monkeypatch) -> None:
     async def fake_select_latest_snapshot(access_token: str, source_id: str) -> dict[str, str]:
         return {"etag": '"old-etag"', "last_modified": "Wed, 10 Feb 2026 00:00:00 GMT"}
 
-    async def fake_fetch(
-        url: str,
-        etag: str | None = None,
-        last_modified: str | None = None,
-        *,
-        timeout_seconds: float,
-        max_bytes: int,
-    ) -> dict[str, object]:
-        return {
-            "status": 304,
-            "bytes": b"",
-            "content_type": "text/html",
-            "etag": '"old-etag"',
-            "last_modified": "Wed, 10 Feb 2026 00:00:00 GMT",
-            "fetched_url": "https://example.com/policy",
-        }
+    class FakeAdapter:
+        async def fetch(self, source, prev_snapshot):
+            return AdapterResult(
+                canonical_text="",
+                content_type="text/html",
+                etag='"old-etag"',
+                last_modified="Wed, 10 Feb 2026 00:00:00 GMT",
+                http_status=304,
+                fetched_url=source.url,
+                content_len=0,
+            )
+
+    def fake_get_adapter(kind: str):
+        return FakeAdapter()
 
     async def fake_set_source_metadata(access_token: str, payload: dict[str, object]) -> None:
         return None
@@ -220,9 +214,9 @@ def test_process_run_handles_304_without_finding(monkeypatch) -> None:
     monkeypatch.setattr(run_processor, "rpc_set_monitor_run_state", fake_set_state)
     monkeypatch.setattr(run_processor, "select_source_by_id", fake_select_source)
     monkeypatch.setattr(run_processor, "select_latest_snapshot", fake_select_latest_snapshot)
-    monkeypatch.setattr(run_processor, "fetch_url", fake_fetch)
+    monkeypatch.setattr(run_processor, "get_adapter", fake_get_adapter)
     monkeypatch.setattr(run_processor, "rpc_set_source_fetch_metadata", fake_set_source_metadata)
-    monkeypatch.setattr(run_processor, "rpc_insert_snapshot_v2", fake_insert_snapshot)
+    monkeypatch.setattr(run_processor, "rpc_insert_snapshot_v3", fake_insert_snapshot)
     monkeypatch.setattr(run_processor, "rpc_upsert_finding", fake_upsert_finding)
 
     processor = run_processor.MonitorRunProcessor(access_token="worker-token")
@@ -255,6 +249,8 @@ def test_process_run_uses_service_role_for_writes(monkeypatch) -> None:
         return {
             "id": SOURCE_ID,
             "org_id": ORG_ID,
+            "kind": "html",
+            "config": {},
             "url": "https://example.com/policy",
             "is_enabled": True,
             "etag": None,
@@ -263,31 +259,25 @@ def test_process_run_uses_service_role_for_writes(monkeypatch) -> None:
 
     async def fake_select_latest_snapshot(access_token: str, source_id: str) -> dict[str, str]:
         called_read_tokens.append(access_token)
-        return {"text_fingerprint": "same-fingerprint", "text_preview": "same"}
-
-    async def fake_fetch(
-        url: str,
-        etag: str | None = None,
-        last_modified: str | None = None,
-        *,
-        timeout_seconds: float,
-        max_bytes: int,
-    ) -> dict[str, object]:
         return {
-            "status": 200,
-            "bytes": b"same",
-            "content_type": "text/plain",
-            "etag": None,
-            "last_modified": None,
-            "fetched_url": url,
+            "text_fingerprint": hashlib.sha256(b"same").hexdigest(),
+            "canonical_text": "same",
         }
 
-    def fake_normalize(content_type: str | None, content: bytes) -> dict[str, str]:
-        return {
-            "normalized_text": "same",
-            "text_preview": "same",
-            "text_fingerprint": "same-fingerprint",
-        }
+    class FakeAdapter:
+        async def fetch(self, source, prev_snapshot):
+            return AdapterResult(
+                canonical_text="same",
+                content_type="text/plain",
+                etag=None,
+                last_modified=None,
+                http_status=200,
+                fetched_url=source.url,
+                content_len=4,
+            )
+
+    def fake_get_adapter(kind: str):
+        return FakeAdapter()
 
     async def fake_set_source_metadata(access_token: str, payload: dict[str, object]) -> None:
         called_write_tokens.append(access_token)
@@ -309,10 +299,9 @@ def test_process_run_uses_service_role_for_writes(monkeypatch) -> None:
     monkeypatch.setattr(run_processor, "rpc_set_monitor_run_state", fake_set_state)
     monkeypatch.setattr(run_processor, "select_source_by_id", fake_select_source)
     monkeypatch.setattr(run_processor, "select_latest_snapshot", fake_select_latest_snapshot)
-    monkeypatch.setattr(run_processor, "fetch_url", fake_fetch)
-    monkeypatch.setattr(run_processor, "normalize", fake_normalize)
+    monkeypatch.setattr(run_processor, "get_adapter", fake_get_adapter)
     monkeypatch.setattr(run_processor, "rpc_set_source_fetch_metadata", fake_set_source_metadata)
-    monkeypatch.setattr(run_processor, "rpc_insert_snapshot_v2", fake_insert_snapshot)
+    monkeypatch.setattr(run_processor, "rpc_insert_snapshot_v3", fake_insert_snapshot)
 
     processor = run_processor.MonitorRunProcessor(
         access_token=read_token,
@@ -325,6 +314,174 @@ def test_process_run_uses_service_role_for_writes(monkeypatch) -> None:
     assert called_write_tokens
     assert all(token == read_token for token in called_read_tokens)
     assert all(token == write_token for token in called_write_tokens)
+
+
+def test_process_run_rss_item_id_dedupes(monkeypatch) -> None:
+    snapshot_insert_calls = 0
+
+    async def fake_select_queued(access_token: str, limit: int) -> list[dict[str, str]]:
+        return [
+            {"id": RUN_ID, "org_id": ORG_ID, "source_id": SOURCE_ID, "status": "queued", "attempts": 0}
+        ]
+
+    async def fake_set_state(access_token: str, payload: dict[str, str | None]) -> None:
+        return None
+
+    async def fake_select_source(access_token: str, source_id: str) -> dict[str, object]:
+        return {
+            "id": SOURCE_ID,
+            "org_id": ORG_ID,
+            "kind": "rss",
+            "config": {},
+            "url": "https://example.com/feed.xml",
+            "is_enabled": True,
+            "etag": None,
+            "last_modified": None,
+        }
+
+    async def fake_select_latest_snapshot(access_token: str, source_id: str) -> dict[str, object]:
+        return {
+            "item_id": "same-item",
+            "text_fingerprint": "old-fingerprint",
+            "canonical_text": "old",
+        }
+
+    class FakeAdapter:
+        async def fetch(self, source, prev_snapshot):
+            return AdapterResult(
+                canonical_title="Post",
+                canonical_text="",
+                item_id="same-item",
+                item_published_at=datetime(2026, 2, 12, tzinfo=UTC),
+                content_type="application/rss+xml",
+                http_status=200,
+                fetched_url=source.url,
+                content_len=100,
+            )
+
+    def fake_get_adapter(kind: str):
+        assert kind == "rss"
+        return FakeAdapter()
+
+    async def fake_set_source_metadata(access_token: str, payload: dict[str, object]) -> None:
+        return None
+
+    async def fake_insert_snapshot(access_token: str, payload: dict[str, object]) -> str:
+        nonlocal snapshot_insert_calls
+        snapshot_insert_calls += 1
+        return "snapshot-id"
+
+    async def fake_mark_started(run_id: str, attempts: int) -> None:
+        assert attempts == 1
+
+    async def fake_clear_retry_state(run_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(run_processor, "select_queued_monitor_runs", fake_select_queued)
+    monkeypatch.setattr(run_processor, "mark_monitor_run_attempt_started", fake_mark_started)
+    monkeypatch.setattr(run_processor, "clear_monitor_run_error_state", fake_clear_retry_state)
+    monkeypatch.setattr(run_processor, "rpc_set_monitor_run_state", fake_set_state)
+    monkeypatch.setattr(run_processor, "select_source_by_id", fake_select_source)
+    monkeypatch.setattr(run_processor, "select_latest_snapshot", fake_select_latest_snapshot)
+    monkeypatch.setattr(run_processor, "get_adapter", fake_get_adapter)
+    monkeypatch.setattr(run_processor, "rpc_set_source_fetch_metadata", fake_set_source_metadata)
+    monkeypatch.setattr(run_processor, "rpc_insert_snapshot_v3", fake_insert_snapshot)
+
+    processor = run_processor.MonitorRunProcessor(access_token="worker-token")
+    processed_count = asyncio.run(processor.process_queued_runs_once(limit=5))
+
+    assert processed_count == 1
+    assert snapshot_insert_calls == 0
+
+
+def test_process_run_rss_stores_item_id(monkeypatch) -> None:
+    inserted_snapshot_payloads: list[dict[str, object]] = []
+
+    async def fake_select_queued(access_token: str, limit: int) -> list[dict[str, str]]:
+        return [
+            {"id": RUN_ID, "org_id": ORG_ID, "source_id": SOURCE_ID, "status": "queued", "attempts": 0}
+        ]
+
+    async def fake_set_state(access_token: str, payload: dict[str, str | None]) -> None:
+        return None
+
+    async def fake_select_source(access_token: str, source_id: str) -> dict[str, object]:
+        return {
+            "id": SOURCE_ID,
+            "org_id": ORG_ID,
+            "kind": "rss",
+            "config": {},
+            "url": "https://example.com/feed.xml",
+            "is_enabled": True,
+            "etag": None,
+            "last_modified": None,
+        }
+
+    async def fake_select_latest_snapshot(access_token: str, source_id: str) -> dict[str, object] | None:
+        return None
+
+    class FakeAdapter:
+        async def fetch(self, source, prev_snapshot):
+            return AdapterResult(
+                canonical_title="Post",
+                canonical_text="Body text",
+                item_id="entry-123",
+                item_published_at=datetime(2026, 2, 12, tzinfo=UTC),
+                content_type="application/rss+xml",
+                http_status=200,
+                fetched_url=source.url,
+                content_len=256,
+            )
+
+    def fake_get_adapter(kind: str):
+        return FakeAdapter()
+
+    async def fake_set_source_metadata(access_token: str, payload: dict[str, object]) -> None:
+        return None
+
+    async def fake_insert_snapshot(access_token: str, payload: dict[str, object]) -> str:
+        inserted_snapshot_payloads.append(payload)
+        return "snapshot-id"
+
+    async def fake_upsert_finding(access_token: str, payload: dict[str, object]) -> str:
+        return FINDING_ID
+
+    async def fake_insert_explanation(access_token: str, payload: dict[str, object]) -> str:
+        return "exp-id"
+
+    async def fake_alert(access_token: str, payload: dict[str, str]) -> dict[str, object]:
+        return {"id": ALERT_ID}
+
+    async def fake_audit(access_token: str, payload: dict[str, object]) -> None:
+        return None
+
+    async def fake_mark_started(run_id: str, attempts: int) -> None:
+        assert attempts == 1
+
+    async def fake_clear_retry_state(run_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(run_processor, "select_queued_monitor_runs", fake_select_queued)
+    monkeypatch.setattr(run_processor, "mark_monitor_run_attempt_started", fake_mark_started)
+    monkeypatch.setattr(run_processor, "clear_monitor_run_error_state", fake_clear_retry_state)
+    monkeypatch.setattr(run_processor, "rpc_set_monitor_run_state", fake_set_state)
+    monkeypatch.setattr(run_processor, "select_source_by_id", fake_select_source)
+    monkeypatch.setattr(run_processor, "select_latest_snapshot", fake_select_latest_snapshot)
+    monkeypatch.setattr(run_processor, "get_adapter", fake_get_adapter)
+    monkeypatch.setattr(run_processor, "rpc_set_source_fetch_metadata", fake_set_source_metadata)
+    monkeypatch.setattr(run_processor, "rpc_insert_snapshot_v3", fake_insert_snapshot)
+    monkeypatch.setattr(run_processor, "rpc_upsert_finding", fake_upsert_finding)
+    monkeypatch.setattr(run_processor, "rpc_insert_finding_explanation", fake_insert_explanation)
+    monkeypatch.setattr(run_processor, "rpc_upsert_alert_for_finding", fake_alert)
+    monkeypatch.setattr(run_processor, "rpc_append_audit", fake_audit)
+
+    processor = run_processor.MonitorRunProcessor(access_token="worker-token")
+    processed_count = asyncio.run(processor.process_queued_runs_once(limit=5))
+
+    assert processed_count == 1
+    assert len(inserted_snapshot_payloads) == 1
+    assert inserted_snapshot_payloads[0]["p_item_id"] == "entry-123"
+    assert inserted_snapshot_payloads[0]["p_canonical_title"] == "Post"
 
 
 def test_queue_due_sources_once_queues_single_run_with_safety_window(monkeypatch) -> None:
@@ -377,6 +534,4 @@ def test_queue_due_sources_once_queues_single_run_with_safety_window(monkeypatch
             "p_source_id": "77777777-7777-7777-7777-777777777777",
         }
     ]
-    assert scheduled_payloads == [
-        {"p_source_id": "77777777-7777-7777-7777-777777777777"}
-    ]
+    assert scheduled_payloads == [{"p_source_id": "77777777-7777-7777-7777-777777777777"}]

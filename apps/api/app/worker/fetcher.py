@@ -44,7 +44,7 @@ def resolve_public_ips(host: str) -> list[ipaddress._BaseAddress]:
     return ips
 
 
-def validate_fetch_url(url: str) -> str:
+def validate_fetch_url(url: str, *, allowed_hosts: set[str] | None = None) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
         raise UnsafeUrlError("only http/https URLs are allowed")
@@ -56,6 +56,8 @@ def validate_fetch_url(url: str) -> str:
     host = parsed.hostname.strip().lower()
     if host == "localhost" or host.endswith(".local"):
         raise UnsafeUrlError("localhost and .local hosts are blocked")
+    if allowed_hosts is not None and host not in {item.lower() for item in allowed_hosts}:
+        raise UnsafeUrlError("URL host is not allowed")
 
     try:
         ip = ipaddress.ip_address(host)
@@ -75,13 +77,17 @@ async def fetch_url(
     *,
     timeout_seconds: float = 10.0,
     max_bytes: int = 1_000_000,
+    allowed_hosts: set[str] | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    safe_url = validate_fetch_url(url)
+    safe_url = validate_fetch_url(url, allowed_hosts=allowed_hosts)
     timeout = httpx.Timeout(timeout_seconds)
     headers: dict[str, str] = {
         "User-Agent": "VeriruleMonitor/1.0",
         "Accept-Encoding": "gzip, deflate",
     }
+    if extra_headers:
+        headers.update(extra_headers)
     if etag:
         headers["If-None-Match"] = etag
     if last_modified:

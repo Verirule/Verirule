@@ -14,6 +14,24 @@ def test_validate_fetch_url_rejects_private_ip_ranges() -> None:
         fetcher.validate_fetch_url("http://169.254.169.254/latest/meta-data")
 
 
+def test_validate_fetch_url_respects_allowed_hosts(monkeypatch) -> None:
+    monkeypatch.setattr(fetcher, "resolve_public_ips", lambda host: [ipaddress.ip_address("140.82.114.5")])
+
+    assert (
+        fetcher.validate_fetch_url(
+            "https://api.github.com/repos/openai/openai-python/releases",
+            allowed_hosts={"api.github.com"},
+        )
+        == "https://api.github.com/repos/openai/openai-python/releases"
+    )
+
+    with pytest.raises(fetcher.UnsafeUrlError):
+        fetcher.validate_fetch_url(
+            "https://example.com/feed.xml",
+            allowed_hosts={"api.github.com"},
+        )
+
+
 def test_fetch_url_handles_304_not_modified(monkeypatch) -> None:
     class FakeResponse:
         status_code = 304

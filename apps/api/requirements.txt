@@ -5,3 +5,5 @@ httpx==0.27.2
 PyJWT==2.9.0
 cryptography>=42
 reportlab>=4
+feedparser>=6
+pypdf>=4

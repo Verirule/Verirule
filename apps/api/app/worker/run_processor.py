@@ -17,7 +17,7 @@ from app.core.supabase_rest import (
     rpc_append_audit,
     rpc_create_monitor_run,
     rpc_insert_finding_explanation,
-    rpc_insert_snapshot_v2,
+    rpc_insert_snapshot_v3,
     rpc_schedule_next_run,
     rpc_set_monitor_run_state,
     rpc_set_source_fetch_metadata,
@@ -29,9 +29,10 @@ from app.core.supabase_rest import (
     select_recent_active_monitor_runs_for_source,
     select_source_by_id,
 )
+from app.worker.adapters.base import Snapshot, Source
+from app.worker.adapters.registry import get_adapter
 from app.worker.explain import build_explanation
-from app.worker.fetcher import UnsafeUrlError, fetch_url
-from app.worker.normalize import normalize
+from app.worker.fetcher import UnsafeUrlError
 from app.worker.retry import backoff_seconds, sanitize_error
 
 MAX_RUN_ATTEMPTS = 5
@@ -114,29 +115,21 @@ class MonitorRunProcessor:
             if not source_url:
                 raise ValueError("source URL is empty")
 
-            previous_snapshot = await select_latest_snapshot(self.access_token, source_id)
-            source_etag = str(source.get("etag") or "").strip() or None
-            source_last_modified = str(source.get("last_modified") or "").strip() or None
-            request_etag = source_etag or (
-                str(previous_snapshot.get("etag") or "").strip() if previous_snapshot else None
+            source_payload = dict(source)
+            source_payload["fetch_timeout_seconds"] = self.fetch_timeout_seconds
+            source_payload["fetch_max_bytes"] = self.fetch_max_bytes
+            source_model = Source.model_validate(source_payload)
+            previous_snapshot_row = await select_latest_snapshot(self.access_token, source_id)
+            previous_snapshot = (
+                Snapshot.model_validate(previous_snapshot_row) if previous_snapshot_row else None
             )
-            request_last_modified = source_last_modified or (
-                str(previous_snapshot.get("last_modified") or "").strip()
-                if previous_snapshot
-                else None
-            )
+            adapter = get_adapter(source_model.kind)
+            adapter_result = await adapter.fetch(source_model, previous_snapshot)
 
-            fetch_result = await fetch_url(
-                source_url,
-                etag=request_etag,
-                last_modified=request_last_modified,
-                timeout_seconds=self.fetch_timeout_seconds,
-                max_bytes=self.fetch_max_bytes,
-            )
-            status_code = int(fetch_result.get("status") or 0)
-            response_etag = str(fetch_result.get("etag") or "").strip() or None
-            response_last_modified = str(fetch_result.get("last_modified") or "").strip() or None
-            response_content_type = str(fetch_result.get("content_type") or "").strip() or None
+            status_code = int(adapter_result.http_status)
+            response_etag = adapter_result.etag
+            response_last_modified = adapter_result.last_modified
+            response_content_type = adapter_result.content_type
 
             await rpc_set_source_fetch_metadata(
                 self.write_token,
@@ -156,34 +149,55 @@ class MonitorRunProcessor:
                 await clear_monitor_run_error_state(run_id)
                 return
 
-            response_bytes = (
-                fetch_result["bytes"] if isinstance(fetch_result.get("bytes"), bytes) else b""
-            )
-            normalized = normalize(response_content_type, response_bytes)
-            current_fingerprint = str(normalized["text_fingerprint"])
+            if source_model.kind in {"rss", "github_releases"} and previous_snapshot:
+                previous_item_id = (previous_snapshot.item_id or "").strip()
+                current_item_id = (adapter_result.item_id or "").strip()
+                if previous_item_id and current_item_id and previous_item_id == current_item_id:
+                    await rpc_set_monitor_run_state(
+                        self.write_token,
+                        {"p_run_id": run_id, "p_status": "succeeded", "p_error": None},
+                    )
+                    await clear_monitor_run_error_state(run_id)
+                    return
+
+            canonical_text = (adapter_result.canonical_text or "").strip()
+            if canonical_text:
+                current_fingerprint = hashlib.sha256(canonical_text.encode("utf-8")).hexdigest()
+            elif adapter_result.raw_bytes_hash:
+                current_fingerprint = adapter_result.raw_bytes_hash
+            else:
+                fallback_bytes = (adapter_result.item_id or "").encode("utf-8")
+                current_fingerprint = hashlib.sha256(fallback_bytes).hexdigest()
+
             previous_fingerprint = None
             if previous_snapshot:
-                previous_fingerprint = str(
-                    previous_snapshot.get("text_fingerprint")
-                    or previous_snapshot.get("content_hash")
-                    or ""
+                previous_fingerprint = (
+                    previous_snapshot.text_fingerprint or previous_snapshot.content_hash or ""
                 ).strip() or None
 
-            await rpc_insert_snapshot_v2(
+            await rpc_insert_snapshot_v3(
                 self.write_token,
                 {
                     "p_org_id": org_id,
                     "p_source_id": source_id,
                     "p_run_id": run_id,
-                    "p_fetched_url": str(fetch_result.get("fetched_url") or source_url),
+                    "p_fetched_url": adapter_result.fetched_url or source_url,
                     "p_content_hash": current_fingerprint,
                     "p_content_type": response_content_type,
-                    "p_content_len": len(response_bytes),
+                    "p_content_len": int(adapter_result.content_len),
                     "p_http_status": status_code,
                     "p_etag": response_etag,
                     "p_last_modified": response_last_modified,
-                    "p_text_preview": str(normalized.get("text_preview") or ""),
+                    "p_text_preview": canonical_text[:2000],
                     "p_text_fingerprint": current_fingerprint,
+                    "p_canonical_title": adapter_result.canonical_title,
+                    "p_canonical_text": canonical_text,
+                    "p_item_id": adapter_result.item_id,
+                    "p_item_published_at": (
+                        adapter_result.item_published_at.isoformat()
+                        if adapter_result.item_published_at
+                        else None
+                    ),
                 },
             )
 
@@ -191,10 +205,10 @@ class MonitorRunProcessor:
                 finding_fingerprint = hashlib.sha256(
                     f"{source_id}:{current_fingerprint}".encode()
                 ).hexdigest()
-                previous_text = (
-                    str(previous_snapshot.get("text_preview") or "") if previous_snapshot else ""
-                )
-                explanation = build_explanation(previous_text, str(normalized["normalized_text"]))
+                previous_text = ""
+                if previous_snapshot:
+                    previous_text = previous_snapshot.canonical_text or previous_snapshot.text_preview or ""
+                explanation = build_explanation(previous_text, canonical_text)
                 finding_id = await rpc_upsert_finding(
                     self.write_token,
                     {
@@ -205,7 +219,7 @@ class MonitorRunProcessor:
                         "p_summary": str(explanation["summary"]),
                         "p_severity": "medium",
                         "p_fingerprint": finding_fingerprint,
-                        "p_raw_url": str(fetch_result.get("fetched_url") or source_url),
+                        "p_raw_url": adapter_result.fetched_url or source_url,
                         "p_raw_hash": current_fingerprint,
                     },
                 )

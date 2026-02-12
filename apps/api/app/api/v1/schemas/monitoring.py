@@ -28,6 +28,8 @@ class FindingOut(BaseModel):
     fingerprint: str
     raw_url: str | None = None
     raw_hash: str | None = None
+    canonical_title: str | None = None
+    item_published_at: datetime | None = None
     has_explanation: bool = False
 
 

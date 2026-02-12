@@ -36,7 +36,7 @@ def test_sources_returns_list_when_supabase_ok(monkeypatch) -> None:
         async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
             assert url == "https://example.supabase.co/rest/v1/sources"
             assert params == {
-                "select": "id,org_id,name,type,url,is_enabled,cadence,next_run_at,last_run_at,created_at",
+                "select": "id,org_id,name,type,kind,config,title,url,is_enabled,cadence,next_run_at,last_run_at,created_at",
                 "org_id": "eq.11111111-1111-1111-1111-111111111111",
             }
             assert headers["Authorization"] == "Bearer token-123"
@@ -48,6 +48,9 @@ def test_sources_returns_list_when_supabase_ok(monkeypatch) -> None:
                         "org_id": "11111111-1111-1111-1111-111111111111",
                         "name": "Security RSS",
                         "type": "rss",
+                        "kind": "rss",
+                        "config": {},
+                        "title": "Security Feed",
                         "url": "https://example.com/feed.xml",
                         "is_enabled": True,
                         "cadence": "manual",
@@ -81,6 +84,9 @@ def test_sources_returns_list_when_supabase_ok(monkeypatch) -> None:
                 "org_id": "11111111-1111-1111-1111-111111111111",
                 "name": "Security RSS",
                 "type": "rss",
+                "kind": "rss",
+                "config": {},
+                "title": "Security Feed",
                 "url": "https://example.com/feed.xml",
                 "is_enabled": True,
                 "cadence": "manual",
@@ -115,12 +121,15 @@ def test_create_source_returns_id_when_supabase_ok(monkeypatch) -> None:
             return None
 
         async def post(self, url: str, json: dict[str, str], headers: dict[str, str]) -> FakeResponse:
-            assert url == "https://example.supabase.co/rest/v1/rpc/create_source"
+            assert url == "https://example.supabase.co/rest/v1/rpc/create_source_v2"
             assert json == {
                 "p_org_id": "11111111-1111-1111-1111-111111111111",
                 "p_name": "Security RSS",
                 "p_type": "rss",
                 "p_url": "https://example.com/feed.xml",
+                "p_kind": "rss",
+                "p_config": {},
+                "p_title": "Security Feed",
             }
             assert headers["Authorization"] == "Bearer token-123"
             assert headers["apikey"] == "test-anon-key"
@@ -144,6 +153,9 @@ def test_create_source_returns_id_when_supabase_ok(monkeypatch) -> None:
                 "name": "Security RSS",
                 "type": "rss",
                 "url": "https://example.com/feed.xml",
+                "kind": "rss",
+                "config": {},
+                "title": "Security Feed",
             },
         )
     finally:
@@ -153,7 +165,7 @@ def test_create_source_returns_id_when_supabase_ok(monkeypatch) -> None:
     assert response.json() == {"id": "22222222-2222-2222-2222-222222222222"}
 
 
-def test_toggle_source_returns_ok_when_supabase_ok(monkeypatch) -> None:
+def test_update_source_returns_ok_when_supabase_ok(monkeypatch) -> None:
     class FakeResponse:
         def raise_for_status(self) -> None:
             return None
@@ -173,9 +185,15 @@ def test_toggle_source_returns_ok_when_supabase_ok(monkeypatch) -> None:
             return None
 
         async def post(self, url: str, json: dict[str, object], headers: dict[str, str]) -> FakeResponse:
-            assert url == "https://example.supabase.co/rest/v1/rpc/toggle_source"
+            assert url == "https://example.supabase.co/rest/v1/rpc/update_source"
             assert json == {
                 "p_source_id": "22222222-2222-2222-2222-222222222222",
+                "p_name": None,
+                "p_url": None,
+                "p_type": None,
+                "p_kind": None,
+                "p_config": None,
+                "p_title": None,
                 "p_is_enabled": False,
             }
             assert headers["Authorization"] == "Bearer token-123"
@@ -183,7 +201,7 @@ def test_toggle_source_returns_ok_when_supabase_ok(monkeypatch) -> None:
             return FakeResponse()
 
         async def get(self, *args, **kwargs):  # pragma: no cover
-            raise AssertionError("GET should not be called in toggle_source test")
+            raise AssertionError("GET should not be called in update_source test")
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123",
@@ -229,7 +247,7 @@ def test_due_sources_returns_list_when_supabase_ok(monkeypatch) -> None:
         async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
             assert url == "https://example.supabase.co/rest/v1/sources"
             assert params == {
-                "select": "id,org_id,name,type,url,is_enabled,cadence,next_run_at,last_run_at,created_at",
+                "select": "id,org_id,name,type,kind,config,title,url,is_enabled,cadence,next_run_at,last_run_at,created_at",
                 "cadence": "neq.manual",
                 "is_enabled": "eq.true",
                 "next_run_at": "lte.now()",
@@ -244,6 +262,9 @@ def test_due_sources_returns_list_when_supabase_ok(monkeypatch) -> None:
                         "org_id": "11111111-1111-1111-1111-111111111111",
                         "name": "Security RSS",
                         "type": "rss",
+                        "kind": "rss",
+                        "config": {},
+                        "title": None,
                         "url": "https://example.com/feed.xml",
                         "is_enabled": True,
                         "cadence": "hourly",
@@ -277,6 +298,9 @@ def test_due_sources_returns_list_when_supabase_ok(monkeypatch) -> None:
                 "org_id": "11111111-1111-1111-1111-111111111111",
                 "name": "Security RSS",
                 "type": "rss",
+                "kind": "rss",
+                "config": {},
+                "title": None,
                 "url": "https://example.com/feed.xml",
                 "is_enabled": True,
                 "cadence": "hourly",
@@ -342,3 +366,26 @@ def test_schedule_source_returns_ok_when_supabase_ok(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"ok": True}
+
+
+def test_create_source_validates_github_repo_config() -> None:
+    app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
+        access_token="token-123",
+        claims={"sub": "user-1"},
+    )
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/sources",
+            json={
+                "org_id": "11111111-1111-1111-1111-111111111111",
+                "name": "OpenAI Releases",
+                "kind": "github_releases",
+                "url": "https://github.com/openai/openai-python/releases",
+                "config": {},
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422

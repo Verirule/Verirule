@@ -78,6 +78,25 @@ def test_findings_returns_list_when_supabase_ok(monkeypatch) -> None:
                 }
                 return FakeResponse([{"finding_id": FINDING_ID}])
 
+            if url == "https://example.supabase.co/rest/v1/snapshots":
+                assert params == {
+                    "select": "id,run_id,canonical_title,item_published_at,created_at",
+                    "run_id": f"eq.{RUN_ID}",
+                    "order": "created_at.desc",
+                    "limit": "1",
+                }
+                return FakeResponse(
+                    [
+                        {
+                            "id": "88888888-8888-8888-8888-888888888888",
+                            "run_id": RUN_ID,
+                            "canonical_title": "Release 1.3.0",
+                            "item_published_at": "2026-02-09T00:00:00Z",
+                            "created_at": "2026-02-09T00:00:00Z",
+                        }
+                    ]
+                )
+
             raise AssertionError(f"unexpected URL: {url}")
 
         async def post(self, *args, **kwargs):  # pragma: no cover
@@ -109,6 +128,8 @@ def test_findings_returns_list_when_supabase_ok(monkeypatch) -> None:
                 "fingerprint": "sha256:abc",
                 "raw_url": "https://example.com",
                 "raw_hash": "abc123",
+                "canonical_title": "Release 1.3.0",
+                "item_published_at": "2026-02-09T00:00:00Z",
                 "has_explanation": True,
             }
         ]
