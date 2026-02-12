@@ -6,6 +6,7 @@ import { LogoutButton } from "@/components/logout-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  Activity,
   Bell,
   CircleDollarSign,
   ClipboardList,
@@ -55,6 +56,7 @@ const navigationSections: NavigationSection[] = [
       { href: "/dashboard/tasks", label: "Tasks", icon: ListChecks },
       { href: "/dashboard/audit", label: "Audit", icon: ClipboardList },
       { href: "/dashboard/exports", label: "Exports", icon: FileOutput },
+      { href: "/dashboard/system", label: "System", icon: Activity },
     ],
   },
   {
