@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     WORKER_BATCH_LIMIT: int = 5
     WORKER_FETCH_TIMEOUT_SECONDS: float = 10.0
     WORKER_FETCH_MAX_BYTES: int = 1_000_000
+    EXPORTS_BUCKET_NAME: str = "exports"
+    EXPORT_SIGNED_URL_SECONDS: int = 300
 
     @model_validator(mode="after")
     def apply_supabase_defaults(self) -> "Settings":

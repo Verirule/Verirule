@@ -5,6 +5,8 @@ from fastapi import HTTPException, status
 
 from app.core.settings import get_settings
 
+AUDIT_PACKET_MAX_ROWS = 2_000
+
 
 def supabase_rest_headers(access_token: str) -> dict[str, str]:
     settings = get_settings()
@@ -19,6 +21,21 @@ def supabase_public_headers() -> dict[str, str]:
     settings = get_settings()
     return {
         "apikey": settings.SUPABASE_ANON_KEY,
+        "Accept": "application/json",
+    }
+
+
+def supabase_service_role_headers() -> dict[str, str]:
+    settings = get_settings()
+    service_role_key = settings.SUPABASE_SERVICE_ROLE_KEY
+    if not service_role_key or not service_role_key.strip():
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Audit exports are not configured.",
+        )
+    return {
+        "Authorization": f"Bearer {service_role_key}",
+        "apikey": service_role_key,
         "Accept": "application/json",
     }
 
@@ -223,6 +240,31 @@ def _validated_list_payload(payload: Any, error_message: str) -> list[dict[str, 
             )
 
     return payload
+
+
+def _with_time_range(
+    params: dict[str, str],
+    *,
+    column: str,
+    from_ts: str | None,
+    to_ts: str | None,
+) -> dict[str, str]:
+    ranged = dict(params)
+    if from_ts:
+        ranged[column] = f"gte.{from_ts}"
+    if to_ts:
+        ranged[column] = f"lte.{to_ts}"
+    return ranged
+
+
+def _consume_audit_packet_rows(rows: list[dict[str, Any]], remaining: int) -> int:
+    row_count = len(rows)
+    if row_count > remaining:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Narrow your date range",
+        )
+    return remaining - row_count
 
 
 async def select_monitor_runs(access_token: str, org_id: str) -> list[dict[str, Any]]:
@@ -535,6 +577,262 @@ async def select_audit_log(access_token: str, org_id: str) -> list[dict[str, Any
         ) from exc
 
     return _validated_list_payload(response.json(), "Invalid audit log response from Supabase.")
+
+
+async def rpc_create_audit_export(access_token: str, payload: dict[str, Any]) -> str:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/create_audit_export"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to create audit export."
+        normalized_detail = error_detail.lower()
+
+        if "not authenticated" in normalized_detail:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        if "not a member of org" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_detail) from exc
+        if exc.response.status_code == status.HTTP_400_BAD_REQUEST:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create audit export.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create audit export.",
+        ) from exc
+
+    response_payload = response.json()
+    if not isinstance(response_payload, str):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid create audit export response from Supabase.",
+        )
+    return response_payload
+
+
+async def select_audit_exports(access_token: str, org_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/audit_exports"
+    params = {
+        "select": "id,org_id,requested_by_user_id,format,scope,status,file_path,file_sha256,error_text,created_at,completed_at",
+        "org_id": f"eq.{org_id}",
+        "order": "created_at.desc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch audit exports from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid audit exports response from Supabase.")
+
+
+async def select_audit_export_by_id(access_token: str, export_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/audit_exports"
+    params = {
+        "select": "id,org_id,requested_by_user_id,format,scope,status,file_path,file_sha256,error_text,created_at,completed_at",
+        "id": f"eq.{export_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch audit export from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid audit export response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def select_queued_audit_exports_service(limit: int = 3) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/audit_exports"
+    params = {
+        "select": "id,org_id,requested_by_user_id,format,scope,status,created_at",
+        "status": "eq.queued",
+        "order": "created_at.asc",
+        "limit": str(limit),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch queued audit exports from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(
+        response.json(), "Invalid queued audit exports response from Supabase."
+    )
+
+
+async def select_audit_packet_data(
+    access_token: str,
+    org_id: str,
+    from_ts: str | None,
+    to_ts: str | None,
+) -> dict[str, Any]:
+    settings = get_settings()
+    base_url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1"
+    headers = supabase_rest_headers(access_token)
+    remaining = AUDIT_PACKET_MAX_ROWS
+
+    async def fetch_table(
+        *,
+        table: str,
+        select: str,
+        date_column: str,
+        order: str,
+    ) -> list[dict[str, Any]]:
+        nonlocal remaining
+        params = {
+            "select": select,
+            "org_id": f"eq.{org_id}",
+            "order": order,
+            "limit": str(remaining + 1),
+        }
+        params = _with_time_range(params, column=date_column, from_ts=from_ts, to_ts=to_ts)
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(f"{base_url}/{table}", params=params, headers=headers)
+                response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to fetch export data from Supabase.",
+            ) from exc
+
+        rows = _validated_list_payload(response.json(), "Invalid export data response from Supabase.")
+        remaining = _consume_audit_packet_rows(rows, remaining)
+        return rows
+
+    runs = await fetch_table(
+        table="monitor_runs",
+        select="id,org_id,source_id,status,started_at,finished_at,error,created_at",
+        date_column="created_at",
+        order="created_at.desc",
+    )
+    findings = await fetch_table(
+        table="findings",
+        select="id,org_id,source_id,run_id,title,summary,severity,detected_at,fingerprint,raw_url,raw_hash",
+        date_column="detected_at",
+        order="detected_at.desc",
+    )
+    explanations = await fetch_table(
+        table="finding_explanations",
+        select="finding_id",
+        date_column="created_at",
+        order="created_at.desc",
+    )
+    alerts = await fetch_table(
+        table="alerts",
+        select="id,org_id,finding_id,status,owner_user_id,created_at,resolved_at",
+        date_column="created_at",
+        order="created_at.desc",
+    )
+    tasks = await fetch_table(
+        table="tasks",
+        select="id,org_id,title,description,status,assignee_user_id,alert_id,finding_id,due_at,created_at,updated_at",
+        date_column="created_at",
+        order="created_at.desc",
+    )
+    task_evidence = await fetch_table(
+        table="task_evidence",
+        select="id,task_id,type,ref,created_at",
+        date_column="created_at",
+        order="created_at.asc",
+    )
+    task_comments = await fetch_table(
+        table="task_comments",
+        select="id,task_id,author_user_id,body,created_at",
+        date_column="created_at",
+        order="created_at.asc",
+    )
+    snapshots = await fetch_table(
+        table="snapshots",
+        select="id,org_id,source_id,run_id,http_status,content_type,content_len,fetched_at",
+        date_column="fetched_at",
+        order="fetched_at.desc",
+    )
+    audit_timeline = await fetch_table(
+        table="audit_log",
+        select="id,org_id,actor_user_id,action,entity_type,entity_id,metadata,created_at",
+        date_column="created_at",
+        order="created_at.desc",
+    )
+
+    return {
+        "org_id": org_id,
+        "from": from_ts,
+        "to": to_ts,
+        "runs": runs,
+        "findings": findings,
+        "finding_explanations": explanations,
+        "alerts": alerts,
+        "tasks": tasks,
+        "task_evidence": task_evidence,
+        "task_comments": task_comments,
+        "snapshots": snapshots,
+        "audit_timeline": audit_timeline,
+        "row_count": AUDIT_PACKET_MAX_ROWS - remaining,
+    }
+
+
+async def update_audit_export_status(
+    export_id: str,
+    status_value: str,
+    file_path: str | None,
+    file_sha256: str | None,
+    error_text: str | None,
+    completed_at: str | None,
+) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/audit_exports"
+    params = {"id": f"eq.{export_id}"}
+    payload = {
+        "status": status_value,
+        "file_path": file_path,
+        "file_sha256": file_sha256,
+        "error_text": error_text,
+        "completed_at": completed_at,
+    }
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "return=minimal"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(url, params=params, json=payload, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update audit export status in Supabase.",
+        ) from exc
 
 
 async def rpc_create_monitor_run(access_token: str, payload: dict[str, Any]) -> str:

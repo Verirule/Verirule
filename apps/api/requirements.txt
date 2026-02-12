@@ -4,3 +4,4 @@ pydantic-settings==2.4.0
 httpx==0.27.2
 PyJWT==2.9.0
 cryptography>=42
+reportlab>=4

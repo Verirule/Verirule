@@ -18,9 +18,17 @@
 - Signed upload/download URLs must be short-lived and generated only by the API.
 - `SUPABASE_SERVICE_ROLE_KEY` for storage signing must live only in Fly secrets for the API.
 
+### Audit Exports Storage
+- Create a Supabase Storage bucket named `exports` and keep it private.
+- Bucket public access must remain `OFF`.
+- Audit export object paths must follow: `org/<org_id>/exports/<export_id>.<ext>`.
+- Export downloads must be served only with short-lived signed URLs.
+
 Checklist:
 - Supabase dashboard -> `Storage` -> `Create bucket`
 - Name: `evidence`
+- Public bucket: `OFF`
+- Name: `exports`
 - Public bucket: `OFF`
 
 ## Authentication and Token Verification

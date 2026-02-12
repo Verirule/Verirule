@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     auth,
     billing,
+    exports,
     health,
     integrations,
     monitoring,
@@ -24,3 +25,4 @@ router.include_router(monitoring.router)
 router.include_router(tasks.router)
 router.include_router(task_files.router)
 router.include_router(integrations.router)
+router.include_router(exports.router)
