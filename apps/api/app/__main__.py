@@ -9,6 +9,7 @@ import uvicorn
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import get_settings
 from app.core.supabase_rest import upsert_system_status
+from app.worker.alert_task_processor import ALERT_TASK_BATCH_LIMIT, AlertTaskProcessor
 from app.worker.export_processor import EXPORT_BATCH_LIMIT, ExportProcessor
 from app.worker.retry import sanitize_error
 from app.worker.run_processor import MonitorRunProcessor
@@ -23,6 +24,7 @@ def _now_iso() -> str:
 async def run_worker_tick(
     monitor_processor: MonitorRunProcessor,
     export_processor: ExportProcessor,
+    alert_task_processor: AlertTaskProcessor,
     *,
     run_batch_limit: int,
     heartbeat_enabled: bool,
@@ -33,6 +35,7 @@ async def run_worker_tick(
     runs_queued = 0
     runs_processed = 0
     exports_processed = 0
+    alert_tasks_processed = 0
 
     try:
         due_sources = await monitor_processor.count_due_sources_once()
@@ -70,6 +73,15 @@ async def run_worker_tick(
             extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
         )
 
+    try:
+        alert_tasks_processed = await alert_task_processor.process_alerts_once(limit=ALERT_TASK_BATCH_LIMIT)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        errors += 1
+        logger.error(
+            "worker.tick_process_alert_tasks_error",
+            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
+        )
+
     tick_finished_at = _now_iso()
     payload: dict[str, object] = {
         "mode": "worker",
@@ -77,6 +89,7 @@ async def run_worker_tick(
         "tick_finished_at": tick_finished_at,
         "runs_processed": runs_processed,
         "exports_processed": exports_processed,
+        "alert_tasks_processed": alert_tasks_processed,
         "runs_queued": runs_queued,
         "due_sources": due_sources,
         "errors": errors,
@@ -123,11 +136,13 @@ async def run_worker_supervisor_loop() -> None:
         access_token=write_access_token,
         bucket_name=settings.EXPORTS_BUCKET_NAME,
     )
+    alert_task_processor = AlertTaskProcessor(access_token=write_access_token)
 
     while True:
         payload = await run_worker_tick(
             monitor_processor,
             export_processor,
+            alert_task_processor,
             run_batch_limit=settings.WORKER_BATCH_LIMIT,
             heartbeat_enabled=heartbeat_enabled,
         )
@@ -135,6 +150,7 @@ async def run_worker_supervisor_loop() -> None:
         if (
             int(payload.get("runs_processed") or 0) == 0
             and int(payload.get("exports_processed") or 0) == 0
+            and int(payload.get("alert_tasks_processed") or 0) == 0
             and int(payload.get("runs_queued") or 0) == 0
         ):
             await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))

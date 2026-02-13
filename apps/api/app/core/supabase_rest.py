@@ -582,7 +582,7 @@ async def select_alerts(access_token: str, org_id: str) -> list[dict[str, Any]]:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/alerts"
     params = {
-        "select": "id,org_id,finding_id,status,owner_user_id,created_at,resolved_at",
+        "select": "id,org_id,finding_id,task_id,status,owner_user_id,created_at,resolved_at",
         "org_id": f"eq.{org_id}",
         "order": "created_at.desc",
     }
@@ -604,7 +604,7 @@ async def select_alert_by_id(access_token: str, alert_id: str) -> dict[str, Any]
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/alerts"
     params = {
-        "select": "id,org_id,finding_id,status,owner_user_id,created_at,resolved_at",
+        "select": "id,org_id,finding_id,task_id,status,owner_user_id,created_at,resolved_at",
         "id": f"eq.{alert_id}",
         "limit": "1",
     }
@@ -621,6 +621,58 @@ async def select_alert_by_id(access_token: str, alert_id: str) -> dict[str, Any]
 
     rows = _validated_list_payload(response.json(), "Invalid alert response from Supabase.")
     return rows[0] if rows else None
+
+
+async def select_alert_by_id_for_org(
+    access_token: str, org_id: str, alert_id: str
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/alerts"
+    params = {
+        "select": "id,org_id,finding_id,task_id,status,owner_user_id,created_at,resolved_at",
+        "id": f"eq.{alert_id}",
+        "org_id": f"eq.{org_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch alert from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid alert response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def select_alerts_needing_tasks_service(limit: int = 50) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/alerts"
+    params = {
+        "select": "id,org_id,finding_id,task_id,status,created_at",
+        "status": "eq.open",
+        "task_id": "is.null",
+        "order": "created_at.asc",
+        "limit": str(limit),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch alerts needing tasks from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(
+        response.json(), "Invalid alerts needing tasks response from Supabase."
+    )
 
 
 async def select_finding_by_id(access_token: str, finding_id: str) -> dict[str, Any] | None:
@@ -1451,6 +1503,202 @@ async def rpc_create_task(access_token: str, payload: dict[str, Any]) -> str:
     return response_payload
 
 
+async def insert_task_service(
+    org_id: str,
+    *,
+    title: str,
+    description: str | None,
+    alert_id: str | None,
+    finding_id: str | None,
+) -> str:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/tasks"
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "return=representation"
+    payload = {
+        "org_id": org_id,
+        "title": title,
+        "description": description,
+        "status": "open",
+        "assignee_user_id": None,
+        "alert_id": alert_id,
+        "finding_id": finding_id,
+        "due_at": None,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create task in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid create task response from Supabase.")
+    created_task = rows[0] if rows else None
+    task_id = created_task.get("id") if isinstance(created_task, dict) else None
+    if not isinstance(task_id, str):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid create task response from Supabase.",
+        )
+    return task_id
+
+
+async def bulk_insert_task_controls(
+    access_token: str,
+    org_id: str,
+    task_id: str,
+    control_ids: list[str],
+) -> int:
+    normalized_ids = [control_id.strip() for control_id in control_ids if control_id.strip()]
+    if not normalized_ids:
+        return 0
+
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/task_controls"
+    headers = supabase_rest_headers(access_token)
+    headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+    payload = [{"org_id": org_id, "task_id": task_id, "control_id": control_id} for control_id in normalized_ids]
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                url,
+                params={"on_conflict": "org_id,task_id,control_id"},
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to map controls to task in Supabase.",
+        ) from exc
+
+    return len(normalized_ids)
+
+
+async def bulk_insert_task_controls_service(
+    org_id: str,
+    task_id: str,
+    control_ids: list[str],
+) -> int:
+    normalized_ids = [control_id.strip() for control_id in control_ids if control_id.strip()]
+    if not normalized_ids:
+        return 0
+
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/task_controls"
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+    payload = [{"org_id": org_id, "task_id": task_id, "control_id": control_id} for control_id in normalized_ids]
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                url,
+                params={"on_conflict": "org_id,task_id,control_id"},
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to map controls to task in Supabase.",
+        ) from exc
+
+    return len(normalized_ids)
+
+
+async def bulk_insert_task_evidence_service(
+    org_id: str,
+    task_id: str,
+    evidence_items: list[dict[str, str]],
+) -> int:
+    normalized_items = [
+        item
+        for item in evidence_items
+        if isinstance(item, dict)
+        and isinstance(item.get("type"), str)
+        and item.get("type")
+        and isinstance(item.get("ref"), str)
+        and item.get("ref")
+    ]
+    if not normalized_items:
+        return 0
+
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/task_evidence"
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "return=minimal"
+    payload = [
+        {
+            "org_id": org_id,
+            "task_id": task_id,
+            "type": str(item["type"]),
+            "ref": str(item["ref"]),
+        }
+        for item in normalized_items
+    ]
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to add task evidence in Supabase.",
+        ) from exc
+
+    return len(normalized_items)
+
+
+async def rpc_link_alert_task(access_token: str, org_id: str, alert_id: str, task_id: str) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/link_alert_task"
+    payload = {
+        "p_org_id": org_id,
+        "p_alert_id": alert_id,
+        "p_task_id": task_id,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to link alert task in Supabase."
+        normalized_detail = error_detail.lower()
+        if "not authenticated" in normalized_detail:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        if "not a member of org" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_detail) from exc
+        if "alert not found" in normalized_detail or "task not found" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_detail) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to link alert task in Supabase.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to link alert task in Supabase.",
+        ) from exc
+
+
+async def update_alert_task_id(access_token: str, org_id: str, alert_id: str, task_id: str) -> None:
+    await rpc_link_alert_task(access_token, org_id, alert_id, task_id)
+
+
 async def rpc_set_task_status(access_token: str, payload: dict[str, Any]) -> None:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/set_task_status"
@@ -1645,6 +1893,86 @@ async def select_org_billing(access_token: str, org_id: str) -> dict[str, Any] |
         ) from exc
 
     rows = _validated_list_payload(response.json(), "Invalid billing response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def ensure_alert_task_rules(access_token: str, org_id: str) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/ensure_alert_task_rules"
+    payload = {"p_org_id": org_id}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to initialize alert task rules."
+        normalized_detail = error_detail.lower()
+        if "not authenticated" in normalized_detail:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        if "not a member of org" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_detail) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to initialize alert task rules.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to initialize alert task rules.",
+        ) from exc
+
+
+async def get_alert_task_rules(access_token: str, org_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/alert_task_rules"
+    params = {
+        "select": "org_id,enabled,auto_create_task_on_alert,min_severity,auto_link_suggested_controls,auto_add_evidence_checklist,created_at,updated_at",
+        "org_id": f"eq.{org_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch automation rules from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid automation rules response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def update_alert_task_rules(
+    access_token: str, org_id: str, patch: dict[str, Any]
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/alert_task_rules"
+    params = {
+        "org_id": f"eq.{org_id}",
+        "select": "org_id,enabled,auto_create_task_on_alert,min_severity,auto_link_suggested_controls,auto_add_evidence_checklist,created_at,updated_at",
+    }
+    headers = supabase_rest_headers(access_token)
+    headers["Prefer"] = "return=representation"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(url, params=params, json=patch, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update automation rules in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid automation rules response from Supabase.")
     return rows[0] if rows else None
 
 
@@ -1984,6 +2312,12 @@ async def list_control_evidence_for_controls(
         ) from exc
 
     return _validated_list_payload(response.json(), "Invalid control evidence response from Supabase.")
+
+
+async def list_control_evidence_items(
+    access_token: str, control_ids: list[str]
+) -> list[dict[str, Any]]:
+    return await list_control_evidence_for_controls(access_token, control_ids)
 
 
 async def get_control_guidance(access_token: str, control_id: str) -> dict[str, Any] | None:

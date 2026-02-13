@@ -233,7 +233,7 @@ def test_alerts_returns_list_when_supabase_ok(monkeypatch) -> None:
         async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
             assert url == "https://example.supabase.co/rest/v1/alerts"
             assert params == {
-                "select": "id,org_id,finding_id,status,owner_user_id,created_at,resolved_at",
+                "select": "id,org_id,finding_id,task_id,status,owner_user_id,created_at,resolved_at",
                 "org_id": f"eq.{ORG_ID}",
                 "order": "created_at.desc",
             }
@@ -245,6 +245,7 @@ def test_alerts_returns_list_when_supabase_ok(monkeypatch) -> None:
                         "id": ALERT_ID,
                         "org_id": ORG_ID,
                         "finding_id": FINDING_ID,
+                        "task_id": None,
                         "status": "open",
                         "owner_user_id": None,
                         "created_at": "2026-02-09T00:00:00Z",
@@ -274,6 +275,7 @@ def test_alerts_returns_list_when_supabase_ok(monkeypatch) -> None:
                 "id": ALERT_ID,
                 "org_id": ORG_ID,
                 "finding_id": FINDING_ID,
+                "task_id": None,
                 "status": "open",
                 "owner_user_id": None,
                 "created_at": "2026-02-09T00:00:00Z",

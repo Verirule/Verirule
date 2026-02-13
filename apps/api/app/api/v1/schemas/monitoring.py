@@ -47,6 +47,7 @@ class AlertOut(BaseModel):
     id: UUID
     org_id: UUID
     finding_id: UUID
+    task_id: UUID | None = None
     status: Literal["open", "acknowledged", "resolved"]
     owner_user_id: UUID | None = None
     created_at: datetime
