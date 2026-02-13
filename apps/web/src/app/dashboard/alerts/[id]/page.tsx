@@ -51,12 +51,10 @@ type TaskRecord = {
 type AlertsResponse = { alerts: AlertRecord[] };
 type FindingsResponse = { findings: FindingRecord[] };
 type TasksResponse = { tasks: TaskRecord[] };
-type EvidenceResponse = {
-  evidence: Array<{
+type EvidenceFilesResponse = {
+  evidence_files: Array<{
     id: string;
     task_id: string;
-    type: "link" | "file" | "log";
-    ref: string;
     created_at: string;
   }>;
 };
@@ -148,15 +146,18 @@ export default function AlertDetailsPage() {
 
       const evidencePairs = await Promise.all(
         alertTasks.map(async (task) => {
-          const response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/evidence`, {
-            method: "GET",
-            cache: "no-store",
-          });
+          const response = await fetch(
+            `/api/tasks/${encodeURIComponent(task.id)}/evidence-files?org_id=${encodeURIComponent(orgId)}`,
+            {
+              method: "GET",
+              cache: "no-store",
+            },
+          );
           if (!response.ok) {
             return [task.id, 0] as const;
           }
-          const body = (await response.json().catch(() => ({}))) as Partial<EvidenceResponse>;
-          return [task.id, Array.isArray(body.evidence) ? body.evidence.length : 0] as const;
+          const body = (await response.json().catch(() => ({}))) as Partial<EvidenceFilesResponse>;
+          return [task.id, Array.isArray(body.evidence_files) ? body.evidence_files.length : 0] as const;
         }),
       );
 

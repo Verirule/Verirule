@@ -8,7 +8,8 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
 type TaskStatus = "open" | "in_progress" | "blocked" | "done";
-type EvidenceType = "link" | "log";
+const MAX_EVIDENCE_UPLOAD_BYTES = 25_000_000;
+const ALLOWED_EVIDENCE_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg", ".txt", ".log"];
 
 type OrgRecord = {
   id: string;
@@ -38,20 +39,32 @@ type TaskCommentRecord = {
   created_at: string;
 };
 
-type TaskEvidenceRecord = {
+type EvidenceFileRecord = {
   id: string;
+  org_id: string;
   task_id: string;
-  type: "link" | "file" | "log";
-  ref: string;
+  filename: string;
+  storage_bucket: string;
+  storage_path: string;
+  content_type: string | null;
+  byte_size: number | null;
+  sha256: string | null;
+  uploaded_by: string | null;
   created_at: string;
 };
 
 type OrgsResponse = { orgs: OrgRecord[] };
 type TasksResponse = { tasks: TaskRecord[] };
 type CommentsResponse = { comments: TaskCommentRecord[] };
-type EvidenceResponse = { evidence: TaskEvidenceRecord[] };
-type TaskEvidenceUploadUrlResponse = { path: string; uploadUrl: string; expiresIn: number };
-type TaskEvidenceDownloadUrlResponse = { downloadUrl: string; expiresIn: number };
+type EvidenceFilesResponse = { evidence_files: EvidenceFileRecord[] };
+type EvidenceFileUploadUrlResponse = {
+  evidence_file_id: string;
+  bucket: string;
+  path: string;
+  signed_upload_url: string;
+  expires_in: number;
+};
+type EvidenceFileDownloadUrlResponse = { download_url: string; expires_in: number };
 
 function formatTime(value: string | null): string {
   if (!value) {
@@ -64,12 +77,43 @@ function formatTime(value: string | null): string {
   return parsed.toLocaleString();
 }
 
-function evidenceDisplayName(item: TaskEvidenceRecord): string {
-  if (item.type !== "file") {
-    return item.ref;
+function formatFileSize(byteSize: number | null): string {
+  if (byteSize === null || byteSize <= 0) {
+    return "Unknown size";
   }
-  const parts = item.ref.split("/");
-  return parts[parts.length - 1] || item.ref;
+  const kb = 1024;
+  const mb = kb * 1024;
+  if (byteSize >= mb) {
+    return `${(byteSize / mb).toFixed(2)} MB`;
+  }
+  if (byteSize >= kb) {
+    return `${(byteSize / kb).toFixed(1)} KB`;
+  }
+  return `${byteSize} B`;
+}
+
+function isAllowedEvidenceFile(file: File): boolean {
+  const lowerName = file.name.toLowerCase();
+  return ALLOWED_EVIDENCE_EXTENSIONS.some((ext) => lowerName.endsWith(ext));
+}
+
+function inferContentType(file: File): string | null {
+  if (file.type) {
+    return file.type;
+  }
+  const lowerName = file.name.toLowerCase();
+  if (lowerName.endsWith(".pdf")) return "application/pdf";
+  if (lowerName.endsWith(".png")) return "image/png";
+  if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) return "image/jpeg";
+  if (lowerName.endsWith(".txt") || lowerName.endsWith(".log")) return "text/plain";
+  return null;
+}
+
+async function sha256Hex(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function uploadFileToSignedUrl(
@@ -118,7 +162,7 @@ export default function DashboardTasksPage() {
   const [search, setSearch] = useState("");
 
   const [comments, setComments] = useState<TaskCommentRecord[]>([]);
-  const [evidence, setEvidence] = useState<TaskEvidenceRecord[]>([]);
+  const [evidenceFiles, setEvidenceFiles] = useState<EvidenceFileRecord[]>([]);
 
   const [isLoadingOrgs, setIsLoadingOrgs] = useState(true);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
@@ -127,12 +171,11 @@ export default function DashboardTasksPage() {
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [downloadingEvidenceId, setDownloadingEvidenceId] = useState<string | null>(null);
+  const [deletingEvidenceId, setDeletingEvidenceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [detailsError, setDetailsError] = useState<string | null>(null);
 
   const [commentBody, setCommentBody] = useState("");
-  const [evidenceType, setEvidenceType] = useState<EvidenceType>("link");
-  const [evidenceRef, setEvidenceRef] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const filteredTasks = useMemo(() => {
@@ -235,27 +278,30 @@ export default function DashboardTasksPage() {
           method: "GET",
           cache: "no-store",
         }),
-        fetch(`/api/tasks/${encodeURIComponent(task.id)}/evidence`, {
-          method: "GET",
-          cache: "no-store",
-        }),
+        fetch(
+          `/api/tasks/${encodeURIComponent(task.id)}/evidence-files?org_id=${encodeURIComponent(selectedOrgId)}`,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+        ),
       ]);
 
       const commentsBody = (await commentsResponse.json().catch(() => ({}))) as Partial<CommentsResponse>;
-      const evidenceBody = (await evidenceResponse.json().catch(() => ({}))) as Partial<EvidenceResponse>;
+      const evidenceBody = (await evidenceResponse.json().catch(() => ({}))) as Partial<EvidenceFilesResponse>;
 
       if (!commentsResponse.ok || !Array.isArray(commentsBody.comments)) {
         setDetailsError("Unable to load task comments.");
         return;
       }
 
-      if (!evidenceResponse.ok || !Array.isArray(evidenceBody.evidence)) {
-        setDetailsError("Unable to load task evidence.");
+      if (!evidenceResponse.ok || !Array.isArray(evidenceBody.evidence_files)) {
+        setDetailsError("Unable to load task evidence files.");
         return;
       }
 
       setComments(commentsBody.comments);
-      setEvidence(evidenceBody.evidence);
+      setEvidenceFiles(evidenceBody.evidence_files);
     } catch {
       setDetailsError("Unable to load task details.");
     } finally {
@@ -346,48 +392,23 @@ export default function DashboardTasksPage() {
     }
   };
 
-  const addEvidence = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!selectedTask || !evidenceRef.trim()) {
-      return;
-    }
-
-    setIsSavingTask(true);
-    setDetailsError(null);
-    try {
-      const response = await fetch(`/api/tasks/${encodeURIComponent(selectedTask.id)}/evidence`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: evidenceType, ref: evidenceRef.trim() }),
-      });
-
-      if (response.status === 401) {
-        window.location.href = "/auth/login";
-        return;
-      }
-
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { message?: unknown };
-        setDetailsError(typeof body.message === "string" ? body.message : "Unable to add evidence.");
-        return;
-      }
-
-      setEvidenceRef("");
-      await loadTaskDetails(selectedTask);
-    } catch {
-      setDetailsError("Unable to add evidence.");
-    } finally {
-      setIsSavingTask(false);
-    }
-  };
-
   const beginFileUpload = () => {
     fileInputRef.current?.click();
   };
 
   const onFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
-    if (!selectedTask || !file) {
+    if (!selectedTask || !selectedOrgId || !file) {
+      return;
+    }
+    if (!isAllowedEvidenceFile(file)) {
+      setDetailsError("Unsupported file type. Allowed: pdf, png, jpg, txt, log.");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > MAX_EVIDENCE_UPLOAD_BYTES) {
+      setDetailsError("File exceeds 25 MB limit.");
+      event.target.value = "";
       return;
     }
 
@@ -397,13 +418,15 @@ export default function DashboardTasksPage() {
 
     try {
       const uploadUrlResponse = await fetch(
-        `/api/tasks/${encodeURIComponent(selectedTask.id)}/evidence/upload-url`,
+        `/api/tasks/${encodeURIComponent(selectedTask.id)}/evidence-files/upload-url`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            org_id: selectedOrgId,
             filename: file.name,
-            content_type: file.type || null,
+            content_type: inferContentType(file),
+            byte_size: file.size,
           }),
         },
       );
@@ -413,7 +436,7 @@ export default function DashboardTasksPage() {
         return;
       }
 
-      const uploadUrlBody = (await uploadUrlResponse.json().catch(() => ({}))) as Partial<TaskEvidenceUploadUrlResponse> &
+      const uploadUrlBody = (await uploadUrlResponse.json().catch(() => ({}))) as Partial<EvidenceFileUploadUrlResponse> &
         { message?: unknown };
       if (!uploadUrlResponse.ok) {
         setDetailsError(
@@ -424,33 +447,36 @@ export default function DashboardTasksPage() {
         return;
       }
 
-      const uploadUrl = typeof uploadUrlBody.uploadUrl === "string" ? uploadUrlBody.uploadUrl : "";
-      const evidencePath = typeof uploadUrlBody.path === "string" ? uploadUrlBody.path : "";
-      if (!uploadUrl || !evidencePath) {
+      const uploadUrl =
+        typeof uploadUrlBody.signed_upload_url === "string" ? uploadUrlBody.signed_upload_url : "";
+      const evidenceFileId =
+        typeof uploadUrlBody.evidence_file_id === "string" ? uploadUrlBody.evidence_file_id : "";
+      if (!uploadUrl || !evidenceFileId) {
         setDetailsError("Unable to request file upload URL.");
         return;
       }
 
       await uploadFileToSignedUrl(uploadUrl, file, setUploadProgress);
+      const sha256 = await sha256Hex(file);
 
-      const fileEvidenceResponse = await fetch(
-        `/api/tasks/${encodeURIComponent(selectedTask.id)}/evidence/file`,
+      const finalizeResponse = await fetch(
+        `/api/evidence-files/${encodeURIComponent(evidenceFileId)}/finalize`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: evidencePath }),
+          body: JSON.stringify({ org_id: selectedOrgId, sha256 }),
         },
       );
 
-      if (fileEvidenceResponse.status === 401) {
+      if (finalizeResponse.status === 401) {
         window.location.href = "/auth/login";
         return;
       }
 
-      if (!fileEvidenceResponse.ok) {
-        const body = (await fileEvidenceResponse.json().catch(() => ({}))) as { message?: unknown };
+      if (!finalizeResponse.ok) {
+        const body = (await finalizeResponse.json().catch(() => ({}))) as { message?: unknown };
         setDetailsError(
-          typeof body.message === "string" ? body.message : "Unable to save file evidence.",
+          typeof body.message === "string" ? body.message : "Unable to finalize file evidence.",
         );
         return;
       }
@@ -465,8 +491,8 @@ export default function DashboardTasksPage() {
     }
   };
 
-  const openEvidenceFile = async (item: TaskEvidenceRecord) => {
-    if (!selectedTask || item.type !== "file") {
+  const openEvidenceFile = async (item: EvidenceFileRecord) => {
+    if (!selectedOrgId) {
       return;
     }
 
@@ -475,9 +501,7 @@ export default function DashboardTasksPage() {
 
     try {
       const response = await fetch(
-        `/api/tasks/${encodeURIComponent(selectedTask.id)}/evidence/${encodeURIComponent(
-          item.id,
-        )}/download-url`,
+        `/api/evidence-files/${encodeURIComponent(item.id)}/download-url?org_id=${encodeURIComponent(selectedOrgId)}`,
         {
           method: "GET",
           cache: "no-store",
@@ -489,20 +513,56 @@ export default function DashboardTasksPage() {
         return;
       }
 
-      const body = (await response.json().catch(() => ({}))) as Partial<TaskEvidenceDownloadUrlResponse> & {
+      const body = (await response.json().catch(() => ({}))) as Partial<EvidenceFileDownloadUrlResponse> & {
         message?: unknown;
       };
 
-      if (!response.ok || typeof body.downloadUrl !== "string") {
+      if (!response.ok || typeof body.download_url !== "string") {
         setDetailsError(typeof body.message === "string" ? body.message : "Unable to fetch download URL.");
         return;
       }
 
-      window.open(body.downloadUrl, "_blank", "noopener,noreferrer");
+      window.open(body.download_url, "_blank", "noopener,noreferrer");
     } catch {
       setDetailsError("Unable to fetch download URL.");
     } finally {
       setDownloadingEvidenceId(null);
+    }
+  };
+
+  const deleteEvidenceFile = async (item: EvidenceFileRecord) => {
+    if (!selectedTask || !selectedOrgId) {
+      return;
+    }
+    const confirmed = window.confirm(`Delete evidence file "${item.filename}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingEvidenceId(item.id);
+    setDetailsError(null);
+    try {
+      const response = await fetch(
+        `/api/evidence-files/${encodeURIComponent(item.id)}?org_id=${encodeURIComponent(selectedOrgId)}`,
+        {
+          method: "DELETE",
+          cache: "no-store",
+        },
+      );
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { message?: unknown };
+        setDetailsError(typeof body.message === "string" ? body.message : "Unable to delete evidence file.");
+        return;
+      }
+      await loadTaskDetails(selectedTask);
+    } catch {
+      setDetailsError("Unable to delete evidence file.");
+    } finally {
+      setDeletingEvidenceId(null);
     }
   };
 
@@ -678,12 +738,12 @@ export default function DashboardTasksPage() {
 
                 <section className="space-y-2 rounded-lg border border-border/70 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-medium">Evidence</h3>
+                    <h3 className="font-medium">Evidence Files</h3>
                     <div className="flex items-center gap-2">
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept="application/pdf,image/*,.txt"
+                        accept=".pdf,.png,.jpg,.jpeg,.txt,.log"
                         className="hidden"
                         onChange={onFileSelected}
                       />
@@ -694,7 +754,7 @@ export default function DashboardTasksPage() {
                         disabled={isUploadingFile || isSavingTask}
                         onClick={beginFileUpload}
                       >
-                        {isUploadingFile ? "Uploading..." : "Upload file"}
+                        {isUploadingFile ? "Uploading..." : "Upload evidence file"}
                       </Button>
                     </div>
                   </div>
@@ -703,61 +763,51 @@ export default function DashboardTasksPage() {
                     <p className="text-xs text-muted-foreground">Upload progress: {uploadProgress}%</p>
                   ) : null}
 
-                  {evidence.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No evidence attached yet.</p>
+                  {evidenceFiles.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No evidence files attached yet.</p>
                   ) : (
                     <ul className="space-y-2">
-                      {evidence.map((item) => (
+                      {evidenceFiles.map((item) => (
                         <li key={item.id} className="rounded-md border border-border/60 p-2 text-sm">
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="font-medium">{item.type}</p>
-                              <p className="break-all text-xs text-muted-foreground">
-                                {evidenceDisplayName(item)}
-                              </p>
+                              <p className="font-medium">{item.filename}</p>
+                              <p className="text-xs text-muted-foreground">{formatFileSize(item.byte_size)}</p>
                               <p className="text-xs text-muted-foreground">{formatTime(item.created_at)}</p>
                             </div>
-                            {item.type === "file" ? (
+                            <div className="flex items-center gap-2">
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                disabled={downloadingEvidenceId === item.id || isUploadingFile}
+                                disabled={
+                                  downloadingEvidenceId === item.id ||
+                                  deletingEvidenceId === item.id ||
+                                  isUploadingFile
+                                }
                                 onClick={() => void openEvidenceFile(item)}
                               >
-                                {downloadingEvidenceId === item.id ? "Loading..." : "View/Download"}
+                                {downloadingEvidenceId === item.id ? "Loading..." : "Download"}
                               </Button>
-                            ) : null}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={
+                                  deletingEvidenceId === item.id ||
+                                  downloadingEvidenceId === item.id ||
+                                  isUploadingFile
+                                }
+                                onClick={() => void deleteEvidenceFile(item)}
+                              >
+                                {deletingEvidenceId === item.id ? "Deleting..." : "Delete"}
+                              </Button>
+                            </div>
                           </div>
                         </li>
                       ))}
                     </ul>
                   )}
-
-                  <form onSubmit={addEvidence} className="space-y-2">
-                    <div className="grid gap-2 sm:grid-cols-[140px_1fr]">
-                      <select
-                        value={evidenceType}
-                        onChange={(event) => setEvidenceType(event.target.value as EvidenceType)}
-                        className="h-10 rounded-md border border-input bg-background px-2 text-sm"
-                      >
-                        <option value="link">link</option>
-                        <option value="log">log</option>
-                      </select>
-                      <Input
-                        value={evidenceRef}
-                        onChange={(event) => setEvidenceRef(event.target.value)}
-                        placeholder="URL or log reference"
-                      />
-                    </div>
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={isSavingTask || isUploadingFile || !evidenceRef.trim()}
-                    >
-                      Add Evidence
-                    </Button>
-                  </form>
                 </section>
 
                 {detailsError ? <p className="text-sm text-destructive">{detailsError}</p> : null}
