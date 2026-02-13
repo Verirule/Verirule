@@ -6,6 +6,7 @@ from io import BytesIO
 from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints import exports as exports_endpoint
+from app.billing import guard as billing_guard
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.main import app
 from app.worker import export_processor
@@ -49,6 +50,14 @@ def test_create_zip_export_queues(monkeypatch) -> None:
             },
         )(),
     )
+
+    async def fake_paid_plan(access_token: str, org_id: str) -> dict[str, str]:
+        assert access_token == "token-123"
+        assert org_id == ORG_ID
+        return {"id": org_id, "plan": "pro"}
+
+    monkeypatch.setattr(billing_guard, "select_org_billing", fake_paid_plan)
+
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123",
         claims={"sub": "user-1"},

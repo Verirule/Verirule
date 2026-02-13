@@ -1,6 +1,8 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints import integrations as integrations_endpoint
+from app.billing import guard as billing_guard
 from app.core import crypto as crypto_core
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.integrations import jira as jira_integration
@@ -30,6 +32,11 @@ async def fake_free_plan(access_token: str, org_id: str) -> dict[str, str]:
     return {"org_id": org_id, "plan": "free"}
 
 
+@pytest.fixture(autouse=True)
+def _default_paid_plan(monkeypatch) -> None:
+    monkeypatch.setattr(billing_guard, "select_org_billing", fake_paid_plan)
+
+
 def test_integrations_requires_token() -> None:
     client = TestClient(app)
     response = client.get("/api/v1/integrations", params={"org_id": ORG_ID})
@@ -45,7 +52,6 @@ def test_connect_slack_stores_ciphertext(monkeypatch) -> None:
         return INTEGRATION_ID
 
     monkeypatch.setattr(integrations_endpoint, "rpc_upsert_integration", fake_upsert)
-    monkeypatch.setattr(integrations_endpoint, "select_org_billing", fake_paid_plan)
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123",
@@ -77,7 +83,6 @@ def test_connect_slack_returns_501_when_secrets_key_missing(monkeypatch) -> None
         "get_settings",
         lambda: type("Settings", (), {"VERIRULE_SECRETS_KEY": None})(),
     )
-    monkeypatch.setattr(integrations_endpoint, "select_org_billing", fake_paid_plan)
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123",
@@ -139,7 +144,6 @@ def test_slack_test_endpoint_returns_200(monkeypatch) -> None:
 
     monkeypatch.setattr(integrations_endpoint, "select_integration_secret", fake_select_secret)
     monkeypatch.setattr(slack_integration.httpx, "AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr(integrations_endpoint, "select_org_billing", fake_paid_plan)
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123",
@@ -205,7 +209,6 @@ def test_jira_test_endpoint_returns_200(monkeypatch) -> None:
 
     monkeypatch.setattr(integrations_endpoint, "select_integration_secret", fake_select_secret)
     monkeypatch.setattr(jira_integration.httpx, "AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr(integrations_endpoint, "select_org_billing", fake_paid_plan)
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123",
@@ -291,7 +294,6 @@ def test_slack_notify_returns_200(monkeypatch) -> None:
     monkeypatch.setattr(integrations_endpoint, "select_alert_by_id", fake_select_alert_by_id)
     monkeypatch.setattr(integrations_endpoint, "select_finding_by_id", fake_select_finding_by_id)
     monkeypatch.setattr(slack_integration.httpx, "AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr(integrations_endpoint, "select_org_billing", fake_paid_plan)
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123",
@@ -391,7 +393,6 @@ def test_jira_create_issue_returns_issue_data(monkeypatch) -> None:
     monkeypatch.setattr(integrations_endpoint, "select_alert_by_id", fake_select_alert_by_id)
     monkeypatch.setattr(integrations_endpoint, "select_finding_by_id", fake_select_finding_by_id)
     monkeypatch.setattr(jira_integration.httpx, "AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr(integrations_endpoint, "select_org_billing", fake_paid_plan)
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123",
@@ -411,8 +412,8 @@ def test_jira_create_issue_returns_issue_data(monkeypatch) -> None:
     assert response.json() == {"issueKey": "VR-123", "url": f"{JIRA_BASE_URL}/browse/VR-123"}
 
 
-def test_connect_slack_returns_403_on_free_plan(monkeypatch) -> None:
-    monkeypatch.setattr(integrations_endpoint, "select_org_billing", fake_free_plan)
+def test_connect_slack_returns_402_on_free_plan(monkeypatch) -> None:
+    monkeypatch.setattr(billing_guard, "select_org_billing", fake_free_plan)
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123",
@@ -428,12 +429,12 @@ def test_connect_slack_returns_403_on_free_plan(monkeypatch) -> None:
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 403
+    assert response.status_code == 402
     assert response.json() == {"detail": "Upgrade required"}
 
 
-def test_slack_notify_returns_403_on_free_plan(monkeypatch) -> None:
-    monkeypatch.setattr(integrations_endpoint, "select_org_billing", fake_free_plan)
+def test_slack_notify_returns_402_on_free_plan(monkeypatch) -> None:
+    monkeypatch.setattr(billing_guard, "select_org_billing", fake_free_plan)
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123",
@@ -449,5 +450,5 @@ def test_slack_notify_returns_403_on_free_plan(monkeypatch) -> None:
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 403
+    assert response.status_code == 402
     assert response.json() == {"detail": "Upgrade required"}

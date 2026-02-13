@@ -11,6 +11,7 @@ from app.api.v1.schemas.integrations import (
     SlackConnectIn,
     SlackNotifyIn,
 )
+from app.billing.guard import require_feature
 from app.core.crypto import decrypt_json, encrypt_json
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.core.supabase_rest import (
@@ -20,7 +21,6 @@ from app.core.supabase_rest import (
     select_finding_by_id,
     select_integration_secret,
     select_integrations,
-    select_org_billing,
 )
 from app.integrations.jira import create_issue, test_connection
 from app.integrations.slack import build_alert_payload, send_webhook
@@ -84,20 +84,11 @@ async def _fetch_alert_and_finding(access_token: str, org_id: str, alert_id: str
     return alert, finding
 
 
-async def _require_paid_plan(access_token: str, org_id: str) -> None:
-    row = await select_org_billing(access_token, org_id)
-    plan = row.get("plan") if isinstance(row, dict) else None
-    if plan in {"pro", "business"}:
-        return
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Upgrade required",
-    )
-
-
 @router.get("/integrations")
 async def integrations(
-    org_id: UUID, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+    org_id: UUID,
+    auth: VerifiedSupabaseAuth = supabase_auth_dependency,
+    _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, list[IntegrationOut]]:
     rows = await select_integrations(auth.access_token, str(org_id))
     return {
@@ -119,9 +110,10 @@ async def integrations(
 
 @router.post("/integrations/slack/connect")
 async def connect_slack(
-    payload: SlackConnectIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+    payload: SlackConnectIn,
+    auth: VerifiedSupabaseAuth = supabase_auth_dependency,
+    _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, bool]:
-    await _require_paid_plan(auth.access_token, str(payload.org_id))
     ciphertext = encrypt_json({"webhook_url": payload.webhook_url.strip()})
     await rpc_upsert_integration(
         auth.access_token,
@@ -138,9 +130,10 @@ async def connect_slack(
 
 @router.post("/integrations/jira/connect")
 async def connect_jira(
-    payload: JiraConnectIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+    payload: JiraConnectIn,
+    auth: VerifiedSupabaseAuth = supabase_auth_dependency,
+    _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, bool]:
-    await _require_paid_plan(auth.access_token, str(payload.org_id))
     base_url = payload.base_url.strip().rstrip("/")
     email = payload.email.strip()
     api_token = payload.api_token.strip()
@@ -169,9 +162,10 @@ async def connect_jira(
 
 @router.post("/integrations/slack/test")
 async def test_slack(
-    payload: OrgIntegrationIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+    payload: OrgIntegrationIn,
+    auth: VerifiedSupabaseAuth = supabase_auth_dependency,
+    _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, bool]:
-    await _require_paid_plan(auth.access_token, str(payload.org_id))
     row = await select_integration_secret(auth.access_token, str(payload.org_id), "slack")
     _, ciphertext = _ensure_connected_secret(row, "Slack")
 
@@ -183,9 +177,10 @@ async def test_slack(
 
 @router.post("/integrations/jira/test")
 async def test_jira(
-    payload: OrgIntegrationIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+    payload: OrgIntegrationIn,
+    auth: VerifiedSupabaseAuth = supabase_auth_dependency,
+    _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, bool]:
-    await _require_paid_plan(auth.access_token, str(payload.org_id))
     row = await select_integration_secret(auth.access_token, str(payload.org_id), "jira")
     _, ciphertext = _ensure_connected_secret(row, "Jira")
 
@@ -199,9 +194,10 @@ async def test_jira(
 
 @router.post("/integrations/slack/notify")
 async def notify_slack(
-    payload: SlackNotifyIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+    payload: SlackNotifyIn,
+    auth: VerifiedSupabaseAuth = supabase_auth_dependency,
+    _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, bool]:
-    await _require_paid_plan(auth.access_token, str(payload.org_id))
     row = await select_integration_secret(auth.access_token, str(payload.org_id), "slack")
     _, ciphertext = _ensure_connected_secret(row, "Slack")
     secret = decrypt_json(ciphertext)
@@ -231,9 +227,10 @@ async def notify_slack(
 
 @router.post("/integrations/jira/create-issue")
 async def create_jira_issue(
-    payload: SlackNotifyIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+    payload: SlackNotifyIn,
+    auth: VerifiedSupabaseAuth = supabase_auth_dependency,
+    _feature: None = require_feature("integrations_enabled"),
 ) -> JiraCreateIssueOut:
-    await _require_paid_plan(auth.access_token, str(payload.org_id))
     row = await select_integration_secret(auth.access_token, str(payload.org_id), "jira")
     _, ciphertext = _ensure_connected_secret(row, "Jira")
     secret = decrypt_json(ciphertext)
@@ -269,6 +266,7 @@ async def disable_integration(
     integration_type: str,
     payload: OrgIntegrationIn,
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
+    _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, bool]:
     if integration_type not in {"slack", "jira"}:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found.")

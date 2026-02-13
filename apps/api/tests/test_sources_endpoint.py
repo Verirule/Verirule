@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.billing import guard as billing_guard
 from app.core import supabase_rest
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.main import app
@@ -349,11 +350,23 @@ def test_schedule_source_returns_ok_when_supabase_ok(monkeypatch) -> None:
         async def get(self, *args, **kwargs):  # pragma: no cover
             raise AssertionError("GET should not be called in schedule_source test")
 
+    async def fake_select_source_by_id(access_token: str, source_id: str) -> dict[str, str]:
+        assert access_token == "token-123"
+        assert source_id == "22222222-2222-2222-2222-222222222222"
+        return {"id": source_id, "org_id": "11111111-1111-1111-1111-111111111111"}
+
+    async def fake_select_org_billing(access_token: str, org_id: str) -> dict[str, str]:
+        assert access_token == "token-123"
+        assert org_id == "11111111-1111-1111-1111-111111111111"
+        return {"id": org_id, "plan": "pro"}
+
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123",
         claims={"sub": "user-1"},
     )
     monkeypatch.setattr(supabase_rest.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(billing_guard, "select_source_by_id", fake_select_source_by_id)
+    monkeypatch.setattr(billing_guard, "select_org_billing", fake_select_org_billing)
 
     try:
         client = TestClient(app)

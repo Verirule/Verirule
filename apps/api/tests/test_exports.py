@@ -1,14 +1,27 @@
 import asyncio
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints import exports as exports_endpoint
+from app.billing import guard as billing_guard
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.main import app
 from app.worker import export_processor
 
 ORG_ID = "11111111-1111-1111-1111-111111111111"
 EXPORT_ID = "22222222-2222-2222-2222-222222222222"
+
+
+async def _fake_paid_plan(access_token: str, org_id: str) -> dict[str, str]:
+    assert access_token == "token-123"
+    assert org_id == ORG_ID
+    return {"id": org_id, "plan": "pro"}
+
+
+@pytest.fixture(autouse=True)
+def _default_paid_plan(monkeypatch) -> None:
+    monkeypatch.setattr(billing_guard, "select_org_billing", _fake_paid_plan)
 
 
 def test_create_export_requires_auth() -> None:
@@ -129,6 +142,41 @@ def test_download_url_requires_succeeded(monkeypatch) -> None:
 
     assert response.status_code == 409
     assert response.json() == {"detail": "Export is not ready for download."}
+
+
+def test_create_export_returns_402_on_free_plan(monkeypatch) -> None:
+    async def fake_free_plan(access_token: str, org_id: str) -> dict[str, str]:
+        assert access_token == "token-123"
+        assert org_id == ORG_ID
+        return {"id": org_id, "plan": "free"}
+
+    monkeypatch.setattr(billing_guard, "select_org_billing", fake_free_plan)
+    monkeypatch.setattr(
+        exports_endpoint,
+        "get_settings",
+        lambda: type(
+            "Settings",
+            (),
+            {
+                "SUPABASE_SERVICE_ROLE_KEY": "service-role-123",
+                "EXPORTS_BUCKET_NAME": "exports",
+                "EXPORT_SIGNED_URL_SECONDS": 300,
+            },
+        )(),
+    )
+    app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
+        access_token="token-123",
+        claims={"sub": "user-1"},
+    )
+
+    try:
+        client = TestClient(app)
+        response = client.post("/api/v1/exports", json={"org_id": ORG_ID, "format": "pdf"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 402
+    assert response.json() == {"detail": "Upgrade required"}
 
 
 def test_export_processor_uploads_and_updates_status(monkeypatch) -> None:

@@ -8,6 +8,7 @@ from app.api.v1.schemas.exports import (
     ExportDownloadUrlOut,
     ExportOut,
 )
+from app.billing.guard import ensure_feature_enabled, require_feature
 from app.core.settings import get_settings
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.core.supabase_rest import (
@@ -32,7 +33,9 @@ def _ensure_exports_configured() -> None:
 
 @router.post("/exports")
 async def create_export(
-    payload: ExportCreateIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+    payload: ExportCreateIn,
+    auth: VerifiedSupabaseAuth = supabase_auth_dependency,
+    _feature: None = require_feature("exports_enabled"),
 ) -> ExportCreateOut:
     _ensure_exports_configured()
 
@@ -57,7 +60,9 @@ async def create_export(
 
 @router.get("/exports")
 async def list_exports(
-    org_id: UUID, auth: VerifiedSupabaseAuth = supabase_auth_dependency
+    org_id: UUID,
+    auth: VerifiedSupabaseAuth = supabase_auth_dependency,
+    _feature: None = require_feature("exports_enabled"),
 ) -> dict[str, list[ExportOut]]:
     _ensure_exports_configured()
     rows = await select_audit_exports(auth.access_token, str(org_id))
@@ -73,6 +78,17 @@ async def export_download_url(
     row = await select_audit_export_by_id(auth.access_token, str(export_id))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found.")
+    org_id = row.get("org_id")
+    if not isinstance(org_id, str) or not org_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid export response from Supabase.",
+        )
+    await ensure_feature_enabled(
+        access_token=auth.access_token,
+        org_id=org_id,
+        feature_name="exports_enabled",
+    )
 
     export_status = str(row.get("status") or "")
     file_path = row.get("file_path")

@@ -9,7 +9,13 @@ ORG_ID = "11111111-1111-1111-1111-111111111111"
 
 def test_billing_requires_token() -> None:
     client = TestClient(app)
-    response = client.get("/api/v1/billing", params={"org_id": ORG_ID})
+    response = client.get(f"/api/v1/orgs/{ORG_ID}/billing")
+    assert response.status_code == 401
+
+
+def test_billing_events_requires_token() -> None:
+    client = TestClient(app)
+    response = client.get(f"/api/v1/orgs/{ORG_ID}/billing/events")
     assert response.status_code == 401
 
 
@@ -27,17 +33,18 @@ def test_billing_returns_default_free_when_missing(monkeypatch) -> None:
 
     try:
         client = TestClient(app)
-        response = client.get("/api/v1/billing", params={"org_id": ORG_ID})
+        response = client.get(f"/api/v1/orgs/{ORG_ID}/billing")
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {
-        "org_id": ORG_ID,
-        "plan": "free",
-        "subscription_status": "inactive",
-        "current_period_end": None,
-    }
+    body = response.json()
+    assert body["org_id"] == ORG_ID
+    assert body["plan"] == "free"
+    assert body["plan_status"] == "active"
+    assert body["current_period_end"] is None
+    assert body["entitlements"]["integrations_enabled"] is False
+    assert body["entitlements"]["exports_enabled"] is False
 
 
 def test_billing_returns_stored_plan(monkeypatch) -> None:
@@ -45,9 +52,11 @@ def test_billing_returns_stored_plan(monkeypatch) -> None:
         assert access_token == "token-123"
         assert org_id == ORG_ID
         return {
-            "org_id": ORG_ID,
+            "id": ORG_ID,
             "plan": "business",
-            "subscription_status": "active",
+            "plan_status": "active",
+            "stripe_customer_id": "cus_live_123",
+            "stripe_subscription_id": "sub_live_123",
             "current_period_end": "2026-03-01T00:00:00Z",
         }
 
@@ -59,7 +68,7 @@ def test_billing_returns_stored_plan(monkeypatch) -> None:
 
     try:
         client = TestClient(app)
-        response = client.get("/api/v1/billing", params={"org_id": ORG_ID})
+        response = client.get(f"/api/v1/orgs/{ORG_ID}/billing")
     finally:
         app.dependency_overrides.clear()
 
@@ -67,6 +76,64 @@ def test_billing_returns_stored_plan(monkeypatch) -> None:
     assert response.json() == {
         "org_id": ORG_ID,
         "plan": "business",
-        "subscription_status": "active",
+        "plan_status": "active",
+        "stripe_customer_id": "cus_live_123",
+        "stripe_subscription_id": "sub_live_123",
         "current_period_end": "2026-03-01T00:00:00Z",
+        "entitlements": {
+            "plan": "business",
+            "integrations_enabled": True,
+            "exports_enabled": True,
+            "scheduling_enabled": True,
+            "max_sources": None,
+            "max_exports_per_month": None,
+            "max_integrations": None,
+        },
+    }
+
+
+def test_billing_events_returns_list(monkeypatch) -> None:
+    async def fake_select_billing_events(access_token: str, org_id: str, *, limit: int):
+        assert access_token == "token-123"
+        assert org_id == ORG_ID
+        assert limit == 10
+        return [
+            {
+                "id": "33333333-3333-3333-3333-333333333333",
+                "org_id": ORG_ID,
+                "stripe_event_id": "evt_123",
+                "event_type": "customer.subscription.updated",
+                "created_at": "2026-02-13T00:00:00Z",
+                "processed_at": "2026-02-13T00:00:01Z",
+                "status": "processed",
+                "error": None,
+            }
+        ]
+
+    monkeypatch.setattr(billing_endpoint, "select_billing_events", fake_select_billing_events)
+    app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
+        access_token="token-123",
+        claims={"sub": "user-1"},
+    )
+
+    try:
+        client = TestClient(app)
+        response = client.get(f"/api/v1/orgs/{ORG_ID}/billing/events", params={"limit": 10})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "events": [
+            {
+                "id": "33333333-3333-3333-3333-333333333333",
+                "org_id": ORG_ID,
+                "stripe_event_id": "evt_123",
+                "event_type": "customer.subscription.updated",
+                "created_at": "2026-02-13T00:00:00Z",
+                "processed_at": "2026-02-13T00:00:01Z",
+                "status": "processed",
+                "error": None,
+            }
+        ]
     }

@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from app.api.v1.schemas.sources import SourceCreateIn, SourceOut, SourceScheduleIn, SourceUpdateIn
+from app.billing.guard import require_feature
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.core.supabase_rest import (
     rpc_create_source,
@@ -77,6 +78,7 @@ async def schedule_source(
     source_id: UUID,
     payload: SourceScheduleIn,
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
+    _feature: None = require_feature("scheduling_enabled"),
 ) -> dict[str, bool]:
     await rpc_set_source_cadence(
         auth.access_token,
