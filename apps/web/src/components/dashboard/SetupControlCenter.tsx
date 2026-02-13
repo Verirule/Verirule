@@ -136,7 +136,7 @@ export function SetupControlCenter() {
             <CardContent className="space-y-3 text-sm">
               <StatusPill ok={data.siteUrl.ok} label="siteUrl" />
               <p className="text-muted-foreground">{data.siteUrl.detail}</p>
-              {!data.siteUrl.ok ? <FixLine value="NEXT_PUBLIC_SITE_URL=https://www.verirule.xyz" /> : null}
+              {!data.siteUrl.ok ? <FixLine value="NEXT_PUBLIC_SITE_URL=https://www.verirule.com" /> : null}
             </CardContent>
           </Card>
 

@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 
-const CANONICAL_SITE_URL = "https://www.verirule.xyz";
-const CANONICAL_SITE_HOST = "www.verirule.xyz";
+const CANONICAL_SITE_URL = "https://www.verirule.com";
+const CANONICAL_SITE_HOST = "www.verirule.com";
 const warnedSiteMessages = new Set<string>();
 
 function warnSiteConfig(message: string): void {
