@@ -20,7 +20,11 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     expose_headers=["X-Request-ID"],
 )
-app.add_middleware(RateLimitMiddleware, max_requests_per_minute=60)
+if settings.API_RATE_LIMIT_ENABLED:
+    app.add_middleware(
+        RateLimitMiddleware,
+        max_requests_per_minute=settings.API_RATE_LIMIT_PER_MINUTE,
+    )
 app.add_middleware(RequestIDMiddleware)
 
 app.include_router(v1_router, prefix="/api/v1")

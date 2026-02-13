@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     API_PORT: int = 8000
     LOG_LEVEL: str = "INFO"
     API_CORS_ORIGINS: str = "http://localhost:3000"
+    API_RATE_LIMIT_ENABLED: bool = True
+    API_RATE_LIMIT_PER_MINUTE: int = 60
     REQUIRE_ALERT_EVIDENCE_FOR_RESOLVE: bool = True
     ALERT_RESOLVE_MIN_EVIDENCE: int = 1
     SLACK_ALERT_NOTIFICATIONS_ENABLED: bool = True
