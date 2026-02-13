@@ -7,7 +7,7 @@ import { type NextRequest } from "next/server";
 function getValidatedNextRedirect(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const nextParam = requestUrl.searchParams.get("next");
-  const siteUrl = getSiteUrl(request) || requestUrl.origin;
+  const siteUrl = getSiteUrl(request);
   const defaultRedirect = `${siteUrl}/dashboard`;
 
   if (!nextParam) {

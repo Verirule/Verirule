@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { getSiteUrl } from "@/lib/env";
 import { createClient } from "@/lib/supabase/client";
 import {
   validateEmailAddress,
@@ -46,6 +47,7 @@ export function SignUpForm({
   const repeatPasswordError = repeatPasswordTouched || submitAttempted ? rawRepeatPasswordError : null;
   const submitDisabled = loading || Boolean(rawEmailError || rawPasswordError || rawRepeatPasswordError);
   const hasOAuthProviders = useMemo(() => getEnabledOAuthProviders().length > 0, []);
+  const siteUrl = useMemo(() => getSiteUrl(), []);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +70,7 @@ export function SignUpForm({
         email: trimmedEmail,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: `${siteUrl}/auth/callback`,
         },
       });
 
@@ -107,7 +109,7 @@ export function SignUpForm({
         type: "signup",
         email: trimmedEmail,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: `${siteUrl}/auth/callback`,
         },
       });
 

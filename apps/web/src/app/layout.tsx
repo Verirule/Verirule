@@ -2,11 +2,10 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { AccentThemeManager } from "@/src/components/theme/AccentThemeManager";
 import { ThemeProvider } from "@/src/components/theme/ThemeProvider";
+import { getSiteUrl } from "@/lib/env";
 import "./globals.css";
 
-const metadataBase = process.env.NEXT_PUBLIC_SITE_URL
-  ? new URL(process.env.NEXT_PUBLIC_SITE_URL)
-  : new URL("https://www.verirule.xyz");
+const metadataBase = new URL(getSiteUrl());
 
 export const metadata: Metadata = {
   metadataBase,
