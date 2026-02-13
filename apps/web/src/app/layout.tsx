@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Manrope, Space_Grotesk } from "next/font/google";
 import { AccentThemeManager } from "@/src/components/theme/AccentThemeManager";
 import { ThemeProvider } from "@/src/components/theme/ThemeProvider";
 import { getSiteUrl } from "@/lib/env";
@@ -18,8 +18,14 @@ export const metadata: Metadata = {
   },
 };
 
-const inter = Inter({
-  variable: "--font-inter",
+const manrope = Manrope({
+  variable: "--font-body",
+  display: "swap",
+  subsets: ["latin"],
+});
+
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-display",
   display: "swap",
   subsets: ["latin"],
 });
@@ -31,7 +37,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} antialiased`}>
+      <body className={`${manrope.className} ${manrope.variable} ${spaceGrotesk.variable} antialiased`}>
         <ThemeProvider>{children}</ThemeProvider>
         <AccentThemeManager />
       </body>

@@ -12,7 +12,7 @@ export function LogoMark({ className }: LogoMarkProps) {
       alt="Verirule"
       width={256}
       height={256}
-      className={cn("shrink-0", className)}
+      className={cn("shrink-0 object-contain", className)}
     />
   );
 }

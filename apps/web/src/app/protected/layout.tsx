@@ -14,11 +14,13 @@ export default function ProtectedLayout({
   return (
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col gap-12 items-center">
-        <nav className="vr-surface w-full flex justify-center border-b border-b-foreground/10 h-16">
+        <nav className="vr-surface w-full flex justify-center border-b-2 border-b-foreground/15 h-20">
           <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
             <Link href="/" className="flex items-center gap-3 font-semibold">
-              <LogoMark className="h-6 w-6" />
-              <span>Verirule</span>
+              <span className="vr-brand-chip h-11 w-11">
+                <LogoMark className="h-full w-full" />
+              </span>
+              <span className="text-lg font-bold">Verirule</span>
             </Link>
             {!hasEnvVars ? (
               <EnvVarWarning />

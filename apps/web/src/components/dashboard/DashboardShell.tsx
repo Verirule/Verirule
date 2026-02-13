@@ -132,8 +132,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="vr-page min-h-screen bg-background">
-      <header className="vr-surface sticky top-0 z-40 border-b border-border/60 bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
+      <header className="vr-surface sticky top-0 z-40 border-b-2 border-border/70 bg-background">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2">
             <Button
               type="button"
@@ -145,9 +145,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             >
               {mobileSidebarOpen ? <X /> : <Menu />}
             </Button>
-            <Link href="/" className="flex items-center gap-2 font-semibold">
-              <LogoMark className="h-6 w-6" />
-              <span>Verirule</span>
+            <Link href="/" className="flex items-center gap-3 font-semibold">
+              <span className="vr-brand-chip h-10 w-10 sm:h-11 sm:w-11">
+                <LogoMark className="h-full w-full" />
+              </span>
+              <span className="text-lg font-bold tracking-tight">Verirule</span>
             </Link>
           </div>
           <div className="flex items-center gap-2">
@@ -160,7 +162,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       <div className="mx-auto flex max-w-6xl">
         <aside
           className={cn(
-            "vr-surface fixed inset-y-0 left-0 z-30 w-72 border-r border-border/70 bg-background px-4 pb-6 pt-20 transition-transform duration-200 lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:translate-x-0 lg:pt-6",
+            "vr-surface fixed inset-y-0 left-0 z-30 w-72 border-r-2 border-border/70 bg-background px-4 pb-6 pt-20 transition-transform duration-200 lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:translate-x-0 lg:pt-6",
             mobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >

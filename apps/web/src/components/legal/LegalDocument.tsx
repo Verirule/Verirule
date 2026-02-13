@@ -19,9 +19,11 @@ export function LegalDocument({ title, summary, lastUpdated, sections }: LegalDo
     <div className="min-h-screen bg-[#0F172A] text-slate-100">
       <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 sm:py-14">
         <header className="mb-8">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <LogoMark className="h-7 w-7" />
-            <span className="font-semibold text-white">Verirule</span>
+          <Link href="/" className="inline-flex items-center gap-3">
+            <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 p-1">
+              <LogoMark className="h-full w-full" />
+            </span>
+            <span className="text-xl font-bold text-white">Verirule</span>
           </Link>
           <h1 className="mt-6 text-3xl font-semibold tracking-tight text-white sm:text-4xl">{title}</h1>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-300 sm:text-base">{summary}</p>
