@@ -14,14 +14,9 @@ export const metadata: Metadata = {
   description: "Regulatory monitoring and audit evidence workflow platform",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/brand/icon.svg", type: "image/svg+xml" },
-      { url: "/brand/icon-192.png", type: "image/png", sizes: "192x192" },
-      { url: "/brand/icon-512.png", type: "image/png", sizes: "512x512" },
-    ],
-    shortcut: "/favicon.ico",
-    apple: [{ url: "/brand/icon-192.png", sizes: "192x192" }],
+    icon: [{ url: "/brand/icon.svg", type: "image/svg+xml" }],
+    shortcut: "/brand/icon.svg",
+    apple: [{ url: "/brand/icon.svg", type: "image/svg+xml" }],
   },
 };
 
@@ -47,7 +42,7 @@ export default function RootLayout({
     "@type": "Organization",
     name: "Verirule",
     url: siteUrl,
-    logo: `${siteUrl}/brand/icon-512.png`,
+    logo: `${siteUrl}/brand/logo.svg`,
   };
 
   const websiteJsonLd = {
