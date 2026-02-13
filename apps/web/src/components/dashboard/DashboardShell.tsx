@@ -19,6 +19,7 @@ import {
   RadioTower,
   SearchCheck,
   Settings,
+  ShieldCheck,
   Workflow,
   X,
 } from "lucide-react";
@@ -52,6 +53,7 @@ const navigationSections: NavigationSection[] = [
     title: "Operations",
     links: [
       { href: "/dashboard/findings", label: "Findings", icon: SearchCheck },
+      { href: "/dashboard/controls", label: "Controls", icon: ShieldCheck },
       { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
       { href: "/dashboard/tasks", label: "Tasks", icon: ListChecks },
       { href: "/dashboard/audit", label: "Audit", icon: ClipboardList },

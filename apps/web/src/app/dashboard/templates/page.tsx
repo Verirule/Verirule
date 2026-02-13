@@ -100,6 +100,9 @@ export default function DashboardTemplatesPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [lastAppliedTemplateSlug, setLastAppliedTemplateSlug] = useState<string | null>(null);
+  const [isInstallingControls, setIsInstallingControls] = useState(false);
+  const [controlsInstallMessage, setControlsInstallMessage] = useState<string | null>(null);
 
   const selectedTemplate = useMemo(() => {
     if (!selectedTemplateSlug) {
@@ -190,6 +193,7 @@ export default function DashboardTemplatesPage() {
     setApplyingSlug(slug);
     setError(null);
     setSuccessMessage(null);
+    setControlsInstallMessage(null);
 
     const overrides: { cadence?: TemplateCadence; enable_all?: boolean } = {};
     if (overrideCadence) {
@@ -229,10 +233,58 @@ export default function DashboardTemplatesPage() {
       const skipped = typeof body.skipped === "number" ? body.skipped : 0;
       const templateName = templates.find((item) => item.slug === slug)?.name ?? slug;
       setSuccessMessage(`${templateName} applied. ${created} source(s) created, ${skipped} skipped.`);
+      setLastAppliedTemplateSlug(slug);
     } catch {
       setError("Unable to apply template right now.");
     } finally {
       setApplyingSlug(null);
+    }
+  };
+
+  const installRecommendedControls = async () => {
+    if (!selectedOrgId || !lastAppliedTemplateSlug) {
+      setError("Apply a template before installing controls.");
+      return;
+    }
+
+    setIsInstallingControls(true);
+    setError(null);
+    setControlsInstallMessage(null);
+
+    try {
+      const response = await fetch(
+        `/api/orgs/${encodeURIComponent(selectedOrgId)}/controls/install-from-template`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ template_slug: lastAppliedTemplateSlug }),
+        },
+      );
+      const body = (await response.json().catch(() => ({}))) as {
+        installed?: unknown;
+        message?: unknown;
+      };
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      if (!response.ok) {
+        const message =
+          typeof body.message === "string"
+            ? body.message
+            : "Unable to install recommended controls right now.";
+        setError(message);
+        return;
+      }
+
+      const installed = typeof body.installed === "number" ? body.installed : 0;
+      setControlsInstallMessage(`${installed} control(s) installed for this workspace.`);
+    } catch {
+      setError("Unable to install recommended controls right now.");
+    } finally {
+      setIsInstallingControls(false);
     }
   };
 
@@ -359,9 +411,27 @@ export default function DashboardTemplatesPage() {
           ) : null}
 
           {successMessage ? (
-            <p className="text-sm text-emerald-700">
-              {successMessage} <Link href="/dashboard/sources" className="underline">View sources</Link>
-            </p>
+            <div className="space-y-2">
+              <p className="text-sm text-emerald-700">
+                {successMessage} <Link href="/dashboard/sources" className="underline">View sources</Link>
+              </p>
+              {lastAppliedTemplateSlug ? (
+                <div className="rounded-md border border-border/70 bg-card p-3">
+                  <p className="text-sm">Install recommended controls for this template.</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button type="button" size="sm" onClick={() => void installRecommendedControls()} disabled={isInstallingControls}>
+                      {isInstallingControls ? "Installing..." : "Install controls"}
+                    </Button>
+                    <Link href="/dashboard/controls" className="text-xs underline">
+                      Open controls dashboard
+                    </Link>
+                  </div>
+                  {controlsInstallMessage ? (
+                    <p className="mt-2 text-xs text-emerald-700">{controlsInstallMessage}</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           ) : null}
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </CardContent>

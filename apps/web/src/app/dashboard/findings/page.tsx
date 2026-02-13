@@ -31,8 +31,45 @@ type FindingRecord = {
   has_explanation: boolean;
 };
 
+type ControlConfidence = "low" | "medium" | "high";
+
+type OrgControlCatalogRecord = {
+  id: string;
+  control_id: string;
+  framework_slug: string;
+  control_key: string;
+  title: string;
+  status: "not_started" | "in_progress" | "implemented" | "needs_review";
+};
+
+type FindingControlRecord = {
+  id: string;
+  org_id: string;
+  finding_id: string;
+  control_id: string;
+  confidence: ControlConfidence;
+  created_at: string;
+  framework_slug: string;
+  control_key: string;
+  title: string;
+  severity_default: "low" | "medium" | "high";
+  tags: string[];
+};
+
+type ControlSuggestionRecord = {
+  control_id: string;
+  framework_slug: string;
+  control_key: string;
+  title: string;
+  confidence: ControlConfidence;
+  reasons: string[];
+};
+
 type OrgsResponse = { orgs: OrgRecord[] };
 type FindingsResponse = { findings: FindingRecord[] };
+type OrgControlsResponse = { controls: OrgControlCatalogRecord[] };
+type FindingControlsResponse = { controls: FindingControlRecord[] };
+type ControlSuggestResponse = { suggestions: ControlSuggestionRecord[] };
 type FindingExplanationCitation = {
   quote: string;
   context: string;
@@ -80,6 +117,16 @@ export default function DashboardFindingsPage() {
   const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
   const [explanationError, setExplanationError] = useState<string | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
+  const [orgControlsCatalog, setOrgControlsCatalog] = useState<OrgControlCatalogRecord[]>([]);
+  const [mappedControls, setMappedControls] = useState<FindingControlRecord[]>([]);
+  const [controlSuggestions, setControlSuggestions] = useState<ControlSuggestionRecord[]>([]);
+  const [manualControlSearch, setManualControlSearch] = useState("");
+  const [selectedManualControlId, setSelectedManualControlId] = useState("");
+  const [linkConfidence, setLinkConfidence] = useState<ControlConfidence>("medium");
+  const [isLoadingMappings, setIsLoadingMappings] = useState(false);
+  const [isSuggestingControls, setIsSuggestingControls] = useState(false);
+  const [isLinkingControl, setIsLinkingControl] = useState(false);
+  const [mappingError, setMappingError] = useState<string | null>(null);
 
   const filteredFindings = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -169,6 +216,76 @@ export default function DashboardFindingsPage() {
     }
   };
 
+  const loadOrgControlsCatalog = async (orgId: string) => {
+    if (!orgId) {
+      setOrgControlsCatalog([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/orgs/${encodeURIComponent(orgId)}/controls`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const body = (await response.json().catch(() => ({}))) as Partial<OrgControlsResponse>;
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      if (!response.ok || !Array.isArray(body.controls)) {
+        setOrgControlsCatalog([]);
+        return;
+      }
+
+      setOrgControlsCatalog(body.controls);
+    } catch {
+      setOrgControlsCatalog([]);
+    }
+  };
+
+  const loadMappedControls = async (findingId: string, orgId: string) => {
+    if (!findingId || !orgId) {
+      setMappedControls([]);
+      return;
+    }
+
+    setIsLoadingMappings(true);
+    setMappingError(null);
+    try {
+      const response = await fetch(
+        `/api/findings/${encodeURIComponent(findingId)}/controls?org_id=${encodeURIComponent(orgId)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      );
+      const body = (await response.json().catch(() => ({}))) as Partial<FindingControlsResponse> & {
+        message?: unknown;
+      };
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      if (!response.ok || !Array.isArray(body.controls)) {
+        const message = typeof body.message === "string" ? body.message : "Unable to load mapped controls right now.";
+        setMappingError(message);
+        setMappedControls([]);
+        return;
+      }
+
+      setMappedControls(body.controls);
+    } catch {
+      setMappingError("Unable to load mapped controls right now.");
+      setMappedControls([]);
+    } finally {
+      setIsLoadingMappings(false);
+    }
+  };
+
   useEffect(() => {
     void loadOrgs();
   }, []);
@@ -176,9 +293,11 @@ export default function DashboardFindingsPage() {
   useEffect(() => {
     if (!selectedOrgId) {
       setFindings([]);
+      setOrgControlsCatalog([]);
       return;
     }
     void loadFindings(selectedOrgId);
+    void loadOrgControlsCatalog(selectedOrgId);
   }, [selectedOrgId]);
 
   const loadExplanation = async (findingId: string) => {
@@ -244,7 +363,115 @@ export default function DashboardFindingsPage() {
     setExplanation(null);
     setExplanationError(null);
     setIsLoadingExplanation(false);
+    setMappedControls([]);
+    setControlSuggestions([]);
+    setManualControlSearch("");
+    setSelectedManualControlId("");
+    setMappingError(null);
+    if (selectedOrgId) {
+      void loadMappedControls(finding.id, selectedOrgId);
+    }
   };
+
+  const suggestControls = async () => {
+    if (!selectedFinding || !selectedOrgId) {
+      setMappingError("Select a workspace and finding before requesting suggestions.");
+      return;
+    }
+
+    setIsSuggestingControls(true);
+    setMappingError(null);
+    try {
+      const response = await fetch(
+        `/api/findings/${encodeURIComponent(selectedFinding.id)}/controls/suggest?org_id=${encodeURIComponent(selectedOrgId)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      );
+      const body = (await response.json().catch(() => ({}))) as Partial<ControlSuggestResponse> & {
+        message?: unknown;
+      };
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      if (!response.ok || !Array.isArray(body.suggestions)) {
+        const message = typeof body.message === "string" ? body.message : "Unable to suggest controls right now.";
+        setMappingError(message);
+        setControlSuggestions([]);
+        return;
+      }
+
+      setControlSuggestions(body.suggestions);
+    } catch {
+      setMappingError("Unable to suggest controls right now.");
+      setControlSuggestions([]);
+    } finally {
+      setIsSuggestingControls(false);
+    }
+  };
+
+  const linkControl = async (controlId: string, confidence: ControlConfidence) => {
+    if (!selectedFinding || !selectedOrgId || !controlId) {
+      setMappingError("Select a control before linking.");
+      return;
+    }
+
+    setIsLinkingControl(true);
+    setMappingError(null);
+    try {
+      const response = await fetch(`/api/findings/${encodeURIComponent(selectedFinding.id)}/controls`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          org_id: selectedOrgId,
+          control_id: controlId,
+          confidence,
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { message?: unknown };
+
+      if (response.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      if (!response.ok) {
+        const message = typeof body.message === "string" ? body.message : "Unable to link control right now.";
+        setMappingError(message);
+        return;
+      }
+
+      await loadMappedControls(selectedFinding.id, selectedOrgId);
+      setControlSuggestions((current) => current.filter((item) => item.control_id !== controlId));
+      setSelectedManualControlId("");
+    } catch {
+      setMappingError("Unable to link control right now.");
+    } finally {
+      setIsLinkingControl(false);
+    }
+  };
+
+  const availableManualControls = useMemo(() => {
+    const query = manualControlSearch.trim().toLowerCase();
+    const mappedIds = new Set(mappedControls.map((item) => item.control_id));
+    return orgControlsCatalog
+      .filter((item) => !mappedIds.has(item.control_id))
+      .filter((item) => {
+        if (!query) {
+          return true;
+        }
+        return (
+          item.control_key.toLowerCase().includes(query) ||
+          item.title.toLowerCase().includes(query) ||
+          item.framework_slug.toLowerCase().includes(query)
+        );
+      })
+      .slice(0, 100);
+  }, [manualControlSearch, mappedControls, orgControlsCatalog]);
 
   return (
     <div className="space-y-6">
@@ -408,6 +635,115 @@ export default function DashboardFindingsPage() {
                 <p className="break-all text-sm">{selectedFinding.fingerprint}</p>
               </div>
               <div className="space-y-3 border-t border-border/70 pt-3">
+                <div className="space-y-3 rounded-md border border-border/70 bg-background p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">Mapped controls</p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isSuggestingControls || isLinkingControl || isLoadingMappings}
+                      onClick={() => void suggestControls()}
+                    >
+                      {isSuggestingControls ? "Suggesting..." : "Suggest controls"}
+                    </Button>
+                  </div>
+
+                  {isLoadingMappings ? <p className="text-sm text-muted-foreground">Loading mapped controls...</p> : null}
+                  {!isLoadingMappings && mappedControls.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No controls are linked to this finding.</p>
+                  ) : null}
+                  {!isLoadingMappings && mappedControls.length > 0 ? (
+                    <ul className="space-y-2">
+                      {mappedControls.map((control) => (
+                        <li key={control.id} className="rounded border border-border/60 bg-card px-2 py-2">
+                          <p className="text-sm font-medium">
+                            {control.control_key} - {control.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {control.framework_slug} | confidence {control.confidence}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+
+                  {controlSuggestions.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Suggested controls</p>
+                      <ul className="space-y-2">
+                        {controlSuggestions.map((suggestion) => (
+                          <li key={suggestion.control_id} className="rounded border border-border/60 bg-card px-2 py-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {suggestion.control_key} - {suggestion.title}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {suggestion.framework_slug} | confidence {suggestion.confidence}
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={isLinkingControl}
+                                onClick={() => void linkControl(suggestion.control_id, suggestion.confidence)}
+                              >
+                                Link
+                              </Button>
+                            </div>
+                            {suggestion.reasons.length > 0 ? (
+                              <p className="mt-1 text-xs text-muted-foreground">{suggestion.reasons.join(" | ")}</p>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  <div className="space-y-2 rounded-md border border-border/60 bg-card p-2">
+                    <p className="text-sm text-muted-foreground">Manual link</p>
+                    <Input
+                      value={manualControlSearch}
+                      onChange={(event) => setManualControlSearch(event.target.value)}
+                      placeholder="Search control key, title, or framework"
+                      maxLength={160}
+                    />
+                    <select
+                      value={selectedManualControlId}
+                      onChange={(event) => setSelectedManualControlId(event.target.value)}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="">Select control</option>
+                      {availableManualControls.map((control) => (
+                        <option key={control.id} value={control.control_id}>
+                          {control.control_key} - {control.title}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="grid gap-2 sm:grid-cols-[160px_1fr]">
+                      <select
+                        value={linkConfidence}
+                        onChange={(event) => setLinkConfidence(event.target.value as ControlConfidence)}
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="low">Low confidence</option>
+                        <option value="medium">Medium confidence</option>
+                        <option value="high">High confidence</option>
+                      </select>
+                      <Button
+                        type="button"
+                        disabled={!selectedManualControlId || isLinkingControl}
+                        onClick={() => void linkControl(selectedManualControlId, linkConfidence)}
+                      >
+                        {isLinkingControl ? "Linking..." : "Link selected control"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {mappingError ? <p className="text-sm text-destructive">{mappingError}</p> : null}
+                </div>
+
                 <Button
                   type="button"
                   size="sm"
