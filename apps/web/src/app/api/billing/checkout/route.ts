@@ -57,9 +57,9 @@ export async function POST(request: NextRequest) {
   }
 
   const { data: billingRow, error: billingError } = await supabase
-    .from("org_billing")
+    .from("orgs")
     .select("stripe_customer_id")
-    .eq("org_id", orgId)
+    .eq("id", orgId)
     .maybeSingle();
   if (billingError) {
     return NextResponse.json({ message: "Failed to load billing record" }, { status: 502 });
@@ -84,8 +84,8 @@ export async function POST(request: NextRequest) {
       mode: "subscription",
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${siteUrl}/dashboard/settings/billing?success=1`,
-      cancel_url: `${siteUrl}/dashboard/settings/billing?canceled=1`,
+      success_url: `${siteUrl}/dashboard/billing?success=1`,
+      cancel_url: `${siteUrl}/dashboard/billing?canceled=1`,
       metadata: {
         org_id: orgId,
         user_id: userId,

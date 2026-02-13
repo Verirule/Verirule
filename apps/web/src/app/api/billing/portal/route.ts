@@ -45,9 +45,9 @@ export async function POST(request: NextRequest) {
   }
 
   const { data: billingRow, error: billingError } = await supabase
-    .from("org_billing")
+    .from("orgs")
     .select("stripe_customer_id")
-    .eq("org_id", orgId)
+    .eq("id", orgId)
     .maybeSingle();
   if (billingError) {
     return NextResponse.json({ message: "Failed to load billing record" }, { status: 502 });
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     const stripe = getStripeServerClient();
     const session = await stripe.billingPortal.sessions.create({
       customer: stripeCustomerId,
-      return_url: `${siteUrl}/dashboard/settings/billing`,
+      return_url: `${siteUrl}/dashboard/billing`,
     });
     return NextResponse.json({ url: session.url }, { status: 200 });
   } catch (error: unknown) {

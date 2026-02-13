@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  FREE_SOURCE_LIMIT,
+  type BillingEntitlements,
+  type BillingPlanStatus,
   getPlanFeatures,
   type BillingPlan,
   type BillingStatusResponse,
@@ -13,9 +16,11 @@ type PlanState = BillingStatusResponse & {
 };
 
 type UsePlanResult = {
+  orgId: string | null;
   plan: BillingPlan;
-  status: string | null;
+  status: BillingPlanStatus;
   currentPeriodEnd: string | null;
+  entitlements: BillingEntitlements;
   features: PlanFeatures;
   loading: boolean;
   error: string | null;
@@ -28,11 +33,54 @@ function normalizeStatus(payload: unknown): BillingStatusResponse {
   const row = (payload ?? {}) as Partial<BillingStatusResponse>;
   const plan: BillingPlan =
     row.plan === "pro" || row.plan === "business" || row.plan === "free" ? row.plan : "free";
-  return {
+  const planStatus: BillingPlanStatus =
+    row.plan_status === "past_due" ||
+    row.plan_status === "canceled" ||
+    row.plan_status === "trialing" ||
+    row.plan_status === "active"
+      ? row.plan_status
+      : "active";
+
+  const fallbackFeatures = getPlanFeatures(plan);
+  const entitlements: BillingEntitlements = {
     plan,
-    status: typeof row.status === "string" ? row.status : null,
+    integrations_enabled:
+      typeof row.entitlements?.integrations_enabled === "boolean"
+        ? row.entitlements.integrations_enabled
+        : fallbackFeatures.canUseIntegrations,
+    exports_enabled:
+      typeof row.entitlements?.exports_enabled === "boolean"
+        ? row.entitlements.exports_enabled
+        : fallbackFeatures.canUseExports,
+    scheduling_enabled:
+      typeof row.entitlements?.scheduling_enabled === "boolean"
+        ? row.entitlements.scheduling_enabled
+        : fallbackFeatures.canUseScheduledRuns,
+    max_sources:
+      typeof row.entitlements?.max_sources === "number" || row.entitlements?.max_sources === null
+        ? row.entitlements.max_sources
+        : fallbackFeatures.maxSources,
+    max_exports_per_month:
+      typeof row.entitlements?.max_exports_per_month === "number" ||
+      row.entitlements?.max_exports_per_month === null
+        ? row.entitlements.max_exports_per_month
+        : fallbackFeatures.maxExportsPerMonth,
+    max_integrations:
+      typeof row.entitlements?.max_integrations === "number" || row.entitlements?.max_integrations === null
+        ? row.entitlements.max_integrations
+        : fallbackFeatures.maxIntegrations,
+  };
+
+  return {
+    org_id: typeof row.org_id === "string" ? row.org_id : "",
+    plan,
+    plan_status: planStatus,
+    stripe_customer_id: typeof row.stripe_customer_id === "string" ? row.stripe_customer_id : null,
+    stripe_subscription_id:
+      typeof row.stripe_subscription_id === "string" ? row.stripe_subscription_id : null,
     current_period_end:
       typeof row.current_period_end === "string" ? row.current_period_end : null,
+    entitlements,
   };
 }
 
@@ -41,7 +89,7 @@ async function fetchPlanStatus(orgId: string, forceRefresh = false): Promise<Bil
     return statusPromiseCache.get(orgId) as Promise<BillingStatusResponse>;
   }
 
-  const pending = fetch(`/api/billing/status?org_id=${encodeURIComponent(orgId)}`, {
+  const pending = fetch(`/api/billing?org_id=${encodeURIComponent(orgId)}`, {
     method: "GET",
     cache: "no-store",
   }).then(async (response) => {
@@ -56,9 +104,21 @@ async function fetchPlanStatus(orgId: string, forceRefresh = false): Promise<Bil
 }
 
 const FREE_PLAN_STATE: PlanState = {
+  org_id: "",
   plan: "free",
-  status: "inactive",
+  plan_status: "active",
+  stripe_customer_id: null,
+  stripe_subscription_id: null,
   current_period_end: null,
+  entitlements: {
+    plan: "free",
+    integrations_enabled: false,
+    exports_enabled: false,
+    scheduling_enabled: false,
+    max_sources: FREE_SOURCE_LIMIT,
+    max_exports_per_month: 5,
+    max_integrations: 0,
+  },
   features: getPlanFeatures("free"),
 };
 
@@ -80,9 +140,17 @@ export function usePlan(orgId: string): UsePlanResult {
       setError(null);
       try {
         const result = await fetchPlanStatus(orgId, forceRefresh);
+        const features: PlanFeatures = {
+          canUseIntegrations: result.entitlements.integrations_enabled,
+          canUseExports: result.entitlements.exports_enabled,
+          canUseScheduledRuns: result.entitlements.scheduling_enabled,
+          maxSources: result.entitlements.max_sources,
+          maxExportsPerMonth: result.entitlements.max_exports_per_month,
+          maxIntegrations: result.entitlements.max_integrations,
+        };
         setState({
           ...result,
-          features: getPlanFeatures(result.plan),
+          features,
         });
       } catch {
         setState(FREE_PLAN_STATE);
@@ -99,9 +167,11 @@ export function usePlan(orgId: string): UsePlanResult {
   }, [load]);
 
   return {
+    orgId: state.org_id || null,
     plan: state.plan,
-    status: state.status,
+    status: state.plan_status,
     currentPeriodEnd: state.current_period_end,
+    entitlements: state.entitlements,
     features: state.features,
     loading,
     error,

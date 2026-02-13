@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePlan } from "@/src/components/billing/usePlan";
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 type OrgRecord = {
   id: string;
@@ -149,7 +149,7 @@ export default function DashboardAlertsPage() {
     }
   };
 
-  const loadAlertsAndFindings = async (orgId: string) => {
+  const loadAlertsAndFindings = useCallback(async (orgId: string) => {
     if (!orgId) {
       setAlerts([]);
       setFindings([]);
@@ -171,20 +171,28 @@ export default function DashboardAlertsPage() {
           method: "GET",
           cache: "no-store",
         }),
-        fetch(`/api/integrations?org_id=${encodeURIComponent(orgId)}`, {
-          method: "GET",
-          cache: "no-store",
-        }),
+        planFeatures.canUseIntegrations
+          ? fetch(`/api/integrations?org_id=${encodeURIComponent(orgId)}`, {
+              method: "GET",
+              cache: "no-store",
+            })
+          : Promise.resolve(null),
       ]);
 
-      if (alertsResponse.status === 401 || findingsResponse.status === 401 || integrationsResponse.status === 401) {
+      if (
+        alertsResponse.status === 401 ||
+        findingsResponse.status === 401 ||
+        integrationsResponse?.status === 401
+      ) {
         window.location.href = "/auth/login";
         return;
       }
 
       const alertsBody = (await alertsResponse.json().catch(() => ({}))) as Partial<AlertsResponse>;
       const findingsBody = (await findingsResponse.json().catch(() => ({}))) as Partial<FindingsResponse>;
-      const integrationsBody = (await integrationsResponse.json().catch(() => ({}))) as Partial<IntegrationsResponse>;
+      const integrationsBody = integrationsResponse
+        ? ((await integrationsResponse.json().catch(() => ({}))) as Partial<IntegrationsResponse>)
+        : { integrations: [] };
 
       if (!alertsResponse.ok || !Array.isArray(alertsBody.alerts)) {
         setError("Unable to load alerts right now.");
@@ -197,7 +205,7 @@ export default function DashboardAlertsPage() {
         setFindings([]);
         return;
       }
-      if (!integrationsResponse.ok || !Array.isArray(integrationsBody.integrations)) {
+      if (integrationsResponse && (!integrationsResponse.ok || !Array.isArray(integrationsBody.integrations))) {
         setError("Unable to load integrations right now.");
         setIntegrations([]);
         return;
@@ -205,7 +213,7 @@ export default function DashboardAlertsPage() {
 
       setAlerts(alertsBody.alerts);
       setFindings(findingsBody.findings);
-      setIntegrations(integrationsBody.integrations);
+      setIntegrations(Array.isArray(integrationsBody.integrations) ? integrationsBody.integrations : []);
     } catch {
       setError("Unable to load alerts right now.");
       setAlerts([]);
@@ -214,7 +222,7 @@ export default function DashboardAlertsPage() {
     } finally {
       setIsLoadingAlerts(false);
     }
-  };
+  }, [planFeatures.canUseIntegrations]);
 
   useEffect(() => {
     void loadOrgs();
@@ -228,7 +236,7 @@ export default function DashboardAlertsPage() {
       return;
     }
     void loadAlertsAndFindings(selectedOrgId);
-  }, [selectedOrgId]);
+  }, [selectedOrgId, loadAlertsAndFindings]);
 
   const updateAlert = async (alertId: string, status: AlertAction) => {
     setUpdatingAlertId(alertId);

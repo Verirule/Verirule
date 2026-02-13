@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useEffect, useState } from "react";
+import { usePlan } from "@/src/components/billing/usePlan";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 
 type OrgRecord = {
   id: string;
@@ -74,6 +76,7 @@ export default function DashboardExportsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const { features } = usePlan(selectedOrgId);
 
   const loadOrgs = async () => {
     setIsLoadingOrgs(true);
@@ -111,8 +114,12 @@ export default function DashboardExportsPage() {
     }
   };
 
-  const loadExports = async (orgId: string) => {
+  const loadExports = useCallback(async (orgId: string) => {
     if (!orgId) {
+      setExportRows([]);
+      return;
+    }
+    if (!features.canUseExports) {
       setExportRows([]);
       return;
     }
@@ -147,11 +154,15 @@ export default function DashboardExportsPage() {
     } finally {
       setIsLoadingExports(false);
     }
-  };
+  }, [features.canUseExports]);
 
   const generateExport = async () => {
     if (!selectedOrgId) {
       setError("Select a workspace first.");
+      return;
+    }
+    if (!features.canUseExports) {
+      setError("Upgrade required to generate exports.");
       return;
     }
 
@@ -220,6 +231,11 @@ export default function DashboardExportsPage() {
   };
 
   const openDownload = async (exportId: string) => {
+    if (!features.canUseExports) {
+      setError("Upgrade required to download exports.");
+      return;
+    }
+
     setError(null);
     try {
       const response = await fetch(`/api/exports/${encodeURIComponent(exportId)}/download-url`, {
@@ -256,16 +272,20 @@ export default function DashboardExportsPage() {
       setExportRows([]);
       return;
     }
+    if (!features.canUseExports) {
+      setExportRows([]);
+      return;
+    }
     void loadExports(selectedOrgId);
-  }, [selectedOrgId]);
+  }, [selectedOrgId, features.canUseExports, loadExports]);
 
   useEffect(() => {
-    if (!selectedOrgId) return;
+    if (!selectedOrgId || !features.canUseExports) return;
     const interval = window.setInterval(() => {
       void loadExports(selectedOrgId);
     }, 15000);
     return () => window.clearInterval(interval);
-  }, [selectedOrgId]);
+  }, [selectedOrgId, features.canUseExports, loadExports]);
 
   return (
     <div className="space-y-6">
@@ -341,9 +361,18 @@ export default function DashboardExportsPage() {
                 </div>
               </div>
 
-              <Button type="button" onClick={generateExport} disabled={isGenerating || !selectedOrgId}>
-                {isGenerating ? "Generating..." : "Generate export"}
-              </Button>
+              {features.canUseExports ? (
+                <Button type="button" onClick={generateExport} disabled={isGenerating || !selectedOrgId}>
+                  {isGenerating ? "Generating..." : "Generate export"}
+                </Button>
+              ) : (
+                <div className="space-y-2 rounded-md border border-border/70 bg-muted/30 p-3">
+                  <p className="text-sm text-muted-foreground">Exports are available on Pro and Business plans.</p>
+                  <Button asChild size="sm">
+                    <Link href="/dashboard/billing">Upgrade plan</Link>
+                  </Button>
+                </div>
+              )}
             </>
           ) : null}
           {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
@@ -357,12 +386,15 @@ export default function DashboardExportsPage() {
           <CardDescription>Queued and completed exports for the selected workspace.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {!features.canUseExports && selectedOrgId ? (
+            <p className="text-sm text-muted-foreground">Upgrade to view and manage export history.</p>
+          ) : null}
           {isLoadingExports ? <p className="text-sm text-muted-foreground">Loading exports...</p> : null}
-          {!isLoadingExports && selectedOrgId && exportRows.length === 0 ? (
+          {!isLoadingExports && selectedOrgId && exportRows.length === 0 && features.canUseExports ? (
             <p className="text-sm text-muted-foreground">No exports for this workspace yet.</p>
           ) : null}
 
-          {!isLoadingExports && exportRows.length > 0 ? (
+          {!isLoadingExports && exportRows.length > 0 && features.canUseExports ? (
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
                 <thead className="border-b border-border/70 text-xs uppercase tracking-wide text-muted-foreground">

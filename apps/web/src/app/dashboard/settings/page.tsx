@@ -20,7 +20,7 @@ export default function DashboardSettingsPage() {
           Manage subscription plan, checkout, and self-serve billing portal access.
         </p>
         <Link
-          href="/dashboard/settings/billing"
+          href="/dashboard/billing"
           className="mt-4 inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-medium transition-colors hover:bg-accent"
         >
           Open Billing

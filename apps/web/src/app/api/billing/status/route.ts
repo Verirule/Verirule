@@ -4,7 +4,7 @@ import type { BillingPlan } from "@/src/lib/billing";
 
 type BillingRow = {
   plan: BillingPlan;
-  subscription_status: string | null;
+  plan_status: string | null;
   current_period_end: string | null;
 };
 
@@ -36,9 +36,9 @@ export async function GET(request: NextRequest) {
   }
 
   const { data: billingRow, error: billingError } = await supabase
-    .from("org_billing")
-    .select("plan, subscription_status, current_period_end")
-    .eq("org_id", orgId)
+    .from("orgs")
+    .select("plan, plan_status, current_period_end")
+    .eq("id", orgId)
     .maybeSingle();
 
   if (billingError) {
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(
     {
       plan: (billingRow as BillingRow | null)?.plan ?? "free",
-      status: (billingRow as BillingRow | null)?.subscription_status ?? "inactive",
+      status: (billingRow as BillingRow | null)?.plan_status ?? "active",
       current_period_end: (billingRow as BillingRow | null)?.current_period_end ?? null,
     },
     { status: 200 },

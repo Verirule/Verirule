@@ -164,8 +164,12 @@ export default function DashboardIntegrationsPage() {
       setIntegrations([]);
       return;
     }
+    if (!planFeatures.canUseIntegrations) {
+      setIntegrations([]);
+      return;
+    }
     void loadIntegrations(selectedOrgId);
-  }, [selectedOrgId, loadIntegrations]);
+  }, [selectedOrgId, planFeatures.canUseIntegrations, loadIntegrations]);
 
   const connectSlack = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -377,6 +381,20 @@ export default function DashboardIntegrationsPage() {
           ) : null}
         </CardContent>
       </Card>
+
+      {!planFeatures.canUseIntegrations && selectedOrgId ? (
+        <Card className="border-border/70">
+          <CardHeader>
+            <CardTitle>Upgrade Required</CardTitle>
+            <CardDescription>Integrations are available on Pro and Business plans.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild size="sm">
+              <Link href="/dashboard/billing">Upgrade plan</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="border-border/70">
         <CardHeader>

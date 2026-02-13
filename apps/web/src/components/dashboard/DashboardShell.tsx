@@ -65,7 +65,7 @@ const navigationSections: NavigationSection[] = [
     title: "Admin",
     links: [
       { href: "/dashboard/settings", label: "Settings", icon: Settings },
-      { href: "/dashboard/settings/billing", label: "Billing", icon: CircleDollarSign },
+      { href: "/dashboard/billing", label: "Billing", icon: CircleDollarSign },
       { href: "/dashboard/settings/integrations", label: "Integrations", icon: Workflow },
     ],
   },
