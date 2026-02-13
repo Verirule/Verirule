@@ -1,167 +1,151 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
-import { getPublicSupabaseEnv } from "@/lib/env";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-function safeErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Unknown error";
+type AuthCheckResponse = {
+  siteUrl: string;
+  supabaseUrl: string;
+  urlHasWhitespace: boolean;
+  urlHasQuotes: boolean;
+  keyPresent: boolean;
+  keyLength: number;
+  settingsFetch: {
+    ok: boolean;
+    status: number | null;
+  };
+  expectedRedirect: string;
+};
+
+function asDisplay(value: string): string {
+  return value || "(empty)";
 }
 
 export default function DebugAuthPage() {
-  const { url, key, problems } = useMemo(() => getPublicSupabaseEnv(), []);
-  const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
-  const [signupStatus, setSignupStatus] = useState<string | null>(null);
-  const [rawFetchStatus, setRawFetchStatus] = useState<string | null>(null);
-  const [isCheckingConnection, setIsCheckingConnection] = useState(false);
-  const [isTestingSignup, setIsTestingSignup] = useState(false);
-  const [isTestingRawFetch, setIsTestingRawFetch] = useState(false);
+  const [data, setData] = useState<AuthCheckResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const supabaseUrl = url ?? "";
-  const urlHasQuotes = /['"]/.test(supabaseUrl);
-  const urlHasWhitespace = /\s/.test(supabaseUrl);
-  const keyPresent = Boolean(key);
-  const keyLength = key?.length ?? 0;
-
-  const handleTestConnection = async () => {
-    setIsCheckingConnection(true);
-    setConnectionStatus(null);
+  const loadDiagnostics = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.getSession();
-      if (error) {
-        setConnectionStatus(`Connection error: ${error.message}`);
-        return;
-      }
-      setConnectionStatus("Connection check succeeded.");
-    } catch (error) {
-      const message = safeErrorMessage(error);
-      console.error("debug/auth connection test failed", { message });
-      setConnectionStatus(`Connection error: ${message}`);
-    } finally {
-      setIsCheckingConnection(false);
-    }
-  };
-
-  const handleTestSignUp = async () => {
-    setIsTestingSignup(true);
-    setSignupStatus(null);
-    try {
-      const supabase = createClient();
-      const testEmail = `test+${Date.now()}@example.com`;
-      const { error } = await supabase.auth.signUp({
-        email: testEmail,
-        password: "DebugPassword123!",
+      const response = await fetch("/api/debug/auth-check", {
+        method: "GET",
+        cache: "no-store",
       });
+      const body = (await response.json().catch(() => ({}))) as Partial<AuthCheckResponse> & {
+        message?: unknown;
+      };
 
-      if (error) {
-        setSignupStatus(`Sign up error: ${error.message}`);
-        return;
-      }
-      setSignupStatus("Sign up request accepted.");
-    } catch (error) {
-      const message = safeErrorMessage(error);
-      console.error("debug/auth signup test failed", { message });
-      setSignupStatus(`Sign up error: ${message}`);
-    } finally {
-      setIsTestingSignup(false);
-    }
-  };
-
-  const handleTestRawFetch = async () => {
-    setIsTestingRawFetch(true);
-    setRawFetchStatus(null);
-
-    try {
-      if (!supabaseUrl) {
-        setRawFetchStatus("Raw fetch error: Missing Supabase URL.");
+      if (!response.ok) {
+        setError(typeof body.message === "string" ? body.message : "Unable to load auth diagnostics.");
+        setData(null);
         return;
       }
 
-      const response = await fetch(`${supabaseUrl}/auth/v1/`, { method: "GET" });
-      setRawFetchStatus(`Raw fetch status: ${response.status}`);
-    } catch (error) {
-      const message = safeErrorMessage(error);
-      const errorName = error instanceof Error ? error.name : "UnknownError";
-      setRawFetchStatus(`Raw fetch error (${errorName}): ${message}`);
+      setData({
+        siteUrl: typeof body.siteUrl === "string" ? body.siteUrl : "",
+        supabaseUrl: typeof body.supabaseUrl === "string" ? body.supabaseUrl : "",
+        urlHasWhitespace: Boolean(body.urlHasWhitespace),
+        urlHasQuotes: Boolean(body.urlHasQuotes),
+        keyPresent: Boolean(body.keyPresent),
+        keyLength: typeof body.keyLength === "number" ? body.keyLength : 0,
+        settingsFetch: {
+          ok: Boolean(body.settingsFetch?.ok),
+          status: typeof body.settingsFetch?.status === "number" ? body.settingsFetch.status : null,
+        },
+        expectedRedirect:
+          typeof body.expectedRedirect === "string" ? body.expectedRedirect : "/auth/callback",
+      });
+    } catch {
+      setError("Unable to load auth diagnostics.");
+      setData(null);
     } finally {
-      setIsTestingRawFetch(false);
+      setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadDiagnostics();
+  }, [loadDiagnostics]);
 
   return (
     <main className="min-h-screen px-4 py-10 sm:px-6">
-      <div className="mx-auto w-full max-w-3xl space-y-8">
+      <div className="mx-auto w-full max-w-3xl space-y-6">
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight">Auth diagnostics</h1>
           <p className="text-sm text-muted-foreground">
-            Public configuration checks for debugging signup/login failures.
+            Diagnose Supabase signup/login redirect issues without exposing secrets.
           </p>
         </header>
 
-        <section className="rounded-xl border bg-card p-5">
-          <h2 className="text-base font-semibold">Environment checks</h2>
-          <ul className="mt-3 space-y-2 text-sm">
-            <li>
-              <span className="font-medium">supabaseUrl:</span>{" "}
-              <code className="break-all">{supabaseUrl || "(empty)"}</code>
-            </li>
-            <li>
-              <span className="font-medium">urlHasQuotes:</span> {String(urlHasQuotes)}
-            </li>
-            <li>
-              <span className="font-medium">urlHasWhitespace:</span> {String(urlHasWhitespace)}
-            </li>
-            <li>
-              <span className="font-medium">keyPresent:</span> {String(keyPresent)}
-            </li>
-            <li>
-              <span className="font-medium">keyLength:</span> {keyLength}
-            </li>
-            <li className="space-y-1">
-              <span className="font-medium">problems:</span>
-              {problems.length > 0 ? (
-                <ul className="list-disc pl-5 text-muted-foreground">
-                  {problems.map((problem) => (
-                    <li key={problem}>{problem}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-muted-foreground">None detected.</p>
-              )}
-            </li>
-          </ul>
-        </section>
-
-        <section className="rounded-xl border bg-card p-5 space-y-4">
-          <h2 className="text-base font-semibold">Supabase checks</h2>
-          <div className="flex flex-wrap gap-3">
-            <Button onClick={handleTestConnection} disabled={isCheckingConnection}>
-              {isCheckingConnection ? "Testing..." : "Test Supabase connection"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleTestSignUp}
-              disabled={isTestingSignup}
-            >
-              {isTestingSignup ? "Testing..." : "Test sign up (no email sent)"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleTestRawFetch}
-              disabled={isTestingRawFetch}
-            >
-              {isTestingRawFetch ? "Testing..." : "Test raw fetch"}
+        <section className="rounded-xl border bg-card p-5 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold">Checks</h2>
+            <Button type="button" variant="outline" size="sm" onClick={() => void loadDiagnostics()} disabled={isLoading}>
+              {isLoading ? "Refreshing..." : "Refresh"}
             </Button>
           </div>
-          {connectionStatus ? <p className="text-sm text-muted-foreground">{connectionStatus}</p> : null}
-          {signupStatus ? <p className="text-sm text-muted-foreground">{signupStatus}</p> : null}
-          {rawFetchStatus ? <p className="text-sm text-muted-foreground">{rawFetchStatus}</p> : null}
+
+          {isLoading ? <p className="text-sm text-muted-foreground">Loading diagnostics...</p> : null}
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+          {!isLoading && data ? (
+            <ul className="space-y-2 text-sm">
+              <li>
+                <span className="font-medium">NEXT_PUBLIC_SITE_URL:</span>{" "}
+                <code className="break-all">{asDisplay(data.siteUrl)}</code>
+              </li>
+              <li>
+                <span className="font-medium">NEXT_PUBLIC_SUPABASE_URL:</span>{" "}
+                <code className="break-all">{asDisplay(data.supabaseUrl)}</code>
+              </li>
+              <li>
+                <span className="font-medium">NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY present:</span>{" "}
+                {String(data.keyPresent)}
+              </li>
+              <li>
+                <span className="font-medium">NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY length:</span> {data.keyLength}
+              </li>
+              <li>
+                <span className="font-medium">URL contains whitespace:</span> {String(data.urlHasWhitespace)}
+              </li>
+              <li>
+                <span className="font-medium">URL contains surrounding quotes:</span> {String(data.urlHasQuotes)}
+              </li>
+              <li>
+                <span className="font-medium">Supabase settings fetch:</span>{" "}
+                {data.settingsFetch.ok ? "ok" : "failed"}{" "}
+                {data.settingsFetch.status !== null ? `(status ${data.settingsFetch.status})` : "(no status)"}
+              </li>
+              <li>
+                <span className="font-medium">Expected redirect URL:</span>{" "}
+                <code className="break-all">{data.expectedRedirect}</code>
+              </li>
+            </ul>
+          ) : null}
         </section>
+
+        {data?.urlHasQuotes || data?.urlHasWhitespace ? (
+          <section className="rounded-xl border bg-card p-5">
+            <h2 className="text-base font-semibold">Fix</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Remove quotes and whitespace from `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_SUPABASE_URL` in Vercel
+              Environment Variables, then redeploy.
+            </p>
+          </section>
+        ) : null}
+
+        {data && !data.settingsFetch.ok ? (
+          <section className="rounded-xl border bg-card p-5">
+            <h2 className="text-base font-semibold">Fix</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Supabase auth settings check failed. This usually means the Supabase URL is wrong or there is a network
+              connectivity problem between Vercel and Supabase.
+            </p>
+          </section>
+        ) : null}
       </div>
     </main>
   );
