@@ -2,11 +2,10 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePlan } from "@/src/components/billing/usePlan";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type OrgRecord = {
   id: string;
@@ -23,6 +22,7 @@ type AlertRecord = {
   id: string;
   org_id: string;
   finding_id: string;
+  task_id: string | null;
   status: AlertStatus;
   owner_user_id: string | null;
   created_at: string;
@@ -85,16 +85,10 @@ export default function DashboardAlertsPage() {
   const [isLoadingOrgs, setIsLoadingOrgs] = useState(true);
   const [isLoadingAlerts, setIsLoadingAlerts] = useState(false);
   const [updatingAlertId, setUpdatingAlertId] = useState<string | null>(null);
+  const [creatingTaskAlertId, setCreatingTaskAlertId] = useState<string | null>(null);
   const [actingAlertId, setActingAlertId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-
-  const [createTaskAlert, setCreateTaskAlert] = useState<AlertRecord | null>(null);
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskDescription, setTaskDescription] = useState("");
-  const [taskCreateError, setTaskCreateError] = useState<string | null>(null);
-  const [taskCreatedId, setTaskCreatedId] = useState<string | null>(null);
-  const [isCreatingTask, setIsCreatingTask] = useState(false);
 
   const findingById = useMemo(() => {
     return new Map(findings.map((finding) => [finding.id, finding]));
@@ -267,71 +261,34 @@ export default function DashboardAlertsPage() {
     }
   };
 
-  const openCreateTaskModal = (alert: AlertRecord) => {
-    const finding = findingById.get(alert.finding_id);
-    const baseTitle = finding?.title?.trim() || "Alert remediation";
-    setCreateTaskAlert(alert);
-    setTaskTitle(`Remediate: ${baseTitle}`);
-    setTaskDescription(finding?.summary?.trim() || `Remediation task for alert ${alert.id}.`);
-    setTaskCreateError(null);
-    setTaskCreatedId(null);
-  };
-
-  const closeCreateTaskModal = () => {
-    setCreateTaskAlert(null);
-    setTaskTitle("");
-    setTaskDescription("");
-    setTaskCreateError(null);
-    setTaskCreatedId(null);
-    setIsCreatingTask(false);
-  };
-
-  const createTaskFromAlert = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!createTaskAlert) {
-      return;
-    }
-
-    const title = taskTitle.trim();
-    if (!title) {
-      setTaskCreateError("Task title is required.");
-      return;
-    }
-
-    setIsCreatingTask(true);
-    setTaskCreateError(null);
-    setTaskCreatedId(null);
+  const createTaskNow = async (alert: AlertRecord) => {
+    setCreatingTaskAlertId(alert.id);
+    setError(null);
+    setActionMessage(null);
 
     try {
-      const response = await fetch("/api/tasks", {
+      const response = await fetch(`/api/alerts/${encodeURIComponent(alert.id)}/create-task-now`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          org_id: createTaskAlert.org_id,
-          title,
-          description: taskDescription.trim() || null,
-          alert_id: createTaskAlert.id,
-          finding_id: createTaskAlert.finding_id,
-        }),
+        body: JSON.stringify({ org_id: alert.org_id }),
       });
+      const body = (await response.json().catch(() => ({}))) as { message?: unknown };
 
       if (response.status === 401) {
         window.location.href = "/auth/login";
         return;
       }
-
-      const body = (await response.json().catch(() => ({}))) as { id?: unknown; message?: unknown };
       if (!response.ok) {
-        setTaskCreateError(typeof body.message === "string" ? body.message : "Unable to create task.");
+        setError(typeof body.message === "string" ? body.message : "Unable to create task.");
         return;
       }
 
-      setTaskCreatedId(typeof body.id === "string" ? body.id : null);
+      setActionMessage("Task created.");
       await loadAlertsAndFindings(selectedOrgId);
     } catch {
-      setTaskCreateError("Unable to create task.");
+      setError("Unable to create task.");
     } finally {
-      setIsCreatingTask(false);
+      setCreatingTaskAlertId(null);
     }
   };
 
@@ -512,14 +469,27 @@ export default function DashboardAlertsPage() {
                         >
                           {updatingAlertId === alert.id ? "Saving..." : "Resolve"}
                         </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openCreateTaskModal(alert)}
-                        >
-                          Create task
-                        </Button>
+                        {alert.task_id ? (
+                          <Button asChild type="button" variant="outline" size="sm">
+                            <Link
+                              href={`/dashboard/tasks?org_id=${encodeURIComponent(
+                                alert.org_id,
+                              )}&task_id=${encodeURIComponent(alert.task_id)}`}
+                            >
+                              Open task
+                            </Link>
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={creatingTaskAlertId === alert.id}
+                            onClick={() => void createTaskNow(alert)}
+                          >
+                            {creatingTaskAlertId === alert.id ? "Creating..." : "Create task now"}
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           variant="outline"
@@ -579,66 +549,6 @@ export default function DashboardAlertsPage() {
         </CardContent>
       </Card>
 
-      {createTaskAlert ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-lg border border-border/70 bg-background p-4 shadow-lg sm:p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Create Remediation Task</h2>
-              <Button type="button" variant="outline" size="sm" onClick={closeCreateTaskModal}>
-                Close
-              </Button>
-            </div>
-
-            <form onSubmit={createTaskFromAlert} className="space-y-3">
-              <div className="space-y-2">
-                <Label htmlFor="task-title">Title</Label>
-                <Input
-                  id="task-title"
-                  value={taskTitle}
-                  onChange={(event) => setTaskTitle(event.target.value)}
-                  maxLength={120}
-                  placeholder="Remediate: finding title"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="task-description">Description</Label>
-                <textarea
-                  id="task-description"
-                  value={taskDescription}
-                  onChange={(event) => setTaskDescription(event.target.value)}
-                  className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  placeholder="Remediation details"
-                />
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                Alert: {createTaskAlert.id} | Finding: {createTaskAlert.finding_id}
-              </p>
-
-              <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={isCreatingTask}>
-                  {isCreatingTask ? "Creating..." : "Create Task"}
-                </Button>
-                {taskCreatedId ? (
-                  <Button asChild type="button" variant="outline">
-                    <Link
-                      href={`/dashboard/tasks?org_id=${encodeURIComponent(
-                        createTaskAlert.org_id,
-                      )}&task_id=${encodeURIComponent(taskCreatedId)}`}
-                    >
-                      Go to Tasks
-                    </Link>
-                  </Button>
-                ) : null}
-              </div>
-            </form>
-
-            {taskCreatedId ? <p className="mt-3 text-sm text-emerald-600">Task created.</p> : null}
-            {taskCreateError ? <p className="mt-3 text-sm text-destructive">{taskCreateError}</p> : null}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

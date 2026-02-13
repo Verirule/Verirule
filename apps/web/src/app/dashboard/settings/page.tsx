@@ -28,6 +28,19 @@ export default function DashboardSettingsPage() {
       </section>
 
       <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
+        <h2 className="text-lg font-semibold tracking-tight">Automation</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Configure alert-to-task automation rules, severity thresholds, and checklist behavior.
+        </p>
+        <Link
+          href="/dashboard/settings/automation"
+          className="mt-4 inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-medium transition-colors hover:bg-accent"
+        >
+          Open Automation
+        </Link>
+      </section>
+
+      <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold tracking-tight">Integrations</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Configure outgoing connectors such as Slack and Jira for routing and escalation workflows.
