@@ -15,12 +15,46 @@ type OrgsResponse = {
   orgs: OrgRecord[];
 };
 
+type ApiErrorResponse = {
+  message?: unknown;
+  code?: unknown;
+  missing?: unknown;
+};
+
 function formatCreatedAt(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     return "Unknown date";
   }
   return parsed.toLocaleDateString();
+}
+
+function formatOrgLoadError(status: number, payload: ApiErrorResponse): string {
+  const code = typeof payload.code === "string" ? payload.code : "";
+
+  if (status === 401 || code === "unauthorized") {
+    return "Unable to load workspace: Sign in again.";
+  }
+
+  if (status === 403 || code === "rls_denied") {
+    return "Unable to load workspace: No access to orgs; verify membership.";
+  }
+
+  if (code === "env_missing") {
+    const missing = Array.isArray(payload.missing)
+      ? payload.missing.filter((item): item is string => typeof item === "string")
+      : [];
+    if (missing.length > 0) {
+      return `Unable to load workspace: missing env ${missing.join(", ")}.`;
+    }
+    return "Unable to load workspace: missing required environment variables.";
+  }
+
+  if (typeof payload.message === "string" && payload.message.trim().length > 0) {
+    return `Unable to load workspace: ${payload.message}`;
+  }
+
+  return "Unable to load workspace right now.";
 }
 
 export function OrgsPanel() {
@@ -38,23 +72,20 @@ export function OrgsPanel() {
 
     try {
       const response = await fetch("/api/orgs", { method: "GET", cache: "no-store" });
-      const body = (await response.json().catch(() => ({}))) as Partial<OrgsResponse> & {
-        message?: unknown;
-      };
+      const body = (await response.json().catch(() => ({}))) as
+        | (Partial<OrgsResponse> & ApiErrorResponse)
+        | ApiErrorResponse;
+      const orgRows =
+        "orgs" in body && Array.isArray(body.orgs) ? (body.orgs as OrgRecord[]) : null;
 
-      if (response.status === 401) {
-        window.location.href = "/auth/login";
+      if (!response.ok || !orgRows) {
+        setError(formatOrgLoadError(response.status, body));
         return;
       }
 
-      if (!response.ok || !Array.isArray(body.orgs)) {
-        setError("Unable to load workspaces right now.");
-        return;
-      }
-
-      setOrgs(body.orgs);
+      setOrgs(orgRows);
     } catch {
-      setError("Unable to load workspaces right now.");
+      setError("Unable to load workspace right now.");
     } finally {
       setIsLoading(false);
     }
@@ -80,14 +111,14 @@ export function OrgsPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: trimmedName }),
       });
-
-      if (response.status === 401) {
-        window.location.href = "/auth/login";
-        return;
-      }
+      const body = (await response.json().catch(() => ({}))) as ApiErrorResponse;
 
       if (!response.ok) {
-        setError("Unable to create workspace right now.");
+        setError(
+          typeof body.message === "string" && body.message.trim().length > 0
+            ? body.message
+            : "Unable to create workspace right now.",
+        );
         return;
       }
 
@@ -106,8 +137,7 @@ export function OrgsPanel() {
         <CardHeader>
           <CardTitle>Workspaces</CardTitle>
           <CardDescription>
-            Your organizations are scoped by database RLS and loaded through the same-origin API
-            proxy.
+            Your organizations are scoped by database RLS and loaded through the same-origin API.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
