@@ -12,6 +12,7 @@ import {
   ClipboardList,
   FileOutput,
   FlaskConical,
+  Gauge,
   LayoutTemplate,
   LayoutDashboard,
   ListChecks,
@@ -55,6 +56,7 @@ const navigationSections: NavigationSection[] = [
     links: [
       { href: "/dashboard/findings", label: "Findings", icon: SearchCheck },
       { href: "/dashboard/controls", label: "Controls", icon: ShieldCheck },
+      { href: "/dashboard/readiness", label: "Readiness", icon: Gauge },
       { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
       { href: "/dashboard/tasks", label: "Tasks", icon: ListChecks },
       { href: "/dashboard/audit", label: "Audit", icon: ClipboardList },

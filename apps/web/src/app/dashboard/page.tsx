@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { OrgsPanel } from "@/src/components/dashboard/OrgsPanel";
+import { ReadinessCard } from "@/src/components/dashboard/ReadinessCard";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -36,6 +37,7 @@ export default async function DashboardPage() {
           </div>
         </section>
       ) : null}
+      <ReadinessCard />
       <OrgsPanel />
     </div>
   );
