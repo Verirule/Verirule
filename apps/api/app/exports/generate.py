@@ -58,11 +58,27 @@ def _filename_only(value: str) -> str:
     return PurePosixPath(value).name
 
 
+def _combined_evidence_rows(packet: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = list(_to_rows(packet.get("task_evidence")))
+    for evidence_file in _to_rows(packet.get("evidence_files")):
+        rows.append(
+            {
+                "id": evidence_file.get("id"),
+                "task_id": evidence_file.get("task_id"),
+                "type": "file",
+                "ref": _safe_text(evidence_file.get("filename"))
+                or _safe_text(evidence_file.get("storage_path")),
+                "created_at": evidence_file.get("created_at"),
+            }
+        )
+    return rows
+
+
 def build_csv(packet: dict[str, Any]) -> bytes:
     findings = _sort_rows(_to_rows(packet.get("findings")), timestamp_field="detected_at")
     alerts = _sort_rows(_to_rows(packet.get("alerts")), timestamp_field="created_at")
     tasks = _sort_rows(_to_rows(packet.get("tasks")), timestamp_field="created_at")
-    evidence_rows = _sort_rows(_to_rows(packet.get("task_evidence")), timestamp_field="created_at")
+    evidence_rows = _sort_rows(_combined_evidence_rows(packet), timestamp_field="created_at")
     runs = _sort_rows(_to_rows(packet.get("runs")), timestamp_field="created_at")
     snapshots = _sort_rows(_to_rows(packet.get("snapshots")), timestamp_field="fetched_at")
     timeline = _sort_rows(_to_rows(packet.get("audit_timeline")), timestamp_field="created_at")
@@ -234,7 +250,7 @@ def build_pdf(packet: dict[str, Any]) -> bytes:
     findings = _sort_rows(_to_rows(packet.get("findings")), timestamp_field="detected_at")
     alerts = _sort_rows(_to_rows(packet.get("alerts")), timestamp_field="created_at")
     tasks = _sort_rows(_to_rows(packet.get("tasks")), timestamp_field="created_at")
-    evidence_rows = _sort_rows(_to_rows(packet.get("task_evidence")), timestamp_field="created_at")
+    evidence_rows = _sort_rows(_combined_evidence_rows(packet), timestamp_field="created_at")
     runs = _sort_rows(_to_rows(packet.get("runs")), timestamp_field="created_at")
     snapshots = _sort_rows(_to_rows(packet.get("snapshots")), timestamp_field="fetched_at")
     timeline = _sort_rows(_to_rows(packet.get("audit_timeline")), timestamp_field="created_at")

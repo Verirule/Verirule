@@ -7,19 +7,21 @@ from fastapi import HTTPException, status
 from app.core.settings import get_settings
 
 
-def _service_role_key() -> str:
+def _service_role_key(error_detail: str = "Audit exports are not configured.") -> str:
     settings = get_settings()
     service_role_key = settings.SUPABASE_SERVICE_ROLE_KEY
     if not service_role_key or not service_role_key.strip():
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="Audit exports are not configured.",
+            detail=error_detail,
         )
     return service_role_key
 
 
-def _admin_headers(*, content_type: str | None = None) -> dict[str, str]:
-    service_role_key = _service_role_key()
+def _admin_headers(
+    *, content_type: str | None = None, error_detail: str = "Audit exports are not configured."
+) -> dict[str, str]:
+    service_role_key = _service_role_key(error_detail)
     headers = {
         "Authorization": f"Bearer {service_role_key}",
         "apikey": service_role_key,
@@ -94,6 +96,38 @@ async def upload_bytes(bucket: str, path: str, data: bytes, content_type: str) -
         ) from exc
 
 
+async def create_signed_upload_url(
+    bucket: str, path: str, content_type: str | None, expires: int
+) -> dict[str, str]:
+    settings = get_settings()
+    encoded_bucket = quote(bucket, safe="")
+    encoded_path = quote(path, safe="/")
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/upload/sign/{encoded_bucket}/{encoded_path}"
+    payload: dict[str, Any] = {"expiresIn": expires}
+    if content_type:
+        payload["contentType"] = content_type
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                url,
+                json=payload,
+                headers=_admin_headers(
+                    content_type="application/json",
+                    error_detail="File evidence uploads are not configured.",
+                ),
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create signed upload URL.",
+        ) from exc
+
+    signed_url = _signed_url_from_payload(response.json())
+    return {"path": path, "signed_url": _normalize_signed_url(signed_url)}
+
+
 async def create_signed_download_url(bucket: str, path: str, expires: int) -> dict[str, str]:
     settings = get_settings()
     encoded_bucket = quote(bucket, safe="")
@@ -105,7 +139,10 @@ async def create_signed_download_url(bucket: str, path: str, expires: int) -> di
             response = await client.post(
                 url,
                 json={"expiresIn": expires},
-                headers=_admin_headers(content_type="application/json"),
+                headers=_admin_headers(
+                    content_type="application/json",
+                    error_detail="Evidence downloads are not configured.",
+                ),
             )
             response.raise_for_status()
     except httpx.HTTPError as exc:
@@ -116,6 +153,32 @@ async def create_signed_download_url(bucket: str, path: str, expires: int) -> di
 
     signed_url = _signed_url_from_payload(response.json())
     return {"path": path, "signed_url": _normalize_signed_url(signed_url)}
+
+
+async def delete_object(bucket: str, path: str) -> None:
+    settings = get_settings()
+    encoded_bucket = quote(bucket, safe="")
+    encoded_path = quote(path, safe="/")
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{encoded_bucket}/{encoded_path}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.delete(
+                url,
+                headers=_admin_headers(error_detail="File evidence uploads are not configured."),
+            )
+        if response.status_code == status.HTTP_404_NOT_FOUND:
+            return
+        if response.status_code >= status.HTTP_400_BAD_REQUEST:
+            detail = _error_message_from_response(response, "Failed to delete evidence file.")
+            raise HTTPException(status_code=response.status_code, detail=detail)
+    except HTTPException:
+        raise
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to delete evidence file.",
+        ) from exc
 
 
 async def download_bytes(bucket: str, path: str) -> bytes:

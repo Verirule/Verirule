@@ -5,6 +5,7 @@ from app.api.v1.endpoints import (
     automation,
     billing,
     controls,
+    evidence_files,
     exports,
     health,
     integrations,
@@ -29,6 +30,7 @@ router.include_router(controls.router)
 router.include_router(monitoring.router)
 router.include_router(tasks.router)
 router.include_router(task_files.router)
+router.include_router(evidence_files.router)
 router.include_router(integrations.router)
 router.include_router(exports.router)
 router.include_router(system.router)

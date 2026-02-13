@@ -59,6 +59,7 @@ def _packet_counts(packet: dict[str, Any]) -> dict[str, int]:
         "alerts": len(_to_rows(packet.get("alerts"))),
         "tasks": len(_to_rows(packet.get("tasks"))),
         "task_evidence": len(_to_rows(packet.get("task_evidence"))),
+        "evidence_files": len(_to_rows(packet.get("evidence_files"))),
         "runs": len(_to_rows(packet.get("runs"))),
         "snapshots": len(_to_rows(packet.get("snapshots"))),
         "audit_timeline": len(_to_rows(packet.get("audit_timeline"))),

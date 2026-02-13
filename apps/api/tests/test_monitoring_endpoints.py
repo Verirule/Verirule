@@ -339,11 +339,19 @@ def test_update_alert_requires_evidence_when_enabled(monkeypatch) -> None:
     async def fake_select_tasks_for_alert(access_token: str, alert_id: str) -> list[dict[str, str]]:
         assert access_token == "token-123"
         assert alert_id == ALERT_ID
-        return [{"id": "99999999-9999-9999-9999-999999999999"}]
+        return [{"id": "99999999-9999-9999-9999-999999999999", "org_id": ORG_ID}]
 
     async def fake_select_task_evidence(access_token: str, task_id: str) -> list[dict[str, str]]:
         assert access_token == "token-123"
         assert task_id == "99999999-9999-9999-9999-999999999999"
+        return []
+
+    async def fake_select_evidence_files_by_task(
+        access_token: str, task_id: str, org_id: str
+    ) -> list[dict[str, str]]:
+        assert access_token == "token-123"
+        assert task_id == "99999999-9999-9999-9999-999999999999"
+        assert org_id == ORG_ID
         return []
 
     monkeypatch.setattr(
@@ -353,6 +361,9 @@ def test_update_alert_requires_evidence_when_enabled(monkeypatch) -> None:
     )
     monkeypatch.setattr(monitoring_endpoint, "select_tasks_for_alert", fake_select_tasks_for_alert)
     monkeypatch.setattr(monitoring_endpoint, "select_task_evidence", fake_select_task_evidence)
+    monkeypatch.setattr(
+        monitoring_endpoint, "select_evidence_files_by_task", fake_select_evidence_files_by_task
+    )
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123", claims={"sub": USER_ID}
@@ -391,9 +402,9 @@ def test_audit_returns_list_when_supabase_ok(monkeypatch) -> None:
             return None
 
         async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
-            assert url == "https://example.supabase.co/rest/v1/audit_log"
+            assert url == "https://example.supabase.co/rest/v1/audit_events"
             assert params == {
-                "select": "id,org_id,actor_user_id,action,entity_type,entity_id,metadata,created_at",
+                "select": "id,org_id,actor_user_id,actor_type,action,entity_type,entity_id,metadata,created_at",
                 "org_id": f"eq.{ORG_ID}",
                 "order": "created_at.desc",
             }
@@ -405,6 +416,7 @@ def test_audit_returns_list_when_supabase_ok(monkeypatch) -> None:
                         "id": "77777777-7777-7777-7777-777777777777",
                         "org_id": ORG_ID,
                         "actor_user_id": USER_ID,
+                        "actor_type": "user",
                         "action": "monitor_run_queued",
                         "entity_type": "monitor_run",
                         "entity_id": RUN_ID,
@@ -435,6 +447,7 @@ def test_audit_returns_list_when_supabase_ok(monkeypatch) -> None:
                 "id": "77777777-7777-7777-7777-777777777777",
                 "org_id": ORG_ID,
                 "actor_user_id": USER_ID,
+                "actor_type": "user",
                 "action": "monitor_run_queued",
                 "entity_type": "monitor_run",
                 "entity_id": RUN_ID,
@@ -555,7 +568,7 @@ def test_monitor_run_queues_only(monkeypatch) -> None:
                 assert json == {"p_org_id": ORG_ID, "p_source_id": SOURCE_ID}
                 return FakeResponse(RUN_ID)
 
-            if url.endswith("/rpc/append_audit"):
+            if url.endswith("/rpc/record_audit_event"):
                 self.audit_called = True
                 assert json == {
                     "p_org_id": ORG_ID,

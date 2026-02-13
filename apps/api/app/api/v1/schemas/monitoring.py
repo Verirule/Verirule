@@ -62,6 +62,7 @@ class AuditOut(BaseModel):
     id: UUID
     org_id: UUID
     actor_user_id: UUID | None = None
+    actor_type: Literal["user", "system"]
     action: str
     entity_type: str
     entity_id: UUID | None = None

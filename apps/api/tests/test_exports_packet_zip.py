@@ -101,8 +101,16 @@ def test_zip_export_processor_writes_audit_packet(monkeypatch) -> None:
             "findings": [],
             "alerts": [],
             "tasks": [{"id": TASK_ID}],
-            "task_evidence": [
-                {"id": EVIDENCE_ID_1, "task_id": TASK_ID, "type": "file", "ref": f"org/{ORG_ID}/tasks/{TASK_ID}/proof.txt"}
+            "task_evidence": [],
+            "evidence_files": [
+                {
+                    "id": EVIDENCE_ID_1,
+                    "task_id": TASK_ID,
+                    "filename": "proof.txt",
+                    "storage_bucket": "evidence",
+                    "storage_path": f"orgs/{ORG_ID}/tasks/{TASK_ID}/proof.txt",
+                    "created_at": "2026-02-10T00:00:00Z",
+                }
             ],
             "task_comments": [],
             "runs": [],
@@ -134,7 +142,7 @@ def test_zip_export_processor_writes_audit_packet(monkeypatch) -> None:
 
     async def fake_download_bytes(bucket: str, path: str) -> bytes:
         assert bucket == "evidence"
-        assert path == f"org/{ORG_ID}/tasks/{TASK_ID}/proof.txt"
+        assert path == f"orgs/{ORG_ID}/tasks/{TASK_ID}/proof.txt"
         return b"proof-bytes"
 
     async def fake_upload_bytes(bucket: str, path: str, data: bytes, content_type: str) -> None:
@@ -205,9 +213,24 @@ def test_zip_export_processor_skips_evidence_when_limits_exceeded(monkeypatch) -
             "findings": [],
             "alerts": [],
             "tasks": [{"id": TASK_ID}],
-            "task_evidence": [
-                {"id": EVIDENCE_ID_1, "task_id": TASK_ID, "type": "file", "ref": "org/a/tasks/t/file-1.txt"},
-                {"id": EVIDENCE_ID_2, "task_id": TASK_ID, "type": "file", "ref": "org/a/tasks/t/file-2.txt"},
+            "task_evidence": [],
+            "evidence_files": [
+                {
+                    "id": EVIDENCE_ID_1,
+                    "task_id": TASK_ID,
+                    "filename": "file-1.txt",
+                    "storage_bucket": "evidence",
+                    "storage_path": "orgs/a/tasks/t/file-1.txt",
+                    "created_at": "2026-02-10T00:00:00Z",
+                },
+                {
+                    "id": EVIDENCE_ID_2,
+                    "task_id": TASK_ID,
+                    "filename": "file-2.txt",
+                    "storage_bucket": "evidence",
+                    "storage_path": "orgs/a/tasks/t/file-2.txt",
+                    "created_at": "2026-02-10T00:00:01Z",
+                },
             ],
             "task_comments": [],
             "runs": [],

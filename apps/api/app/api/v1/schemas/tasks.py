@@ -78,3 +78,42 @@ class TaskEvidenceFileIn(BaseModel):
 class TaskEvidenceDownloadUrlOut(BaseModel):
     downloadUrl: str
     expiresIn: int
+
+
+class EvidenceFileUploadUrlIn(BaseModel):
+    org_id: UUID
+    filename: str = Field(min_length=1, max_length=180)
+    content_type: str | None = Field(default=None, min_length=1, max_length=120)
+    byte_size: int = Field(gt=0)
+
+
+class EvidenceFileUploadUrlOut(BaseModel):
+    evidence_file_id: UUID
+    bucket: str
+    path: str
+    signed_upload_url: str
+    expires_in: int
+
+
+class EvidenceFileFinalizeIn(BaseModel):
+    org_id: UUID
+    sha256: str = Field(min_length=64, max_length=64, pattern=r"^[a-fA-F0-9]{64}$")
+
+
+class EvidenceFileOut(BaseModel):
+    id: UUID
+    org_id: UUID
+    task_id: UUID
+    filename: str
+    storage_bucket: str
+    storage_path: str
+    content_type: str | None = None
+    byte_size: int | None = None
+    sha256: str | None = None
+    uploaded_by: UUID | None = None
+    created_at: datetime
+
+
+class EvidenceFileDownloadUrlOut(BaseModel):
+    download_url: str
+    expires_in: int

@@ -20,6 +20,7 @@ from app.core.supabase_rest import (
     rpc_set_alert_status,
     select_alerts,
     select_audit_log,
+    select_evidence_files_by_task,
     select_finding_explanations_by_org,
     select_findings,
     select_latest_finding_explanation,
@@ -85,9 +86,11 @@ async def update_alert(
         linked_tasks = await select_tasks_for_alert(auth.access_token, str(alert_id))
         for task in linked_tasks:
             task_id = task.get("id")
-            if not isinstance(task_id, str):
+            task_org_id = task.get("org_id")
+            if not isinstance(task_id, str) or not isinstance(task_org_id, str):
                 continue
             evidence_count += len(await select_task_evidence(auth.access_token, task_id))
+            evidence_count += len(await select_evidence_files_by_task(auth.access_token, task_id, task_org_id))
 
         if evidence_count < settings.ALERT_RESOLVE_MIN_EVIDENCE:
             raise HTTPException(

@@ -700,9 +700,9 @@ async def select_finding_by_id(access_token: str, finding_id: str) -> dict[str, 
 
 async def select_audit_log(access_token: str, org_id: str) -> list[dict[str, Any]]:
     settings = get_settings()
-    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/audit_log"
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/audit_events"
     params = {
-        "select": "id,org_id,actor_user_id,action,entity_type,entity_id,metadata,created_at",
+        "select": "id,org_id,actor_user_id,actor_type,action,entity_type,entity_id,metadata,created_at",
         "org_id": f"eq.{org_id}",
         "order": "created_at.desc",
     }
@@ -714,10 +714,10 @@ async def select_audit_log(access_token: str, org_id: str) -> list[dict[str, Any
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch audit log from Supabase.",
+            detail="Failed to fetch audit events from Supabase.",
         ) from exc
 
-    return _validated_list_payload(response.json(), "Invalid audit log response from Supabase.")
+    return _validated_list_payload(response.json(), "Invalid audit events response from Supabase.")
 
 
 async def rpc_create_audit_export(access_token: str, payload: dict[str, Any]) -> str:
@@ -909,6 +909,12 @@ async def select_audit_packet_data(
         date_column="created_at",
         order="created_at.asc",
     )
+    evidence_files = await fetch_table(
+        table="evidence_files",
+        select="id,task_id,filename,storage_bucket,storage_path,content_type,byte_size,sha256,uploaded_by,created_at",
+        date_column="created_at",
+        order="created_at.asc",
+    )
     task_comments = await fetch_table(
         table="task_comments",
         select="id,task_id,author_user_id,body,created_at",
@@ -922,8 +928,8 @@ async def select_audit_packet_data(
         order="fetched_at.desc",
     )
     audit_timeline = await fetch_table(
-        table="audit_log",
-        select="id,org_id,actor_user_id,action,entity_type,entity_id,metadata,created_at",
+        table="audit_events",
+        select="id,org_id,actor_user_id,actor_type,action,entity_type,entity_id,metadata,created_at",
         date_column="created_at",
         order="created_at.desc",
     )
@@ -938,6 +944,7 @@ async def select_audit_packet_data(
         "alerts": alerts,
         "tasks": tasks,
         "task_evidence": task_evidence,
+        "evidence_files": evidence_files,
         "task_comments": task_comments,
         "snapshots": snapshots,
         "audit_timeline": audit_timeline,
@@ -1288,9 +1295,9 @@ async def rpc_set_alert_status(access_token: str, payload: dict[str, Any]) -> No
         ) from exc
 
 
-async def rpc_append_audit(access_token: str, payload: dict[str, Any]) -> None:
+async def rpc_record_audit_event(access_token: str, payload: dict[str, Any]) -> None:
     settings = get_settings()
-    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/append_audit"
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/record_audit_event"
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -1301,6 +1308,10 @@ async def rpc_append_audit(access_token: str, payload: dict[str, Any]) -> None:
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to write audit event in Supabase.",
         ) from exc
+
+
+async def rpc_append_audit(access_token: str, payload: dict[str, Any]) -> None:
+    await rpc_record_audit_event(access_token, payload)
 
 
 async def rpc_insert_finding_explanation(access_token: str, payload: dict[str, Any]) -> str:
@@ -1391,7 +1402,7 @@ async def select_tasks_for_alert(access_token: str, alert_id: str) -> list[dict[
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/tasks"
     params = {
-        "select": "id",
+        "select": "id,org_id",
         "alert_id": f"eq.{alert_id}",
         "order": "created_at.desc",
     }
@@ -1477,6 +1488,128 @@ async def select_task_evidence_by_id(
 
     rows = _validated_list_payload(response.json(), "Invalid evidence response from Supabase.")
     return rows[0] if rows else None
+
+
+async def select_evidence_files_by_task(
+    access_token: str, task_id: str, org_id: str
+) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/evidence_files"
+    params = {
+        "select": "id,org_id,task_id,filename,storage_bucket,storage_path,content_type,byte_size,sha256,uploaded_by,created_at",
+        "task_id": f"eq.{task_id}",
+        "org_id": f"eq.{org_id}",
+        "order": "created_at.desc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch evidence files from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid evidence files response from Supabase.")
+
+
+async def select_evidence_file_by_id(
+    access_token: str, evidence_file_id: str, org_id: str
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/evidence_files"
+    params = {
+        "select": "id,org_id,task_id,filename,storage_bucket,storage_path,content_type,byte_size,sha256,uploaded_by,created_at",
+        "id": f"eq.{evidence_file_id}",
+        "org_id": f"eq.{org_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch evidence file from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid evidence file response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def insert_evidence_file(access_token: str, payload: dict[str, Any]) -> dict[str, Any]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/evidence_files"
+    headers = supabase_rest_headers(access_token)
+    headers["Prefer"] = "return=representation"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create evidence file metadata in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid evidence file create response from Supabase.")
+    created = rows[0] if rows else None
+    if not isinstance(created, dict):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid evidence file create response from Supabase.",
+        )
+    return created
+
+
+async def update_evidence_file_finalize_service(
+    evidence_file_id: str, org_id: str, sha256: str, uploaded_by: str
+) -> dict[str, Any]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/evidence_files"
+    params = {"id": f"eq.{evidence_file_id}", "org_id": f"eq.{org_id}"}
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "return=representation"
+    payload = {"sha256": sha256, "uploaded_by": uploaded_by}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(url, params=params, json=payload, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to finalize evidence file in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid evidence finalize response from Supabase.")
+    updated = rows[0] if rows else None
+    if not isinstance(updated, dict):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found.")
+    return updated
+
+
+async def delete_evidence_file(access_token: str, evidence_file_id: str, org_id: str) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/evidence_files"
+    params = {"id": f"eq.{evidence_file_id}", "org_id": f"eq.{org_id}"}
+    headers = supabase_rest_headers(access_token)
+    headers["Prefer"] = "return=minimal"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.delete(url, params=params, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to delete evidence file metadata in Supabase.",
+        ) from exc
 
 
 async def rpc_create_task(access_token: str, payload: dict[str, Any]) -> str:

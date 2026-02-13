@@ -67,7 +67,9 @@ def _apply_include_scope(packet: dict[str, Any], include: list[str]) -> dict[str
         "findings": "findings",
         "alerts": "alerts",
         "tasks": "tasks",
-        "evidence": "task_evidence",
+        "evidence": "evidence_files",
+        "evidence_files": "evidence_files",
+        "task_evidence": "task_evidence",
         "comments": "task_comments",
         "runs": "runs",
         "snapshots": "snapshots",
@@ -75,11 +77,14 @@ def _apply_include_scope(packet: dict[str, Any], include: list[str]) -> dict[str
         "audit_timeline": "audit_timeline",
     }
     selected = {aliases[item] for item in include if item in aliases}
+    if "evidence_files" in selected:
+        selected.add("task_evidence")
     list_keys = {
         "findings",
         "alerts",
         "tasks",
         "task_evidence",
+        "evidence_files",
         "task_comments",
         "runs",
         "snapshots",
@@ -229,8 +234,46 @@ class ExportProcessor:
 
     async def _collect_evidence_items(self, packet: dict[str, Any]) -> list[dict[str, Any]]:
         settings = get_settings()
-        evidence_rows = packet.get("task_evidence")
-        if not isinstance(evidence_rows, list):
+        evidence_files_raw = packet.get("evidence_files")
+        normalized_rows: list[dict[str, Any]] = []
+        if isinstance(evidence_files_raw, list):
+            for item in evidence_files_raw:
+                if not isinstance(item, dict):
+                    continue
+                storage_path = str(item.get("storage_path") or "").strip()
+                if not storage_path:
+                    continue
+                normalized_rows.append(
+                    {
+                        "evidence_id": str(item.get("id") or "").strip(),
+                        "task_id": str(item.get("task_id") or "").strip(),
+                        "path": storage_path,
+                        "filename": str(item.get("filename") or "").strip(),
+                        "storage_bucket": str(item.get("storage_bucket") or "").strip(),
+                    }
+                )
+
+        if not normalized_rows:
+            legacy_rows = packet.get("task_evidence")
+            if isinstance(legacy_rows, list):
+                for item in legacy_rows:
+                    if not isinstance(item, dict):
+                        continue
+                    evidence_type = str(item.get("type") or "").strip().lower()
+                    evidence_path = str(item.get("ref") or "").strip()
+                    if evidence_type != "file" or not evidence_path:
+                        continue
+                    normalized_rows.append(
+                        {
+                            "evidence_id": str(item.get("id") or "").strip(),
+                            "task_id": str(item.get("task_id") or "").strip(),
+                            "path": evidence_path,
+                            "filename": evidence_path.rsplit("/", 1)[-1],
+                            "storage_bucket": settings.EVIDENCE_BUCKET_NAME,
+                        }
+                    )
+
+        if not normalized_rows:
             return []
 
         max_files = settings.AUDIT_PACKET_MAX_EVIDENCE_FILES
@@ -240,22 +283,17 @@ class ExportProcessor:
         total_limit_reached = False
         evidence_items: list[dict[str, Any]] = []
 
-        for item in evidence_rows:
-            if not isinstance(item, dict):
-                continue
-
-            evidence_type = str(item.get("type") or "").strip().lower()
-            evidence_path = str(item.get("ref") or "").strip()
-            evidence_id = str(item.get("id") or "").strip()
+        for item in normalized_rows:
+            evidence_path = str(item.get("path") or "").strip()
+            evidence_id = str(item.get("evidence_id") or "").strip()
             task_id = str(item.get("task_id") or "").strip()
+            storage_bucket = str(item.get("storage_bucket") or "").strip() or settings.EVIDENCE_BUCKET_NAME
             evidence_record: dict[str, Any] = {
                 "evidence_id": evidence_id or None,
                 "task_id": task_id or None,
                 "path": evidence_path or None,
+                "filename": str(item.get("filename") or "").strip() or evidence_path.rsplit("/", 1)[-1],
             }
-
-            if evidence_type != "file" or not evidence_path:
-                continue
 
             if total_limit_reached:
                 evidence_record["skipped"] = True
@@ -270,7 +308,7 @@ class ExportProcessor:
                 continue
 
             try:
-                file_bytes = await download_bytes(settings.EVIDENCE_BUCKET_NAME, evidence_path)
+                file_bytes = await download_bytes(storage_bucket, evidence_path)
             except HTTPException as exc:
                 detail = _safe_text(exc.detail).lower()
                 if exc.status_code in {400, 404, 413} or (exc.status_code == 502 and "bucket" in detail):
@@ -296,7 +334,6 @@ class ExportProcessor:
                 total_limit_reached = True
                 continue
 
-            evidence_record["filename"] = evidence_path.rsplit("/", 1)[-1]
             evidence_record["bytes"] = file_bytes
             evidence_items.append(evidence_record)
             included_files += 1

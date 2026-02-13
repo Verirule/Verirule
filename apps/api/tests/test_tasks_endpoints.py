@@ -172,11 +172,19 @@ def test_alert_resolution_requires_evidence_when_none_exists(monkeypatch) -> Non
     async def fake_select_tasks_for_alert(access_token: str, alert_id: str) -> list[dict[str, str]]:
         assert access_token == "token-123"
         assert alert_id == ALERT_ID
-        return [{"id": TASK_ID}]
+        return [{"id": TASK_ID, "org_id": ORG_ID}]
 
     async def fake_select_task_evidence(access_token: str, task_id: str) -> list[dict[str, str]]:
         assert access_token == "token-123"
         assert task_id == TASK_ID
+        return []
+
+    async def fake_select_evidence_files_by_task(
+        access_token: str, task_id: str, org_id: str
+    ) -> list[dict[str, str]]:
+        assert access_token == "token-123"
+        assert task_id == TASK_ID
+        assert org_id == ORG_ID
         return []
 
     monkeypatch.setattr(
@@ -186,6 +194,9 @@ def test_alert_resolution_requires_evidence_when_none_exists(monkeypatch) -> Non
     )
     monkeypatch.setattr(monitoring_endpoint, "select_tasks_for_alert", fake_select_tasks_for_alert)
     monkeypatch.setattr(monitoring_endpoint, "select_task_evidence", fake_select_task_evidence)
+    monkeypatch.setattr(
+        monitoring_endpoint, "select_evidence_files_by_task", fake_select_evidence_files_by_task
+    )
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123", claims={"sub": "user-1"}
