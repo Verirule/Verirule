@@ -116,6 +116,20 @@ def test_zip_export_processor_writes_audit_packet(monkeypatch) -> None:
             "runs": [],
             "snapshots": [],
             "audit_timeline": [],
+            "readiness_summary": {
+                "id": "66666666-6666-6666-6666-666666666666",
+                "org_id": ORG_ID,
+                "computed_at": "2026-02-13T00:00:00Z",
+                "score": 78,
+                "controls_total": 20,
+                "controls_with_evidence": 12,
+                "evidence_items_total": 40,
+                "evidence_items_done": 24,
+                "open_alerts_high": 2,
+                "open_tasks": 5,
+                "overdue_tasks": 1,
+                "metadata": {},
+            },
             "finding_explanations": [],
             "row_count": 1,
         }
@@ -154,7 +168,13 @@ def test_zip_export_processor_writes_audit_packet(monkeypatch) -> None:
     monkeypatch.setattr(export_processor, "update_audit_export_status", fake_update_status)
     monkeypatch.setattr(export_processor, "download_bytes", fake_download_bytes)
     monkeypatch.setattr(export_processor, "upload_bytes", fake_upload_bytes)
-    monkeypatch.setattr(export_processor, "build_pdf", lambda packet: b"%PDF-1.4")
+    def fake_build_pdf(packet: dict[str, object]) -> bytes:
+        readiness = packet.get("readiness_summary")
+        assert isinstance(readiness, dict)
+        assert readiness.get("score") == 78
+        return b"%PDF-1.4"
+
+    monkeypatch.setattr(export_processor, "build_pdf", fake_build_pdf)
     monkeypatch.setattr(export_processor, "build_csv", lambda packet: b"type,id\n")
     monkeypatch.setattr(
         export_processor,
@@ -188,6 +208,10 @@ def test_zip_export_processor_writes_audit_packet(monkeypatch) -> None:
     assert "audit_data.csv" in names
     assert "manifest.json" in names
     assert any(name.startswith("evidence/") for name in names)
+    manifest = _zip_json(uploaded[0][2], "manifest.json")
+    readiness = manifest.get("readiness")
+    assert isinstance(readiness, dict)
+    assert readiness.get("score") == 78
 
 
 def test_zip_export_processor_skips_evidence_when_limits_exceeded(monkeypatch) -> None:
@@ -236,6 +260,20 @@ def test_zip_export_processor_skips_evidence_when_limits_exceeded(monkeypatch) -
             "runs": [],
             "snapshots": [],
             "audit_timeline": [],
+            "readiness_summary": {
+                "id": "77777777-7777-7777-7777-777777777777",
+                "org_id": ORG_ID,
+                "computed_at": "2026-02-13T00:00:00Z",
+                "score": 62,
+                "controls_total": 10,
+                "controls_with_evidence": 6,
+                "evidence_items_total": 20,
+                "evidence_items_done": 12,
+                "open_alerts_high": 1,
+                "open_tasks": 4,
+                "overdue_tasks": 2,
+                "metadata": {},
+            },
             "finding_explanations": [],
             "row_count": 2,
         }
@@ -296,3 +334,6 @@ def test_zip_export_processor_skips_evidence_when_limits_exceeded(monkeypatch) -
     assert isinstance(warnings, list)
     assert len(warnings) >= 1
     assert any("max total evidence bytes reached" in str(item).lower() for item in warnings)
+    readiness = manifest.get("readiness")
+    assert isinstance(readiness, dict)
+    assert readiness.get("score") == 62

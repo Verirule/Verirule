@@ -324,6 +324,7 @@ def build_pdf(packet: dict[str, Any]) -> bytes:
     from_ts = _safe_text(packet.get("from")) or "not set"
     to_ts = _safe_text(packet.get("to")) or "not set"
     generated_at = _safe_text(packet.get("generated_at")) or _iso_now()
+    readiness = packet.get("readiness_summary") if isinstance(packet.get("readiness_summary"), dict) else None
 
     story: list[Any] = []
     story.append(Paragraph("Audit Export Report", styles["ExportTitle"]))
@@ -333,7 +334,28 @@ def build_pdf(packet: dict[str, Any]) -> bytes:
     story.append(Paragraph(f"Generated at: {generated_at}", styles["ExportBody"]))
     story.append(Spacer(1, 0.28 * inch))
 
-    story.append(Paragraph("A) Executive Summary", styles["ExportHeading"]))
+    story.append(Paragraph("A) Readiness Summary", styles["ExportHeading"]))
+    if not readiness:
+        story.append(Paragraph("No readiness snapshot available.", styles["ExportBody"]))
+    else:
+        controls_with_evidence = _safe_text(readiness.get("controls_with_evidence")) or "0"
+        controls_total = _safe_text(readiness.get("controls_total")) or "0"
+        evidence_items_done = _safe_text(readiness.get("evidence_items_done")) or "0"
+        evidence_items_total = _safe_text(readiness.get("evidence_items_total")) or "0"
+        readiness_rows = [
+            ["Metric", "Value"],
+            ["Readiness score", _safe_text(readiness.get("score")) or "0"],
+            ["Controls with evidence", f"{controls_with_evidence} / {controls_total}"],
+            ["Evidence completion", f"{evidence_items_done} / {evidence_items_total}"],
+            ["Open high alerts", _safe_text(readiness.get("open_alerts_high")) or "0"],
+            ["Open tasks", _safe_text(readiness.get("open_tasks")) or "0"],
+            ["Overdue tasks", _safe_text(readiness.get("overdue_tasks")) or "0"],
+            ["Computed at", _safe_text(readiness.get("computed_at")) or "n/a"],
+        ]
+        story.append(_build_table(readiness_rows, [2.8 * inch, 3.7 * inch]))
+    story.append(Spacer(1, 0.2 * inch))
+
+    story.append(Paragraph("B) Executive Summary", styles["ExportHeading"]))
     summary_rows = [
         ["Metric", "Value"],
         ["Sources in scope", str(len(source_ids))],
@@ -358,7 +380,7 @@ def build_pdf(packet: dict[str, Any]) -> bytes:
     story.append(_build_table(snapshot_rows[:26], [4.6 * inch, 1.9 * inch]))
 
     story.append(PageBreak())
-    story.append(Paragraph("B) Findings", styles["ExportHeading"]))
+    story.append(Paragraph("C) Findings", styles["ExportHeading"]))
     if not findings:
         story.append(Paragraph("No findings in the selected date range.", styles["ExportBody"]))
     else:
@@ -386,7 +408,7 @@ def build_pdf(packet: dict[str, Any]) -> bytes:
         )
 
     story.append(Spacer(1, 0.14 * inch))
-    story.append(Paragraph("C) Alerts", styles["ExportHeading"]))
+    story.append(Paragraph("D) Alerts", styles["ExportHeading"]))
     if not alerts:
         story.append(Paragraph("No alerts in the selected date range.", styles["ExportBody"]))
     else:
@@ -405,7 +427,7 @@ def build_pdf(packet: dict[str, Any]) -> bytes:
         story.append(_build_table(alert_rows, [1.5 * inch, 1.0 * inch, 2.0 * inch, 2.4 * inch]))
 
     story.append(PageBreak())
-    story.append(Paragraph("D) Tasks and Evidence", styles["ExportHeading"]))
+    story.append(Paragraph("E) Tasks and Evidence", styles["ExportHeading"]))
     if not tasks:
         story.append(Paragraph("No tasks in the selected date range.", styles["ExportBody"]))
     else:
@@ -434,7 +456,7 @@ def build_pdf(packet: dict[str, Any]) -> bytes:
             story.append(Spacer(1, 0.06 * inch))
 
     story.append(Spacer(1, 0.14 * inch))
-    story.append(Paragraph("E) Monitoring Runs", styles["ExportHeading"]))
+    story.append(Paragraph("F) Monitoring Runs", styles["ExportHeading"]))
     if not runs:
         story.append(Paragraph("No monitoring runs in the selected date range.", styles["ExportBody"]))
     else:
@@ -451,7 +473,7 @@ def build_pdf(packet: dict[str, Any]) -> bytes:
         story.append(_build_table(run_rows, [1.5 * inch, 1.0 * inch, 2.2 * inch, 2.2 * inch]))
 
     story.append(PageBreak())
-    story.append(Paragraph("F) Audit Timeline", styles["ExportHeading"]))
+    story.append(Paragraph("G) Audit Timeline", styles["ExportHeading"]))
     if not timeline:
         story.append(Paragraph("No audit timeline events in the selected date range.", styles["ExportBody"]))
     else:

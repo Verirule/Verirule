@@ -262,6 +262,10 @@ def test_worker_heartbeat_upsert_called(monkeypatch) -> None:
             assert limit == 25
             return 2
 
+    class FakeReadinessProcessor:
+        async def process_if_due(self) -> int:
+            return 3
+
     async def fake_upsert_system_status(status_id: str, payload: dict[str, object]) -> None:
         upserts.append((status_id, payload))
 
@@ -272,6 +276,7 @@ def test_worker_heartbeat_upsert_called(monkeypatch) -> None:
             FakeMonitorProcessor(),  # type: ignore[arg-type]
             FakeExportProcessor(),  # type: ignore[arg-type]
             FakeAlertTaskProcessor(),  # type: ignore[arg-type]
+            FakeReadinessProcessor(),  # type: ignore[arg-type]
             run_batch_limit=5,
             heartbeat_enabled=True,
         )
@@ -281,6 +286,7 @@ def test_worker_heartbeat_upsert_called(monkeypatch) -> None:
     assert payload["runs_processed"] == 1
     assert payload["exports_processed"] == 1
     assert payload["alert_tasks_processed"] == 2
+    assert payload["readiness_computed"] == 3
     assert payload["runs_queued"] == 2
     assert payload["due_sources"] == 4
     assert payload["errors"] == 0

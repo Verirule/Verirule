@@ -73,6 +73,7 @@ def build_manifest(
     generated_at: str,
     counts: dict[str, int],
     files: list[dict[str, Any]],
+    readiness_summary: dict[str, Any] | None,
 ) -> bytes:
     total_bytes = 0
     file_count = 0
@@ -103,6 +104,7 @@ def build_manifest(
         },
         "warnings": warnings,
         "files": files,
+        "readiness": readiness_summary or {},
     }
     return json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
 
@@ -217,6 +219,9 @@ def build_zip(
             generated_at=generated_at,
             counts=counts,
             files=files,
+            readiness_summary=packet.get("readiness_summary")
+            if isinstance(packet.get("readiness_summary"), dict)
+            else None,
         )
         archive.writestr("manifest.json", manifest_bytes)
 

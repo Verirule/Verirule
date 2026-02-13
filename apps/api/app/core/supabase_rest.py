@@ -168,6 +168,68 @@ async def supabase_rpc_create_org(access_token: str, name: str) -> str:
     return payload
 
 
+READINESS_SELECT_COLUMNS = (
+    "id,org_id,computed_at,score,controls_total,controls_with_evidence,evidence_items_total,"
+    "evidence_items_done,open_alerts_high,open_tasks,overdue_tasks,metadata"
+)
+
+
+async def rpc_compute_org_readiness(access_token: str, org_id: str) -> str:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/compute_org_readiness"
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                url,
+                json={"p_org_id": org_id},
+                headers=supabase_rest_headers(access_token),
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to compute organization readiness in Supabase.",
+        ) from exc
+
+    payload = response.json()
+    if not isinstance(payload, str):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid compute readiness response from Supabase.",
+        )
+    return payload
+
+
+async def list_org_readiness(access_token: str, org_id: str, limit: int = 30) -> list[dict[str, Any]]:
+    bounded_limit = max(1, min(limit, 100))
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_readiness_snapshots"
+    params = {
+        "select": READINESS_SELECT_COLUMNS,
+        "org_id": f"eq.{org_id}",
+        "order": "computed_at.desc",
+        "limit": str(bounded_limit),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch readiness snapshots from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid readiness snapshots response from Supabase.")
+
+
+async def get_latest_org_readiness(access_token: str, org_id: str) -> dict[str, Any] | None:
+    rows = await list_org_readiness(access_token, org_id, limit=1)
+    return rows[0] if rows else None
+
+
 async def select_sources(access_token: str, org_id: str) -> list[dict[str, Any]]:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/sources"
@@ -675,6 +737,44 @@ async def select_alerts_needing_tasks_service(limit: int = 50) -> list[dict[str,
     )
 
 
+async def list_active_org_ids_service(limit_per_table: int = 2000) -> list[str]:
+    settings = get_settings()
+    source_url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/sources"
+    task_url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/tasks"
+    params = {
+        "select": "org_id",
+        "limit": str(max(1, limit_per_table)),
+    }
+    headers = supabase_service_role_headers()
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            sources_response = await client.get(source_url, params=params, headers=headers)
+            sources_response.raise_for_status()
+            tasks_response = await client.get(task_url, params=params, headers=headers)
+            tasks_response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch active organizations from Supabase.",
+        ) from exc
+
+    source_rows = _validated_list_payload(
+        sources_response.json(), "Invalid active organizations response from Supabase."
+    )
+    task_rows = _validated_list_payload(
+        tasks_response.json(), "Invalid active organizations response from Supabase."
+    )
+
+    org_ids: set[str] = set()
+    for row in [*source_rows, *task_rows]:
+        org_id = row.get("org_id")
+        if isinstance(org_id, str) and org_id.strip():
+            org_ids.add(org_id.strip())
+
+    return sorted(org_ids)
+
+
 async def select_finding_by_id(access_token: str, finding_id: str) -> dict[str, Any] | None:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/findings"
@@ -933,6 +1033,31 @@ async def select_audit_packet_data(
         date_column="created_at",
         order="created_at.desc",
     )
+    readiness_summary: dict[str, Any] | None = None
+    readiness_params = {
+        "select": READINESS_SELECT_COLUMNS,
+        "org_id": f"eq.{org_id}",
+        "order": "computed_at.desc",
+        "limit": "1",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            readiness_response = await client.get(
+                f"{base_url}/org_readiness_snapshots",
+                params=readiness_params,
+                headers=headers,
+            )
+            readiness_response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch export data from Supabase.",
+        ) from exc
+    readiness_rows = _validated_list_payload(
+        readiness_response.json(), "Invalid export data response from Supabase."
+    )
+    if readiness_rows:
+        readiness_summary = readiness_rows[0]
 
     return {
         "org_id": org_id,
@@ -948,6 +1073,7 @@ async def select_audit_packet_data(
         "task_comments": task_comments,
         "snapshots": snapshots,
         "audit_timeline": audit_timeline,
+        "readiness_summary": readiness_summary,
         "row_count": AUDIT_PACKET_MAX_ROWS - remaining,
     }
 
