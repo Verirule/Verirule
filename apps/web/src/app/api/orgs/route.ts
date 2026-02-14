@@ -20,6 +20,11 @@ type SessionContext = {
   supabase: Awaited<ReturnType<typeof createClient>>;
 };
 
+type ForwardedClientHeaders = {
+  forwardedFor: string | null;
+  realIp: string | null;
+};
+
 const FAST_API_TIMEOUT_MS = 10_000;
 
 function getApiBaseUrl(): string | null {
@@ -191,6 +196,7 @@ async function proxyFastApiOrgsRequest(
   method: "GET" | "POST",
   accessToken: string,
   requestId: string,
+  clientHeaders: ForwardedClientHeaders,
   payload?: Record<string, unknown>,
 ): Promise<NextResponse | null> {
   const apiBaseUrl = getApiBaseUrl();
@@ -208,6 +214,8 @@ async function proxyFastApiOrgsRequest(
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
           "X-Request-ID": requestId,
+          ...(clientHeaders.forwardedFor ? { "X-Forwarded-For": clientHeaders.forwardedFor } : {}),
+          ...(clientHeaders.realIp ? { "X-Real-IP": clientHeaders.realIp } : {}),
         },
         body: payload ? JSON.stringify(payload) : undefined,
         cache: "no-store",
@@ -305,13 +313,20 @@ async function createOrgInSupabase(
 
 export async function GET(request: NextRequest) {
   const requestId = requestIdFromHeaders(request.headers);
+  const clientHeaders: ForwardedClientHeaders = {
+    forwardedFor:
+      request.headers.get("x-forwarded-for")?.trim() ||
+      request.headers.get("x-vercel-forwarded-for")?.trim() ||
+      null,
+    realIp: request.headers.get("x-real-ip")?.trim() || null,
+  };
 
   const { context, response } = await getSessionContext(requestId);
   if (response) {
     return response;
   }
 
-  const fastApiResponse = await proxyFastApiOrgsRequest("GET", context.accessToken, requestId);
+  const fastApiResponse = await proxyFastApiOrgsRequest("GET", context.accessToken, requestId, clientHeaders);
   if (fastApiResponse) {
     return fastApiResponse;
   }
@@ -321,6 +336,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const requestId = requestIdFromHeaders(request.headers);
+  const clientHeaders: ForwardedClientHeaders = {
+    forwardedFor:
+      request.headers.get("x-forwarded-for")?.trim() ||
+      request.headers.get("x-vercel-forwarded-for")?.trim() ||
+      null,
+    realIp: request.headers.get("x-real-ip")?.trim() || null,
+  };
   const payload = (await request.json().catch(() => null)) as { name?: unknown } | null;
   const name = typeof payload?.name === "string" ? payload.name : "";
   if (!name.trim()) {
@@ -332,9 +354,13 @@ export async function POST(request: NextRequest) {
     return response;
   }
 
-  const fastApiResponse = await proxyFastApiOrgsRequest("POST", context.accessToken, requestId, {
-    name: name.trim(),
-  });
+  const fastApiResponse = await proxyFastApiOrgsRequest(
+    "POST",
+    context.accessToken,
+    requestId,
+    clientHeaders,
+    { name: name.trim() },
+  );
   if (fastApiResponse) {
     return fastApiResponse;
   }

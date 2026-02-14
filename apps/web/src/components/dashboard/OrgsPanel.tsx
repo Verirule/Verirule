@@ -78,6 +78,35 @@ function formatCreateFailureMessage(requestId: string | null): string {
   return "Workspace creation failed. Please try again.";
 }
 
+function formatCreateOrgError(status: number, payload: ApiErrorResponse, requestId: string | null): string {
+  const code = typeof payload.code === "string" ? payload.code : "";
+  const requestIdSuffix = requestId ? ` (Request ID: ${requestId})` : "";
+  const message =
+    typeof payload.message === "string" && payload.message.trim().length > 0
+      ? payload.message
+      : typeof payload.detail === "string" && payload.detail.trim().length > 0
+        ? payload.detail
+        : null;
+
+  if (status === 401 || code === "unauthorized") {
+    return `Workspace creation failed: Sign in again.${requestIdSuffix}`;
+  }
+
+  if (status === 403 || code === "rls_denied") {
+    return `Workspace creation failed: No access to orgs; verify membership.${requestIdSuffix}`;
+  }
+
+  if (status === 429) {
+    return `Workspace creation failed: ${message ?? "Too many requests. Please wait and retry."}${requestIdSuffix}`;
+  }
+
+  if (message) {
+    return `Workspace creation failed: ${message}${requestIdSuffix}`;
+  }
+
+  return formatCreateFailureMessage(requestId);
+}
+
 export function OrgsPanel() {
   const [orgs, setOrgs] = useState<OrgRecord[]>([]);
   const [name, setName] = useState("");
@@ -152,7 +181,7 @@ export function OrgsPanel() {
       }
 
       if (!result.ok) {
-        setError(formatCreateFailureMessage(result.requestId));
+        setError(formatCreateOrgError(result.status, result.json ?? {}, result.requestId));
         return;
       }
 
@@ -172,7 +201,7 @@ export function OrgsPanel() {
       await loadOrgs();
     } catch (error: unknown) {
       if (error instanceof FetchTimeoutError) {
-        setError(formatCreateFailureMessage(null));
+        setError("Workspace creation timed out. Please try again.");
       } else {
         setError("Unable to create workspace right now.");
       }
