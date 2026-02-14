@@ -480,13 +480,35 @@ async def supabase_rpc_create_org(access_token: str, name: str) -> str:
         ) from exc
 
     payload = response.json()
-    if not isinstance(payload, str):
+    org_id = _extract_create_org_id(payload)
+    if not org_id:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Invalid create organization response from Supabase.",
         )
 
-    return payload
+    return org_id
+
+
+def _extract_create_org_id(payload: Any) -> str | None:
+    if isinstance(payload, str) and payload.strip():
+        return payload.strip()
+
+    if isinstance(payload, dict):
+        for key in ("create_org", "id", "org_id"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
+    if isinstance(payload, list) and payload:
+        first = payload[0]
+        if isinstance(first, str) and first.strip():
+            return first.strip()
+        if isinstance(first, dict):
+            return _extract_create_org_id(first)
+
+    return None
 
 
 READINESS_SELECT_COLUMNS = (

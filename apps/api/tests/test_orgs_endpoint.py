@@ -170,6 +170,54 @@ def test_create_org_returns_id_when_supabase_ok(monkeypatch) -> None:
     assert response.json() == {"id": "3e66f70d-1644-4b07-8d03-3dbfef9b3e01"}
 
 
+def test_create_org_accepts_object_rpc_response(monkeypatch) -> None:
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url: str, json: dict[str, str], headers: dict[str, str]) -> FakeResponse:
+            assert url == "https://example.supabase.co/rest/v1/rpc/create_org"
+            assert json == {"p_name": "Acme"}
+            assert headers["Authorization"] == "Bearer token-123"
+            return FakeResponse({"create_org": "3e66f70d-1644-4b07-8d03-3dbfef9b3e01"})
+
+        async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
+            assert url == "https://example.supabase.co/rest/v1/orgs"
+            return FakeResponse([])
+
+    app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
+        access_token="token-123",
+        claims={"sub": "user-1"},
+    )
+    monkeypatch.setattr(supabase_rest.httpx, "AsyncClient", FakeAsyncClient)
+
+    try:
+        client = TestClient(app)
+        response = client.post("/api/v1/orgs", json={"name": "Acme"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"id": "3e66f70d-1644-4b07-8d03-3dbfef9b3e01"}
+
+
 def test_create_org_is_idempotent_returns_existing_id(monkeypatch) -> None:
     async def fake_select_orgs(access_token: str) -> list[dict[str, str]]:
         assert access_token == "token-123"
