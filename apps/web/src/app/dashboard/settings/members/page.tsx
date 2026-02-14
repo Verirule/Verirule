@@ -77,6 +77,7 @@ export default function DashboardSettingsMembersPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [showUpgradeCta, setShowUpgradeCta] = useState(false);
 
   const currentUserRole = useMemo(() => {
     if (!currentUserId) return null;
@@ -241,6 +242,7 @@ export default function DashboardSettingsMembersPage() {
     event.preventDefault();
     setError(null);
     setSuccess(null);
+    setShowUpgradeCta(false);
 
     if (!canManageMembers || !selectedOrgId) {
       setError("Only admins and owners can create invites.");
@@ -276,6 +278,7 @@ export default function DashboardSettingsMembersPage() {
       if (!response.ok) {
         const detail = typeof body.message === "string" ? body.message : "Unable to create invite.";
         setError(detail);
+        setShowUpgradeCta(response.status === 402);
         return;
       }
 
@@ -287,9 +290,11 @@ export default function DashboardSettingsMembersPage() {
       }
 
       setInviteEmail("");
+      setShowUpgradeCta(false);
       await loadInvites(selectedOrgId);
     } catch {
       setError("Unable to create invite.");
+      setShowUpgradeCta(false);
     } finally {
       setIsInviting(false);
     }
@@ -652,7 +657,16 @@ export default function DashboardSettingsMembersPage() {
         </CardContent>
       </Card>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? (
+        <div className="space-y-2">
+          <p className="text-sm text-destructive">{error}</p>
+          {showUpgradeCta ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/dashboard/billing">Upgrade plan</Link>
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {success ? <p className="text-sm text-emerald-700">{success}</p> : null}
     </div>
   );

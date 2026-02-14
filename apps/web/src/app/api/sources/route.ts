@@ -31,6 +31,24 @@ function logProxyError(error: unknown): void {
   console.error("api/sources proxy failed", { message });
 }
 
+async function upstreamErrorResponse(upstreamResponse: Response) {
+  if (upstreamResponse.status >= 500) {
+    return NextResponse.json({ message: "Upstream API error" }, { status: 502 });
+  }
+
+  const body = (await upstreamResponse.json().catch(() => ({}))) as {
+    detail?: unknown;
+    message?: unknown;
+  };
+  const detail =
+    typeof body.detail === "string"
+      ? body.detail
+      : typeof body.message === "string"
+        ? body.message
+        : "Request failed";
+  return NextResponse.json({ message: detail }, { status: upstreamResponse.status });
+}
+
 function parseKind(value: unknown): SourceKind | null {
   if (
     value === "html" ||
@@ -80,7 +98,7 @@ export async function GET(request: NextRequest) {
       console.error("api/sources proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
-      return NextResponse.json({ message: "Upstream API error" }, { status: 502 });
+      return upstreamErrorResponse(upstreamResponse);
     }
 
     const body = (await upstreamResponse.json().catch(() => ({}))) as unknown;
@@ -141,7 +159,7 @@ export async function POST(request: NextRequest) {
       console.error("api/sources proxy failed", {
         message: `upstream status ${upstreamResponse.status}`,
       });
-      return NextResponse.json({ message: "Upstream API error" }, { status: 502 });
+      return upstreamErrorResponse(upstreamResponse);
     }
 
     const body = (await upstreamResponse.json().catch(() => ({}))) as unknown;

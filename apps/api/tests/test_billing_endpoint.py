@@ -54,7 +54,11 @@ def test_billing_returns_default_free_when_missing(monkeypatch) -> None:
     assert body["plan_status"] == "active"
     assert body["current_period_end"] is None
     assert body["entitlements"]["integrations_enabled"] is False
-    assert body["entitlements"]["exports_enabled"] is False
+    assert body["entitlements"]["exports_enabled"] is True
+    assert body["entitlements"]["scheduling_enabled"] is True
+    assert body["entitlements"]["max_sources"] == 3
+    assert body["entitlements"]["max_exports_per_month"] == 1
+    assert body["entitlements"]["max_members"] == 5
 
 
 def test_billing_returns_stored_plan(monkeypatch) -> None:
@@ -95,9 +99,10 @@ def test_billing_returns_stored_plan(monkeypatch) -> None:
             "integrations_enabled": True,
             "exports_enabled": True,
             "scheduling_enabled": True,
-            "max_sources": None,
-            "max_exports_per_month": None,
-            "max_integrations": None,
+            "max_sources": 100,
+            "max_exports_per_month": 500,
+            "max_integrations": 50,
+            "max_members": 100,
         },
     }
 

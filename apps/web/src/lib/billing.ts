@@ -1,7 +1,7 @@
 export type BillingPlan = "free" | "pro" | "business";
 export type BillingPlanStatus = "active" | "past_due" | "canceled" | "trialing";
 
-export const FREE_SOURCE_LIMIT = 5;
+export const FREE_SOURCE_LIMIT = 3;
 
 export type BillingEntitlements = {
   plan: BillingPlan;
@@ -11,6 +11,7 @@ export type BillingEntitlements = {
   max_sources: number | null;
   max_exports_per_month: number | null;
   max_integrations: number | null;
+  max_members: number | null;
 };
 
 export type BillingStatusResponse = {
@@ -60,6 +61,7 @@ export type PlanFeatures = {
   maxSources: number | null;
   maxExportsPerMonth: number | null;
   maxIntegrations: number | null;
+  maxMembers: number | null;
 };
 
 export function getPlanFeatures(plan: BillingPlan): PlanFeatures {
@@ -68,9 +70,10 @@ export function getPlanFeatures(plan: BillingPlan): PlanFeatures {
       canUseIntegrations: true,
       canUseExports: true,
       canUseScheduledRuns: true,
-      maxSources: null,
-      maxExportsPerMonth: null,
-      maxIntegrations: null,
+      maxSources: 100,
+      maxExportsPerMonth: 500,
+      maxIntegrations: 50,
+      maxMembers: 100,
     };
   }
 
@@ -79,18 +82,20 @@ export function getPlanFeatures(plan: BillingPlan): PlanFeatures {
       canUseIntegrations: true,
       canUseExports: true,
       canUseScheduledRuns: true,
-      maxSources: null,
+      maxSources: 25,
       maxExportsPerMonth: 500,
       maxIntegrations: 10,
+      maxMembers: 25,
     };
   }
 
   return {
     canUseIntegrations: false,
-    canUseExports: false,
-    canUseScheduledRuns: false,
+    canUseExports: true,
+    canUseScheduledRuns: true,
     maxSources: FREE_SOURCE_LIMIT,
-    maxExportsPerMonth: 5,
+    maxExportsPerMonth: 1,
     maxIntegrations: 0,
+    maxMembers: 5,
   };
 }

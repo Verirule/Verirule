@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -149,13 +150,38 @@ def test_download_url_requires_succeeded(monkeypatch) -> None:
     assert response.json() == {"detail": "Export is not ready for download."}
 
 
-def test_create_export_returns_402_on_free_plan(monkeypatch) -> None:
+def test_create_export_returns_402_when_monthly_limit_reached(monkeypatch) -> None:
     async def fake_free_plan(access_token: str, org_id: str) -> dict[str, str]:
         assert access_token == "token-123"
         assert org_id == ORG_ID
         return {"id": org_id, "plan": "free"}
 
+    async def fake_select_audit_exports(access_token: str, org_id: str) -> list[dict[str, object]]:
+        assert access_token == "token-123"
+        assert org_id == ORG_ID
+        return [
+            {
+                "id": EXPORT_ID,
+                "org_id": ORG_ID,
+                "requested_by_user_id": "user-1",
+                "format": "pdf",
+                "scope": {},
+                "status": "succeeded",
+                "file_path": "org/file.pdf",
+                "file_sha256": "sha",
+                "error_text": None,
+                "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                "completed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            }
+        ]
+
+    async def fail_create_export(*args, **kwargs):  # pragma: no cover
+        raise AssertionError("create export RPC should not run when monthly limit is reached")
+
     monkeypatch.setattr(billing_guard, "select_org_billing", fake_free_plan)
+    monkeypatch.setattr(exports_endpoint, "select_org_billing", fake_free_plan)
+    monkeypatch.setattr(exports_endpoint, "select_audit_exports", fake_select_audit_exports)
+    monkeypatch.setattr(exports_endpoint, "rpc_create_audit_export", fail_create_export)
     monkeypatch.setattr(
         exports_endpoint,
         "get_settings",
@@ -181,7 +207,7 @@ def test_create_export_returns_402_on_free_plan(monkeypatch) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 402
-    assert response.json() == {"detail": "Upgrade required"}
+    assert response.json() == {"detail": "Monthly export limit reached"}
 
 
 def test_export_processor_uploads_and_updates_status(monkeypatch) -> None:

@@ -76,6 +76,7 @@ export default function DashboardExportsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [showUpgradeCta, setShowUpgradeCta] = useState(false);
   const { features } = usePlan(selectedOrgId);
 
   const loadOrgs = async () => {
@@ -126,6 +127,7 @@ export default function DashboardExportsPage() {
 
     setIsLoadingExports(true);
     setError(null);
+    setShowUpgradeCta(false);
     try {
       const response = await fetch(`/api/exports?org_id=${encodeURIComponent(orgId)}`, {
         method: "GET",
@@ -143,6 +145,7 @@ export default function DashboardExportsPage() {
       if (!response.ok || !Array.isArray(body.exports)) {
         const messageText = typeof body.message === "string" ? body.message : null;
         setError(messageText || "Unable to load exports right now.");
+        setShowUpgradeCta(response.status === 402);
         setExportRows([]);
         return;
       }
@@ -163,6 +166,7 @@ export default function DashboardExportsPage() {
     }
     if (!features.canUseExports) {
       setError("Upgrade required to generate exports.");
+      setShowUpgradeCta(true);
       return;
     }
 
@@ -184,6 +188,7 @@ export default function DashboardExportsPage() {
     setIsGenerating(true);
     setError(null);
     setMessage(null);
+    setShowUpgradeCta(false);
     try {
       const response = await fetch("/api/exports", {
         method: "POST",
@@ -218,6 +223,7 @@ export default function DashboardExportsPage() {
       if (!response.ok || typeof body.id !== "string") {
         const messageText = typeof body.message === "string" ? body.message : null;
         setError(messageText || "Unable to queue export right now.");
+        setShowUpgradeCta(response.status === 402);
         return;
       }
 
@@ -225,6 +231,7 @@ export default function DashboardExportsPage() {
       await loadExports(selectedOrgId);
     } catch {
       setError("Unable to queue export right now.");
+      setShowUpgradeCta(false);
     } finally {
       setIsGenerating(false);
     }
@@ -233,10 +240,12 @@ export default function DashboardExportsPage() {
   const openDownload = async (exportId: string) => {
     if (!features.canUseExports) {
       setError("Upgrade required to download exports.");
+      setShowUpgradeCta(true);
       return;
     }
 
     setError(null);
+    setShowUpgradeCta(false);
     try {
       const response = await fetch(`/api/exports/${encodeURIComponent(exportId)}/download-url`, {
         method: "GET",
@@ -254,12 +263,14 @@ export default function DashboardExportsPage() {
       if (!response.ok || typeof body.downloadUrl !== "string") {
         const messageText = typeof body.message === "string" ? body.message : null;
         setError(messageText || "Download is not ready yet.");
+        setShowUpgradeCta(response.status === 402);
         return;
       }
 
       window.open(body.downloadUrl, "_blank", "noopener,noreferrer");
     } catch {
       setError("Unable to open download right now.");
+      setShowUpgradeCta(false);
     }
   };
 
@@ -376,7 +387,16 @@ export default function DashboardExportsPage() {
             </>
           ) : null}
           {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <div className="space-y-2">
+              <p className="text-sm text-destructive">{error}</p>
+              {showUpgradeCta ? (
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/dashboard/billing">Upgrade plan</Link>
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

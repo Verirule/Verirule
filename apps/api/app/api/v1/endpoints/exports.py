@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,6 +10,7 @@ from app.api.v1.schemas.exports import (
     ExportOut,
 )
 from app.auth.roles import enforce_org_role
+from app.billing.entitlements import get_entitlements
 from app.billing.guard import ensure_feature_enabled, require_feature
 from app.core.settings import get_settings
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
@@ -16,6 +18,7 @@ from app.core.supabase_rest import (
     rpc_create_audit_export,
     select_audit_export_by_id,
     select_audit_exports,
+    select_org_billing,
 )
 from app.core.supabase_storage_admin import create_signed_download_url
 
@@ -32,6 +35,21 @@ def _ensure_exports_configured() -> None:
         )
 
 
+def _parse_created_at(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
 @router.post("/exports")
 async def create_export(
     payload: ExportCreateIn,
@@ -40,6 +58,25 @@ async def create_export(
 ) -> ExportCreateOut:
     await enforce_org_role(auth, str(payload.org_id), "member")
     _ensure_exports_configured()
+    billing_row = await select_org_billing(auth.access_token, str(payload.org_id))
+    raw_plan = billing_row.get("plan") if isinstance(billing_row, dict) else None
+    entitlements = get_entitlements(raw_plan if isinstance(raw_plan, str) else None)
+
+    if entitlements.max_exports_per_month is not None:
+        existing_rows = await select_audit_exports(auth.access_token, str(payload.org_id))
+        now = datetime.now(UTC)
+        month_start = datetime(year=now.year, month=now.month, day=1, tzinfo=UTC)
+        monthly_exports = 0
+        for row in existing_rows:
+            created_at = _parse_created_at(row.get("created_at"))
+            if created_at is not None and created_at >= month_start:
+                monthly_exports += 1
+
+        if monthly_exports >= entitlements.max_exports_per_month:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Monthly export limit reached",
+            )
 
     scope: dict[str, object] = {}
     if payload.from_ts:

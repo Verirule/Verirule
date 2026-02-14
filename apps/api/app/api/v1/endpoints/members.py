@@ -17,6 +17,7 @@ from app.api.v1.schemas.members import (
     OrgMemberRoleUpdateIn,
 )
 from app.auth.roles import OrgRoleContext, enforce_org_role
+from app.billing.entitlements import get_entitlements
 from app.core.settings import get_settings
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.core.supabase_rest import (
@@ -26,6 +27,7 @@ from app.core.supabase_rest import (
     rpc_accept_org_invite,
     rpc_create_org_invite,
     rpc_record_audit_event,
+    select_org_billing,
     select_org_invite_by_id,
     select_org_invites,
     select_org_member_service,
@@ -181,6 +183,19 @@ async def create_org_invite(
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
 ) -> OrgInviteCreateOut:
     role_ctx: OrgRoleContext = await enforce_org_role(auth, str(org_id), "admin")
+    billing_row = await select_org_billing(auth.access_token, str(org_id))
+    raw_plan = billing_row.get("plan") if isinstance(billing_row, dict) else None
+    entitlements = get_entitlements(raw_plan if isinstance(raw_plan, str) else None)
+
+    if entitlements.max_members is not None:
+        member_rows = await select_org_members_service(str(org_id))
+        pending_invites = await select_org_invites(auth.access_token, str(org_id), pending_only=True)
+        seats_in_use = len(member_rows) + len(pending_invites)
+        if seats_in_use >= entitlements.max_members:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Member limit reached ({entitlements.max_members}). Upgrade required.",
+            )
 
     email = payload.email.strip().lower()
     if not email:

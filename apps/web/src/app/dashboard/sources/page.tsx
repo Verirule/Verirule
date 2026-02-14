@@ -114,6 +114,7 @@ export default function DashboardSourcesPage() {
   const [schedulingSourceId, setSchedulingSourceId] = useState<string | null>(null);
   const [runningSourceId, setRunningSourceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showUpgradeCta, setShowUpgradeCta] = useState(false);
 
   const trimmedName = useMemo(() => name.trim(), [name]);
   const trimmedUrl = useMemo(() => normalizeUrl(url), [url]);
@@ -243,6 +244,7 @@ export default function DashboardSourcesPage() {
   const createSource = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setShowUpgradeCta(false);
 
     if (!selectedOrgId) {
       setError("Select an organization first.");
@@ -261,7 +263,8 @@ export default function DashboardSourcesPage() {
       return;
     }
     if (maxSourcesReached) {
-      setError("Free plan source limit reached. Upgrade to Pro for unlimited sources.");
+      setError("Source limit reached for current plan.");
+      setShowUpgradeCta(true);
       return;
     }
 
@@ -280,6 +283,7 @@ export default function DashboardSourcesPage() {
           config,
         }),
       });
+      const body = (await response.json().catch(() => ({}))) as { message?: unknown };
 
       if (response.status === 401) {
         window.location.href = "/auth/login";
@@ -287,7 +291,8 @@ export default function DashboardSourcesPage() {
       }
 
       if (!response.ok) {
-        setError("Unable to create source right now.");
+        setError(typeof body.message === "string" ? body.message : "Unable to create source right now.");
+        setShowUpgradeCta(response.status === 402);
         return;
       }
 
@@ -295,9 +300,11 @@ export default function DashboardSourcesPage() {
       setKind("html");
       setUrl("");
       setRepo("");
+      setShowUpgradeCta(false);
       await loadSourcesAndRuns(selectedOrgId);
     } catch {
       setError("Unable to create source right now.");
+      setShowUpgradeCta(false);
     } finally {
       setIsCreating(false);
     }
@@ -631,7 +638,16 @@ export default function DashboardSourcesPage() {
                   : "Source limit reached."}
               </p>
             ) : null}
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error ? (
+              <div className="space-y-2">
+                <p className="text-sm text-destructive">{error}</p>
+                {showUpgradeCta ? (
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/dashboard/billing">Upgrade plan</Link>
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             <Button type="submit" disabled={isCreating || !selectedOrgId || maxSourcesReached}>
               {isCreating ? "Creating..." : "Create source"}
             </Button>

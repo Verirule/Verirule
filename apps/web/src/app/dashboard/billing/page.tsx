@@ -319,6 +319,20 @@ export default function DashboardBillingPage() {
               </span>
             ))}
           </div>
+          <div className="space-y-1 rounded-md border border-border/70 bg-muted/30 p-3 text-xs">
+            <p>
+              <span className="font-medium">Max sources:</span>{" "}
+              {features.maxSources === null ? "Unlimited" : features.maxSources}
+            </p>
+            <p>
+              <span className="font-medium">Max exports per month:</span>{" "}
+              {features.maxExportsPerMonth === null ? "Unlimited" : features.maxExportsPerMonth}
+            </p>
+            <p>
+              <span className="font-medium">Max members:</span>{" "}
+              {features.maxMembers === null ? "Unlimited" : features.maxMembers}
+            </p>
+          </div>
           <Button type="button" variant="outline" size="sm" onClick={() => void refresh()}>
             Refresh billing status
           </Button>

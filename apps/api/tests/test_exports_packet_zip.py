@@ -60,7 +60,14 @@ def test_create_zip_export_queues(monkeypatch) -> None:
         assert org_id == ORG_ID
         return {"id": org_id, "plan": "pro"}
 
+    async def fake_select_exports(access_token: str, org_id: str) -> list[dict[str, object]]:
+        assert access_token == "token-123"
+        assert org_id == ORG_ID
+        return []
+
     monkeypatch.setattr(billing_guard, "select_org_billing", fake_paid_plan)
+    monkeypatch.setattr(exports_endpoint, "select_org_billing", fake_paid_plan)
+    monkeypatch.setattr(exports_endpoint, "select_audit_exports", fake_select_exports)
 
     app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
         access_token="token-123",

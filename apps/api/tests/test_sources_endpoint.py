@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.api.v1.endpoints import sources as sources_endpoint
 from app.billing import guard as billing_guard
 from app.core import supabase_rest
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
@@ -100,6 +101,16 @@ def test_sources_returns_list_when_supabase_ok(monkeypatch) -> None:
 
 
 def test_create_source_returns_id_when_supabase_ok(monkeypatch) -> None:
+    async def fake_select_org_billing(access_token: str, org_id: str) -> dict[str, str]:
+        assert access_token == "token-123"
+        assert org_id == "11111111-1111-1111-1111-111111111111"
+        return {"id": org_id, "plan": "pro"}
+
+    async def fake_select_sources(access_token: str, org_id: str) -> list[dict[str, object]]:
+        assert access_token == "token-123"
+        assert org_id == "11111111-1111-1111-1111-111111111111"
+        return []
+
     class FakeResponse:
         def __init__(self, payload):
             self._payload = payload
@@ -144,6 +155,8 @@ def test_create_source_returns_id_when_supabase_ok(monkeypatch) -> None:
         claims={"sub": "user-1"},
     )
     monkeypatch.setattr(supabase_rest.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(sources_endpoint, "select_org_billing", fake_select_org_billing)
+    monkeypatch.setattr(sources_endpoint, "select_sources", fake_select_sources)
 
     try:
         client = TestClient(app)
@@ -164,6 +177,49 @@ def test_create_source_returns_id_when_supabase_ok(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"id": "22222222-2222-2222-2222-222222222222"}
+
+
+def test_create_source_returns_402_when_limit_reached(monkeypatch) -> None:
+    async def fake_select_org_billing(access_token: str, org_id: str) -> dict[str, str]:
+        assert access_token == "token-123"
+        assert org_id == "11111111-1111-1111-1111-111111111111"
+        return {"id": org_id, "plan": "free"}
+
+    async def fake_select_sources(access_token: str, org_id: str) -> list[dict[str, object]]:
+        assert access_token == "token-123"
+        assert org_id == "11111111-1111-1111-1111-111111111111"
+        return [{"id": "1"}, {"id": "2"}, {"id": "3"}]
+
+    async def fail_create_source(*args, **kwargs):  # pragma: no cover
+        raise AssertionError("create_source RPC should not run when source limit is reached")
+
+    app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
+        access_token="token-123",
+        claims={"sub": "user-1"},
+    )
+    monkeypatch.setattr(sources_endpoint, "select_org_billing", fake_select_org_billing)
+    monkeypatch.setattr(sources_endpoint, "select_sources", fake_select_sources)
+    monkeypatch.setattr(sources_endpoint, "rpc_create_source", fail_create_source)
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/sources",
+            json={
+                "org_id": "11111111-1111-1111-1111-111111111111",
+                "name": "Security RSS",
+                "type": "rss",
+                "url": "https://example.com/feed.xml",
+                "kind": "rss",
+                "config": {},
+                "title": "Security Feed",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 402
+    assert response.json() == {"detail": "Source limit reached (3). Upgrade required."}
 
 
 def test_update_source_returns_ok_when_supabase_ok(monkeypatch) -> None:

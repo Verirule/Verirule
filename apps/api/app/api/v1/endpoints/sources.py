@@ -1,8 +1,9 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.v1.schemas.sources import SourceCreateIn, SourceOut, SourceScheduleIn, SourceUpdateIn
+from app.billing.entitlements import get_entitlements
 from app.billing.guard import require_feature
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.core.supabase_rest import (
@@ -11,6 +12,7 @@ from app.core.supabase_rest import (
     rpc_set_source_cadence,
     rpc_update_source,
     select_due_sources,
+    select_org_billing,
     select_sources,
 )
 
@@ -38,6 +40,18 @@ async def due_sources(
 async def create_source(
     payload: SourceCreateIn, auth: VerifiedSupabaseAuth = supabase_auth_dependency
 ) -> dict[str, UUID]:
+    billing_row = await select_org_billing(auth.access_token, str(payload.org_id))
+    raw_plan = billing_row.get("plan") if isinstance(billing_row, dict) else None
+    entitlements = get_entitlements(raw_plan if isinstance(raw_plan, str) else None)
+
+    if entitlements.max_sources is not None:
+        source_rows = await select_sources(auth.access_token, str(payload.org_id))
+        if len(source_rows) >= entitlements.max_sources:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Source limit reached ({entitlements.max_sources}). Upgrade required.",
+            )
+
     source_id = await rpc_create_source(
         auth.access_token,
         {

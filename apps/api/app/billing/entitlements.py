@@ -21,6 +21,7 @@ class PlanEntitlements:
     max_sources: int | None
     max_exports_per_month: int | None
     max_integrations: int | None
+    max_members: int | None
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -43,9 +44,10 @@ def get_entitlements(plan: Plan | str | None) -> PlanEntitlements:
             integrations_enabled=True,
             exports_enabled=True,
             scheduling_enabled=True,
-            max_sources=None,
-            max_exports_per_month=None,
-            max_integrations=None,
+            max_sources=100,
+            max_exports_per_month=500,
+            max_integrations=50,
+            max_members=100,
         )
 
     if resolved_plan is Plan.PRO:
@@ -54,17 +56,19 @@ def get_entitlements(plan: Plan | str | None) -> PlanEntitlements:
             integrations_enabled=True,
             exports_enabled=True,
             scheduling_enabled=True,
-            max_sources=None,
+            max_sources=25,
             max_exports_per_month=500,
             max_integrations=10,
+            max_members=25,
         )
 
     return PlanEntitlements(
         plan=Plan.FREE,
         integrations_enabled=False,
-        exports_enabled=False,
-        scheduling_enabled=False,
-        max_sources=5,
-        max_exports_per_month=5,
+        exports_enabled=True,
+        scheduling_enabled=True,
+        max_sources=3,
+        max_exports_per_month=1,
         max_integrations=0,
+        max_members=5,
     )

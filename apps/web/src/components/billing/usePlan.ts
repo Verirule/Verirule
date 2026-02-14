@@ -69,6 +69,10 @@ function normalizeStatus(payload: unknown): BillingStatusResponse {
       typeof row.entitlements?.max_integrations === "number" || row.entitlements?.max_integrations === null
         ? row.entitlements.max_integrations
         : fallbackFeatures.maxIntegrations,
+    max_members:
+      typeof row.entitlements?.max_members === "number" || row.entitlements?.max_members === null
+        ? row.entitlements.max_members
+        : fallbackFeatures.maxMembers,
   };
 
   return {
@@ -113,11 +117,12 @@ const FREE_PLAN_STATE: PlanState = {
   entitlements: {
     plan: "free",
     integrations_enabled: false,
-    exports_enabled: false,
-    scheduling_enabled: false,
+    exports_enabled: true,
+    scheduling_enabled: true,
     max_sources: FREE_SOURCE_LIMIT,
-    max_exports_per_month: 5,
+    max_exports_per_month: 1,
     max_integrations: 0,
+    max_members: 5,
   },
   features: getPlanFeatures("free"),
 };
@@ -147,6 +152,7 @@ export function usePlan(orgId: string): UsePlanResult {
           maxSources: result.entitlements.max_sources,
           maxExportsPerMonth: result.entitlements.max_exports_per_month,
           maxIntegrations: result.entitlements.max_integrations,
+          maxMembers: result.entitlements.max_members,
         };
         setState({
           ...result,
