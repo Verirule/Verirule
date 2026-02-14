@@ -10,6 +10,7 @@
     "build:web": "npm --workspace apps/web run build",
     "lint:web": "npm --workspace apps/web run lint",
     "test:web": "npm --workspace apps/web run test --if-present",
+    "build": "npm run build:web",
     "dev:api": "powershell -ExecutionPolicy Bypass -File scripts/dev-api.ps1",
     "test:api": "powershell -ExecutionPolicy Bypass -File scripts/test-api.ps1",
     "lint:api": "powershell -ExecutionPolicy Bypass -File scripts/lint-api.ps1",
