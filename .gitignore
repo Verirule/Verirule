@@ -74,3 +74,5 @@ supabase/.env.*
 *.sqlite
 *.sqlite3
 *.log
+
+.vercel

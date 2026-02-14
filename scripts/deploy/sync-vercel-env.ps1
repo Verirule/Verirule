@@ -5,6 +5,11 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+if (Get-Variable PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+  $PSNativeCommandUseErrorActionPreference = $false
+}
+
+$script:VercelBin = "vercel"
 
 function Require-Cli([string]$name) {
   if (-not (Get-Command $name -ErrorAction SilentlyContinue)) {
@@ -30,12 +35,17 @@ function Sync-VercelVar([string]$name, [string]$target, [bool]$required = $true)
     return
   }
 
-  vercel env rm $name $target --yes *> $null
+  & $script:VercelBin env rm $name $target --yes *> $null
+  $global:LASTEXITCODE = 0
 
   $tempFile = New-TemporaryFile
   try {
     Set-Content -Path $tempFile -Value $value -NoNewline
-    Get-Content -Path $tempFile | vercel env add $name $target *> $null
+    Get-Content -Path $tempFile | & $script:VercelBin env add $name $target *> $null
+    if ($LASTEXITCODE -ne 0) {
+      throw "Failed to sync Vercel env variable: $name"
+    }
+    $global:LASTEXITCODE = 0
   }
   finally {
     Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
@@ -45,6 +55,9 @@ function Sync-VercelVar([string]$name, [string]$target, [bool]$required = $true)
 }
 
 Require-Cli "vercel"
+if (Get-Command "vercel.cmd" -ErrorAction SilentlyContinue) {
+  $script:VercelBin = "vercel.cmd"
+}
 
 $requiredVars = @(
   "NEXT_PUBLIC_SITE_URL",
@@ -75,3 +88,4 @@ foreach ($name in $optionalVars) {
 }
 
 Write-Host "Vercel environment sync complete for target: $Target"
+$global:LASTEXITCODE = 0
