@@ -28,6 +28,19 @@ export default function DashboardSettingsPage() {
       </section>
 
       <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
+        <h2 className="text-lg font-semibold tracking-tight">Members</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Manage workspace membership roles, delegated admin access, and invitation workflows.
+        </p>
+        <Link
+          href="/dashboard/settings/members"
+          className="mt-4 inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-medium transition-colors hover:bg-accent"
+        >
+          Open Members
+        </Link>
+      </section>
+
+      <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold tracking-tight">Automation</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Configure alert-to-task automation rules, severity thresholds, and checklist behavior.

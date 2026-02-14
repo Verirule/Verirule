@@ -21,6 +21,7 @@ import {
   SearchCheck,
   Settings,
   ShieldCheck,
+  Users,
   Workflow,
   Zap,
   X,
@@ -68,6 +69,7 @@ const navigationSections: NavigationSection[] = [
     title: "Admin",
     links: [
       { href: "/dashboard/settings", label: "Settings", icon: Settings },
+      { href: "/dashboard/settings/members", label: "Members", icon: Users },
       { href: "/dashboard/billing", label: "Billing", icon: CircleDollarSign },
       { href: "/dashboard/settings/automation", label: "Automation", icon: Zap },
       { href: "/dashboard/settings/integrations", label: "Integrations", icon: Workflow },
