@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str | None = None
     SMTP_USE_TLS: bool = True
     SMTP_USE_SSL: bool = False
+    DIGEST_SEND_HOUR_UTC: int = 8
+    DIGEST_BATCH_LIMIT: int = 50
+    DIGEST_PROCESSOR_INTERVAL_SECONDS: int = 300
     SUPABASE_URL: str
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_ROLE_KEY: str | None = None

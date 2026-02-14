@@ -10,6 +10,7 @@ from app.core.logging import configure_logging, get_logger
 from app.core.settings import get_settings
 from app.core.supabase_rest import upsert_system_status
 from app.worker.alert_task_processor import ALERT_TASK_BATCH_LIMIT, AlertTaskProcessor
+from app.worker.digest_processor import DigestProcessor
 from app.worker.export_processor import EXPORT_BATCH_LIMIT, ExportProcessor
 from app.worker.readiness_processor import ReadinessProcessor
 from app.worker.retry import sanitize_error
@@ -27,6 +28,7 @@ async def run_worker_tick(
     export_processor: ExportProcessor,
     alert_task_processor: AlertTaskProcessor,
     readiness_processor: ReadinessProcessor,
+    digest_processor: DigestProcessor,
     *,
     run_batch_limit: int,
     heartbeat_enabled: bool,
@@ -39,6 +41,7 @@ async def run_worker_tick(
     exports_processed = 0
     alert_tasks_processed = 0
     readiness_computed = 0
+    digests_sent = 0
 
     try:
         due_sources = await monitor_processor.count_due_sources_once()
@@ -94,6 +97,15 @@ async def run_worker_tick(
             extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
         )
 
+    try:
+        digests_sent = await digest_processor.process_if_due()
+    except Exception as exc:  # pragma: no cover - defensive guard
+        errors += 1
+        logger.error(
+            "worker.tick_process_digests_error",
+            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
+        )
+
     tick_finished_at = _now_iso()
     payload: dict[str, object] = {
         "mode": "worker",
@@ -105,6 +117,7 @@ async def run_worker_tick(
         "runs_queued": runs_queued,
         "due_sources": due_sources,
         "readiness_computed": readiness_computed,
+        "digests_sent": digests_sent,
         "errors": errors,
     }
 
@@ -154,6 +167,12 @@ async def run_worker_supervisor_loop() -> None:
         access_token=write_access_token,
         interval_seconds=settings.READINESS_COMPUTE_INTERVAL_SECONDS,
     )
+    digest_processor = DigestProcessor(
+        access_token=write_access_token,
+        send_hour_utc=settings.DIGEST_SEND_HOUR_UTC,
+        batch_limit=settings.DIGEST_BATCH_LIMIT,
+        interval_seconds=settings.DIGEST_PROCESSOR_INTERVAL_SECONDS,
+    )
 
     while True:
         payload = await run_worker_tick(
@@ -161,6 +180,7 @@ async def run_worker_supervisor_loop() -> None:
             export_processor,
             alert_task_processor,
             readiness_processor,
+            digest_processor,
             run_batch_limit=settings.WORKER_BATCH_LIMIT,
             heartbeat_enabled=heartbeat_enabled,
         )
@@ -171,6 +191,7 @@ async def run_worker_supervisor_loop() -> None:
             and int(payload.get("alert_tasks_processed") or 0) == 0
             and int(payload.get("runs_queued") or 0) == 0
             and int(payload.get("readiness_computed") or 0) == 0
+            and int(payload.get("digests_sent") or 0) == 0
         ):
             await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))
 

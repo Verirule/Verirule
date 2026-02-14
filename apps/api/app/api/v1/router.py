@@ -11,6 +11,7 @@ from app.api.v1.endpoints import (
     integrations,
     members,
     monitoring,
+    notifications,
     orgs,
     readiness,
     sources,
@@ -36,5 +37,6 @@ router.include_router(evidence_files.router)
 router.include_router(readiness.router)
 router.include_router(integrations.router)
 router.include_router(members.router)
+router.include_router(notifications.router)
 router.include_router(exports.router)
 router.include_router(system.router)

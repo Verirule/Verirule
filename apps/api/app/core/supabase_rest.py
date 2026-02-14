@@ -2556,6 +2556,295 @@ async def update_alert_task_rules(
     return rows[0] if rows else None
 
 
+async def ensure_org_notification_rules(access_token: str, org_id: str) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/ensure_org_notification_rules"
+    payload = {"p_org_id": org_id}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to initialize notification rules."
+        normalized_detail = error_detail.lower()
+        if "not authenticated" in normalized_detail:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        if "not a member of org" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_detail) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to initialize notification rules.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to initialize notification rules.",
+        ) from exc
+
+
+async def get_org_notification_rules(access_token: str, org_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_notification_rules"
+    params = {
+        "select": "org_id,enabled,mode,digest_cadence,min_severity,last_digest_sent_at,created_at,updated_at",
+        "org_id": f"eq.{org_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch notification rules from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid notification rules response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def update_org_notification_rules(
+    access_token: str, org_id: str, patch: dict[str, Any]
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_notification_rules"
+    params = {
+        "org_id": f"eq.{org_id}",
+        "select": "org_id,enabled,mode,digest_cadence,min_severity,last_digest_sent_at,created_at,updated_at",
+    }
+    headers = supabase_rest_headers(access_token)
+    headers["Prefer"] = "return=representation"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(url, params=params, json=patch, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update notification rules in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid notification rules response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def ensure_user_notification_prefs(access_token: str) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/ensure_user_notification_prefs"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json={}, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to initialize notification preferences."
+        normalized_detail = error_detail.lower()
+        if "not authenticated" in normalized_detail:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to initialize notification preferences.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to initialize notification preferences.",
+        ) from exc
+
+
+async def get_user_notification_prefs(access_token: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/user_notification_prefs"
+    params = {
+        "select": "user_id,email_enabled,created_at,updated_at",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch notification preferences from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(
+        response.json(), "Invalid notification preferences response from Supabase."
+    )
+    return rows[0] if rows else None
+
+
+async def update_user_notification_prefs(
+    access_token: str, patch: dict[str, Any]
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/user_notification_prefs"
+    params = {
+        "select": "user_id,email_enabled,created_at,updated_at",
+    }
+    headers = supabase_rest_headers(access_token)
+    headers["Prefer"] = "return=representation"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(url, params=params, json=patch, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update notification preferences in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(
+        response.json(), "Invalid notification preferences response from Supabase."
+    )
+    return rows[0] if rows else None
+
+
+async def list_digest_notification_rules_service(limit: int = 50) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_notification_rules"
+    params = {
+        "select": "org_id,enabled,mode,digest_cadence,min_severity,last_digest_sent_at,created_at,updated_at",
+        "enabled": "eq.true",
+        "mode": "in.(digest,both)",
+        "order": "updated_at.asc",
+        "limit": str(max(1, limit)),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch notification rules from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid notification rules response from Supabase.")
+
+
+async def update_org_notification_last_digest_sent_service(org_id: str, sent_at: str) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_notification_rules"
+    params = {"org_id": f"eq.{org_id}"}
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "return=minimal"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(
+                url,
+                params=params,
+                json={"last_digest_sent_at": sent_at},
+                headers=headers,
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update notification digest timestamp in Supabase.",
+        ) from exc
+
+
+async def select_org_member_user_ids_service(org_id: str) -> list[str]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_members"
+    params = {
+        "select": "user_id",
+        "org_id": f"eq.{org_id}",
+        "order": "created_at.asc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch organization members from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid organization members response from Supabase.")
+    user_ids: list[str] = []
+    for row in rows:
+        user_id = row.get("user_id")
+        if isinstance(user_id, str) and user_id.strip():
+            user_ids.append(user_id.strip())
+    return user_ids
+
+
+async def select_user_notification_prefs_for_users_service(user_ids: list[str]) -> dict[str, bool]:
+    if not user_ids:
+        return {}
+
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/user_notification_prefs"
+    in_values = ",".join(user_ids)
+    params = {
+        "select": "user_id,email_enabled",
+        "user_id": f"in.({in_values})",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch notification preferences from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(
+        response.json(), "Invalid notification preferences response from Supabase."
+    )
+    prefs: dict[str, bool] = {}
+    for row in rows:
+        user_id = row.get("user_id")
+        if isinstance(user_id, str) and user_id.strip():
+            prefs[user_id.strip()] = bool(row.get("email_enabled", True))
+    return prefs
+
+
+async def select_org_name_service(org_id: str) -> str | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/orgs"
+    params = {"select": "name", "id": f"eq.{org_id}", "limit": "1"}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch organization from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid organization response from Supabase.")
+    if not rows:
+        return None
+    name = rows[0].get("name")
+    return name.strip() if isinstance(name, str) and name.strip() else None
+
+
 async def select_billing_events(
     access_token: str, org_id: str, *, limit: int = 25
 ) -> list[dict[str, Any]]:
