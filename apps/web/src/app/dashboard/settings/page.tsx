@@ -54,6 +54,19 @@ export default function DashboardSettingsPage() {
       </section>
 
       <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
+        <h2 className="text-lg font-semibold tracking-tight">Notifications</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Manage workspace notification routing and your personal email opt-in preferences.
+        </p>
+        <Link
+          href="/dashboard/settings/notifications"
+          className="mt-4 inline-flex h-9 items-center rounded-md border border-input px-3 text-sm font-medium transition-colors hover:bg-accent"
+        >
+          Open Notifications
+        </Link>
+      </section>
+
+      <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold tracking-tight">Integrations</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Configure outgoing connectors such as Slack and Jira for routing and escalation workflows.
