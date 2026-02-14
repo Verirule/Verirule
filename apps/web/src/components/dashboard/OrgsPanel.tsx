@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { FetchTimeoutError, fetchWithTimeout } from "@/src/lib/fetch-with-timeout";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 type OrgRecord = {
@@ -15,10 +16,16 @@ type OrgsResponse = {
   orgs: OrgRecord[];
 };
 
+type OrgCreateResponse = {
+  id?: unknown;
+};
+
 type ApiErrorResponse = {
   message?: unknown;
+  detail?: unknown;
   code?: unknown;
   missing?: unknown;
+  request_id?: unknown;
 };
 
 function formatCreatedAt(value: string): string {
@@ -29,15 +36,16 @@ function formatCreatedAt(value: string): string {
   return parsed.toLocaleDateString();
 }
 
-function formatOrgLoadError(status: number, payload: ApiErrorResponse): string {
+function formatOrgLoadError(status: number, payload: ApiErrorResponse, requestId: string | null): string {
   const code = typeof payload.code === "string" ? payload.code : "";
+  const requestIdSuffix = requestId ? ` (Request ID: ${requestId})` : "";
 
   if (status === 401 || code === "unauthorized") {
-    return "Unable to load workspace: Sign in again.";
+    return `Unable to load workspace: Sign in again.${requestIdSuffix}`;
   }
 
   if (status === 403 || code === "rls_denied") {
-    return "Unable to load workspace: No access to orgs; verify membership.";
+    return `Unable to load workspace: No access to orgs; verify membership.${requestIdSuffix}`;
   }
 
   if (code === "env_missing") {
@@ -45,16 +53,29 @@ function formatOrgLoadError(status: number, payload: ApiErrorResponse): string {
       ? payload.missing.filter((item): item is string => typeof item === "string")
       : [];
     if (missing.length > 0) {
-      return `Unable to load workspace: missing env ${missing.join(", ")}.`;
+      return `Unable to load workspace: missing env ${missing.join(", ")}.${requestIdSuffix}`;
     }
-    return "Unable to load workspace: missing required environment variables.";
+    return `Unable to load workspace: missing required environment variables.${requestIdSuffix}`;
   }
 
-  if (typeof payload.message === "string" && payload.message.trim().length > 0) {
-    return `Unable to load workspace: ${payload.message}`;
+  const message =
+    typeof payload.message === "string" && payload.message.trim().length > 0
+      ? payload.message
+      : typeof payload.detail === "string" && payload.detail.trim().length > 0
+        ? payload.detail
+        : null;
+  if (message) {
+    return `Unable to load workspace: ${message}${requestIdSuffix}`;
   }
 
-  return "Unable to load workspace right now.";
+  return `Unable to load workspace right now.${requestIdSuffix}`;
+}
+
+function formatCreateFailureMessage(requestId: string | null): string {
+  if (requestId) {
+    return `Workspace creation failed. Please try again. (Request ID: ${requestId})`;
+  }
+  return "Workspace creation failed. Please try again.";
 }
 
 export function OrgsPanel() {
@@ -71,21 +92,26 @@ export function OrgsPanel() {
     setError(null);
 
     try {
-      const response = await fetch("/api/orgs", { method: "GET", cache: "no-store" });
-      const body = (await response.json().catch(() => ({}))) as
-        | (Partial<OrgsResponse> & ApiErrorResponse)
-        | ApiErrorResponse;
-      const orgRows =
-        "orgs" in body && Array.isArray(body.orgs) ? (body.orgs as OrgRecord[]) : null;
+      const result = await fetchWithTimeout<Partial<OrgsResponse> & ApiErrorResponse>("/api/orgs", {
+        method: "GET",
+        cache: "no-store",
+        timeoutMs: 15_000,
+      });
+      const body = result.json ?? {};
+      const orgRows = Array.isArray(body.orgs) ? (body.orgs as OrgRecord[]) : null;
 
-      if (!response.ok || !orgRows) {
-        setError(formatOrgLoadError(response.status, body));
+      if (!result.ok || !orgRows) {
+        setError(formatOrgLoadError(result.status, body, result.requestId));
         return;
       }
 
       setOrgs(orgRows);
-    } catch {
-      setError("Unable to load workspace right now.");
+    } catch (error: unknown) {
+      if (error instanceof FetchTimeoutError) {
+        setError("Unable to load workspace right now. Request timed out.");
+      } else {
+        setError("Unable to load workspace right now.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -99,33 +125,57 @@ export function OrgsPanel() {
     event.preventDefault();
     setError(null);
 
-    if (trimmedName.length < 2 || trimmedName.length > 80) {
-      setError("Workspace name must be between 2 and 80 characters.");
+    if (trimmedName.length < 2 || trimmedName.length > 64) {
+      setError("Workspace name must be between 2 and 64 characters.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const response = await fetch("/api/orgs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmedName }),
-      });
-      const body = (await response.json().catch(() => ({}))) as ApiErrorResponse;
+      const createRequest = async () =>
+        fetchWithTimeout<ApiErrorResponse & OrgCreateResponse>("/api/orgs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: trimmedName }),
+          timeoutMs: 15_000,
+        });
 
-      if (!response.ok) {
-        setError(
-          typeof body.message === "string" && body.message.trim().length > 0
-            ? body.message
-            : "Unable to create workspace right now.",
-        );
+      let result: Awaited<ReturnType<typeof createRequest>>;
+      try {
+        result = await createRequest();
+      } catch (error: unknown) {
+        if (error instanceof TypeError) {
+          result = await createRequest();
+        } else {
+          throw error;
+        }
+      }
+
+      if (!result.ok) {
+        setError(formatCreateFailureMessage(result.requestId));
         return;
+      }
+
+      const orgId = typeof result.json?.id === "string" ? result.json.id : null;
+      if (!orgId) {
+        setError(formatCreateFailureMessage(result.requestId));
+        return;
+      }
+
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem("verirule:selected_org_id", orgId);
+        const nextPath = `/dashboard?org_id=${encodeURIComponent(orgId)}`;
+        window.history.replaceState(window.history.state, "", nextPath);
       }
 
       setName("");
       await loadOrgs();
-    } catch {
-      setError("Unable to create workspace right now.");
+    } catch (error: unknown) {
+      if (error instanceof FetchTimeoutError) {
+        setError(formatCreateFailureMessage(null));
+      } else {
+        setError("Unable to create workspace right now.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -168,7 +218,7 @@ export function OrgsPanel() {
       <Card className="border-border/70">
         <CardHeader>
           <CardTitle>{orgs.length === 0 ? "Create Workspace" : "Create Another Workspace"}</CardTitle>
-          <CardDescription>Name must be 2 to 80 characters.</CardDescription>
+          <CardDescription>Name must be 2 to 64 characters.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={createOrg} className="space-y-3">
@@ -177,10 +227,17 @@ export function OrgsPanel() {
               onChange={(event) => setName(event.target.value)}
               placeholder="Acme Compliance"
               autoComplete="off"
-              maxLength={80}
+              maxLength={64}
               disabled={isSubmitting}
             />
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error ? (
+              <div className="space-y-2">
+                <p className="text-sm text-destructive">{error}</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => void loadOrgs()} disabled={isLoading}>
+                  Reload workspaces
+                </Button>
+              </div>
+            ) : null}
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Creating..." : "Create workspace"}
             </Button>

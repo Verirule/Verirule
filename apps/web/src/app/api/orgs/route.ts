@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 type OrgRecord = {
@@ -19,7 +20,7 @@ type SessionContext = {
   supabase: Awaited<ReturnType<typeof createClient>>;
 };
 
-const FAST_API_TIMEOUT_MS = 3500;
+const FAST_API_TIMEOUT_MS = 10_000;
 
 function getApiBaseUrl(): string | null {
   const raw = process.env.VERIRULE_API_URL?.trim();
@@ -33,6 +34,14 @@ function getApiBaseUrl(): string | null {
   } catch {
     return null;
   }
+}
+
+function requestIdFromHeaders(headers: Headers): string {
+  const headerValue = headers.get("x-request-id");
+  if (headerValue && headerValue.trim()) {
+    return headerValue.trim();
+  }
+  return randomUUID();
 }
 
 function extractEnvVarNames(input: string): string[] {
@@ -55,13 +64,22 @@ function isRlsOrMembershipError(error: PostgrestLikeError): boolean {
   );
 }
 
+function withRequestId(response: NextResponse, requestId: string): NextResponse {
+  response.headers.set("X-Request-ID", requestId);
+  return response;
+}
+
 function apiError(
   status: number,
   message: string,
   code: string,
+  requestId: string,
   extra?: Record<string, unknown>,
 ): NextResponse {
-  return NextResponse.json({ message, code, ...(extra ?? {}) }, { status });
+  return withRequestId(
+    NextResponse.json({ message, code, request_id: requestId, ...(extra ?? {}) }, { status }),
+    requestId,
+  );
 }
 
 function toOrgRecord(value: unknown): OrgRecord | null {
@@ -85,9 +103,22 @@ function toOrgRecord(value: unknown): OrgRecord | null {
   };
 }
 
-function logProxyFailure(label: string, error: unknown): void {
+function parseJsonObject(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function logProxyFailure(label: string, error: unknown, requestId: string): void {
   const message = error instanceof Error ? error.message : "Unknown error";
-  console.error(label, { message });
+  console.error(label, { request_id: requestId, message });
 }
 
 async function fetchWithTimeout(
@@ -104,9 +135,9 @@ async function fetchWithTimeout(
   }
 }
 
-async function getSessionContext(): Promise<
-  { context: SessionContext; response: null } | { context: null; response: NextResponse }
-> {
+async function getSessionContext(
+  requestId: string,
+): Promise<{ context: SessionContext; response: null } | { context: null; response: NextResponse }> {
   let supabase: Awaited<ReturnType<typeof createClient>>;
   try {
     supabase = await createClient();
@@ -115,9 +146,7 @@ async function getSessionContext(): Promise<
     const missing = extractEnvVarNames(message);
     return {
       context: null,
-      response: apiError(500, "Missing required environment variables", "env_missing", {
-        missing,
-      }),
+      response: apiError(500, "Missing required environment variables", "env_missing", requestId, { missing }),
     };
   }
 
@@ -125,7 +154,7 @@ async function getSessionContext(): Promise<
   if (error || !data.session?.access_token) {
     return {
       context: null,
-      response: apiError(401, "Sign in again", "unauthorized"),
+      response: apiError(401, "Sign in again", "unauthorized", requestId),
     };
   }
 
@@ -135,9 +164,10 @@ async function getSessionContext(): Promise<
   };
 }
 
-async function tryFastApiOrgsRequest(
+async function proxyFastApiOrgsRequest(
   method: "GET" | "POST",
   accessToken: string,
+  requestId: string,
   payload?: Record<string, unknown>,
 ): Promise<NextResponse | null> {
   const apiBaseUrl = getApiBaseUrl();
@@ -145,32 +175,16 @@ async function tryFastApiOrgsRequest(
     return null;
   }
 
-  try {
-    const health = await fetchWithTimeout(
-      `${apiBaseUrl}/healthz`,
-      {
-        method: "GET",
-        cache: "no-store",
-      },
-      2000,
-    );
-
-    if (!health.ok) {
-      return null;
-    }
-  } catch (error: unknown) {
-    logProxyFailure("api/orgs health check failed", error);
-    return null;
-  }
-
+  const endpointPath = method === "GET" ? "/api/v1/orgs/mine" : "/api/v1/orgs";
   try {
     const upstream = await fetchWithTimeout(
-      `${apiBaseUrl}/api/v1/orgs`,
+      `${apiBaseUrl}${endpointPath}`,
       {
         method,
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
+          "X-Request-ID": requestId,
         },
         body: payload ? JSON.stringify(payload) : undefined,
         cache: "no-store",
@@ -178,33 +192,47 @@ async function tryFastApiOrgsRequest(
       FAST_API_TIMEOUT_MS,
     );
 
-    if (!upstream.ok) {
-      console.error("api/orgs upstream failed", { status: upstream.status });
-      return null;
+    const upstreamRequestId = upstream.headers.get("x-request-id")?.trim() || requestId;
+    const upstreamBodyText = await upstream.text();
+    const upstreamJson = parseJsonObject(upstreamBodyText);
+
+    if (upstream.ok) {
+      const body = upstreamJson ?? {};
+      return withRequestId(NextResponse.json(body, { status: upstream.status }), upstreamRequestId);
     }
 
-    const body = (await upstream.json().catch(() => ({}))) as unknown;
-    return NextResponse.json(body, { status: 200 });
+    const errorPayload: Record<string, unknown> = upstreamJson ?? {
+      message: "Workspace request failed.",
+      code: "upstream_error",
+    };
+    if (!("request_id" in errorPayload)) {
+      errorPayload.request_id = upstreamRequestId;
+    }
+    return withRequestId(NextResponse.json(errorPayload, { status: upstream.status }), upstreamRequestId);
   } catch (error: unknown) {
-    logProxyFailure("api/orgs upstream failed", error);
-    return null;
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return apiError(504, "Workspace request timed out", "upstream_timeout", requestId);
+    }
+    logProxyFailure("api/orgs upstream failed", error, requestId);
+    return apiError(502, "Workspace service unavailable", "upstream_error", requestId);
   }
 }
 
-function mapPostgrestFailure(error: PostgrestLikeError, fallbackMessage: string): NextResponse {
+function mapPostgrestFailure(error: PostgrestLikeError, fallbackMessage: string, requestId: string): NextResponse {
   if (isRlsOrMembershipError(error)) {
-    return apiError(403, "No access to orgs; verify membership", "rls_denied");
+    return apiError(403, "No access to orgs; verify membership", "rls_denied", requestId);
   }
 
   const detail =
     typeof error.message === "string" && error.message.trim().length > 0
       ? error.message
       : fallbackMessage;
-  return apiError(502, detail, "supabase_error");
+  return apiError(502, detail, "supabase_error", requestId);
 }
 
 async function listOrgsFromSupabase(
   supabase: Awaited<ReturnType<typeof createClient>>,
+  requestId: string,
 ): Promise<NextResponse> {
   const { data, error } = await supabase
     .from("orgs")
@@ -212,32 +240,33 @@ async function listOrgsFromSupabase(
     .order("created_at", { ascending: false });
 
   if (error) {
-    return mapPostgrestFailure(error, "Failed to fetch organizations");
+    return mapPostgrestFailure(error, "Failed to fetch organizations", requestId);
   }
 
   const orgs = Array.isArray(data)
     ? data.map((row) => toOrgRecord(row)).filter((row): row is OrgRecord => row !== null)
     : [];
 
-  return NextResponse.json({ orgs }, { status: 200 });
+  return withRequestId(NextResponse.json({ orgs }, { status: 200 }), requestId);
 }
 
 async function createOrgInSupabase(
   supabase: Awaited<ReturnType<typeof createClient>>,
   name: string,
+  requestId: string,
 ): Promise<NextResponse> {
   const normalizedName = name.trim();
-  if (normalizedName.length < 2 || normalizedName.length > 80) {
-    return apiError(400, "Workspace name must be between 2 and 80 characters", "invalid_payload");
+  if (normalizedName.length < 2 || normalizedName.length > 64) {
+    return apiError(400, "Workspace name must be between 2 and 64 characters", "invalid_payload", requestId);
   }
 
   const { data, error } = await supabase.rpc("create_org", { p_name: normalizedName });
   if (error) {
-    return mapPostgrestFailure(error, "Failed to create organization");
+    return mapPostgrestFailure(error, "Failed to create organization", requestId);
   }
 
   if (typeof data !== "string" || !data) {
-    return apiError(502, "Invalid create organization response", "supabase_error");
+    return apiError(502, "Invalid create organization response", "supabase_error", requestId);
   }
 
   const { data: orgRow } = await supabase
@@ -247,41 +276,44 @@ async function createOrgInSupabase(
     .maybeSingle();
 
   const created = toOrgRecord(orgRow);
-  return NextResponse.json({ id: data, org: created }, { status: 201 });
+  return withRequestId(NextResponse.json({ id: data, org: created }, { status: 200 }), requestId);
 }
 
-export async function GET() {
-  const { context, response } = await getSessionContext();
+export async function GET(request: NextRequest) {
+  const requestId = requestIdFromHeaders(request.headers);
+
+  const { context, response } = await getSessionContext(requestId);
   if (response) {
     return response;
   }
 
-  const fastApiResponse = await tryFastApiOrgsRequest("GET", context.accessToken);
+  const fastApiResponse = await proxyFastApiOrgsRequest("GET", context.accessToken, requestId);
   if (fastApiResponse) {
     return fastApiResponse;
   }
 
-  return listOrgsFromSupabase(context.supabase);
+  return listOrgsFromSupabase(context.supabase, requestId);
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = requestIdFromHeaders(request.headers);
   const payload = (await request.json().catch(() => null)) as { name?: unknown } | null;
   const name = typeof payload?.name === "string" ? payload.name : "";
   if (!name.trim()) {
-    return apiError(400, "Invalid org payload", "invalid_payload");
+    return apiError(400, "Invalid org payload", "invalid_payload", requestId);
   }
 
-  const { context, response } = await getSessionContext();
+  const { context, response } = await getSessionContext(requestId);
   if (response) {
     return response;
   }
 
-  const fastApiResponse = await tryFastApiOrgsRequest("POST", context.accessToken, {
+  const fastApiResponse = await proxyFastApiOrgsRequest("POST", context.accessToken, requestId, {
     name: name.trim(),
   });
   if (fastApiResponse) {
     return fastApiResponse;
   }
 
-  return createOrgInSupabase(context.supabase, name);
+  return createOrgInSupabase(context.supabase, name, requestId);
 }
