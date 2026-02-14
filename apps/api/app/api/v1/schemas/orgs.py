@@ -11,4 +11,4 @@ class OrgOut(BaseModel):
 
 
 class OrgCreateIn(BaseModel):
-    name: str = Field(min_length=2, max_length=80)
+    name: str = Field(min_length=2, max_length=64)
