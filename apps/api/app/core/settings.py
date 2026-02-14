@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     SMTP_USE_SSL: bool = False
     DIGEST_SEND_HOUR_UTC: int = 8
     DIGEST_BATCH_LIMIT: int = 50
+    NOTIFY_JOB_BATCH_LIMIT: int = 50
+    NOTIFY_MAX_ATTEMPTS: int = 5
     DIGEST_PROCESSOR_INTERVAL_SECONDS: int = 300
     SUPABASE_URL: str
     SUPABASE_ANON_KEY: str
@@ -65,6 +67,9 @@ class Settings(BaseSettings):
             self.SUPABASE_JWKS_URL = (
                 f"{self.SUPABASE_ISSUER.rstrip('/')}/.well-known/jwks.json"
             )
+        if self.VERIRULE_ENV.strip().lower() == "production":
+            if not (self.EMAIL_FROM or "").strip():
+                raise ValueError("EMAIL_FROM must be configured in production")
         return self
 
     @property

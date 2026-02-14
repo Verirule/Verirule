@@ -8,12 +8,13 @@ def digest_email(
     alerts: list[dict[str, Any]],
     findings: dict[str, int],
     readiness_summary: dict[str, Any],
+    dashboard_url: str,
 ) -> dict[str, str]:
     org_label = org_name.strip() or "your workspace"
     open_alerts = int(findings.get("open_alerts", 0))
     findings_total = int(findings.get("findings_total", 0))
     readiness_score = readiness_summary.get("score")
-    dashboard_url = str(readiness_summary.get("dashboard_url") or "")
+    dashboard_link = dashboard_url.strip()
 
     top_lines = []
     for alert in alerts[:5]:
@@ -36,7 +37,7 @@ def digest_email(
             "Top alerts:",
             alerts_section,
             "",
-            f"Dashboard: {dashboard_url}" if dashboard_url else "Dashboard: /dashboard",
+            f"Dashboard: {dashboard_link}" if dashboard_link else "Dashboard: /dashboard",
             "",
             "This message is informational and does not replace legal or compliance advice.",
         ]
@@ -46,8 +47,8 @@ def digest_email(
         "<li>No open alerts matched your configured threshold.</li>"
     )
     dashboard_link = (
-        f'<a href="{dashboard_url}">{dashboard_url}</a>'
-        if dashboard_url
+        f'<a href="{dashboard_link}">{dashboard_link}</a>'
+        if dashboard_link
         else '<a href="/dashboard">/dashboard</a>'
     )
     readiness_html = (
@@ -70,11 +71,15 @@ def digest_email(
     return {"subject": subject, "html": html, "text": text}
 
 
-def immediate_alert_email(org_name: str, alert: dict[str, Any]) -> dict[str, str]:
+def immediate_alert_email(
+    org_name: str,
+    alert: dict[str, Any],
+    dashboard_url: str,
+) -> dict[str, str]:
     org_label = org_name.strip() or "your workspace"
     severity = str(alert.get("severity") or "high").upper()
     title = str(alert.get("title") or "Untitled finding")
-    dashboard_url = str(alert.get("dashboard_url") or "")
+    dashboard_link = dashboard_url.strip()
 
     subject = f"Verirule alert ({severity}): {org_label}"
     text = "\n".join(
@@ -84,14 +89,14 @@ def immediate_alert_email(org_name: str, alert: dict[str, Any]) -> dict[str, str
             f"Severity: {severity}",
             f"Title: {title}",
             "",
-            f"Dashboard: {dashboard_url}" if dashboard_url else "Dashboard: /dashboard",
+            f"Dashboard: {dashboard_link}" if dashboard_link else "Dashboard: /dashboard",
             "",
             "Please review this alert promptly.",
         ]
     )
     dashboard_html = (
-        f"<p>Dashboard: <a href=\"{dashboard_url}\">{dashboard_url}</a></p>"
-        if dashboard_url
+        f"<p>Dashboard: <a href=\"{dashboard_link}\">{dashboard_link}</a></p>"
+        if dashboard_link
         else "<p>Dashboard: /dashboard</p>"
     )
     html = (

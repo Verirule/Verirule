@@ -15,6 +15,7 @@ ALERT_ID = "55555555-5555-5555-5555-555555555555"
 def test_process_run_creates_explanation_when_content_changes(monkeypatch) -> None:
     run_state_updates: list[dict[str, str | None]] = []
     inserted_explanations: list[dict[str, object]] = []
+    immediate_calls: list[dict[str, str]] = []
 
     async def fake_select_queued(access_token: str, limit: int) -> list[dict[str, str]]:
         assert access_token == "worker-token"
@@ -120,6 +121,9 @@ def test_process_run_creates_explanation_when_content_changes(monkeypatch) -> No
     async def fake_clear_retry_state(run_id: str) -> None:
         assert run_id == RUN_ID
 
+    async def fake_enqueue_immediate(self, *, org_id: str, alert_id: str, severity: str) -> None:
+        immediate_calls.append({"org_id": org_id, "alert_id": alert_id, "severity": severity})
+
     monkeypatch.setattr(run_processor, "select_queued_monitor_runs", fake_select_queued)
     monkeypatch.setattr(run_processor, "mark_monitor_run_attempt_started", fake_mark_started)
     monkeypatch.setattr(run_processor, "clear_monitor_run_error_state", fake_clear_retry_state)
@@ -134,6 +138,11 @@ def test_process_run_creates_explanation_when_content_changes(monkeypatch) -> No
     monkeypatch.setattr(run_processor, "rpc_insert_finding_explanation", fake_insert_explanation)
     monkeypatch.setattr(run_processor, "rpc_upsert_alert_for_finding", fake_upsert_alert)
     monkeypatch.setattr(run_processor, "rpc_append_audit", fake_append_audit)
+    monkeypatch.setattr(
+        run_processor.MonitorRunProcessor,
+        "_enqueue_immediate_alert_if_needed",
+        fake_enqueue_immediate,
+    )
 
     processor = run_processor.MonitorRunProcessor(access_token="worker-token")
     processed_count = asyncio.run(processor.process_queued_runs_once(limit=5))
@@ -143,6 +152,7 @@ def test_process_run_creates_explanation_when_content_changes(monkeypatch) -> No
     assert run_state_updates[-1]["p_status"] == "succeeded"
     assert len(inserted_explanations) == 1
     assert inserted_explanations[0]["p_finding_id"] == FINDING_ID
+    assert immediate_calls == [{"org_id": ORG_ID, "alert_id": ALERT_ID, "severity": "medium"}]
 
 
 def test_process_run_handles_304_without_finding(monkeypatch) -> None:
@@ -461,6 +471,9 @@ def test_process_run_rss_stores_item_id(monkeypatch) -> None:
     async def fake_clear_retry_state(run_id: str) -> None:
         return None
 
+    async def fake_enqueue_immediate(self, *, org_id: str, alert_id: str, severity: str) -> None:
+        return None
+
     monkeypatch.setattr(run_processor, "select_queued_monitor_runs", fake_select_queued)
     monkeypatch.setattr(run_processor, "mark_monitor_run_attempt_started", fake_mark_started)
     monkeypatch.setattr(run_processor, "clear_monitor_run_error_state", fake_clear_retry_state)
@@ -474,6 +487,11 @@ def test_process_run_rss_stores_item_id(monkeypatch) -> None:
     monkeypatch.setattr(run_processor, "rpc_insert_finding_explanation", fake_insert_explanation)
     monkeypatch.setattr(run_processor, "rpc_upsert_alert_for_finding", fake_alert)
     monkeypatch.setattr(run_processor, "rpc_append_audit", fake_audit)
+    monkeypatch.setattr(
+        run_processor.MonitorRunProcessor,
+        "_enqueue_immediate_alert_if_needed",
+        fake_enqueue_immediate,
+    )
 
     processor = run_processor.MonitorRunProcessor(access_token="worker-token")
     processed_count = asyncio.run(processor.process_queued_runs_once(limit=5))
@@ -535,3 +553,42 @@ def test_queue_due_sources_once_queues_single_run_with_safety_window(monkeypatch
         }
     ]
     assert scheduled_payloads == [{"p_source_id": "77777777-7777-7777-7777-777777777777"}]
+
+
+def test_enqueue_immediate_alert_if_needed_enqueues_when_rules_match(monkeypatch) -> None:
+    ensured: list[tuple[str, str]] = []
+    enqueued: list[dict[str, object]] = []
+
+    async def fake_ensure(access_token: str, org_id: str) -> None:
+        ensured.append((access_token, org_id))
+
+    async def fake_get_rules(access_token: str, org_id: str) -> dict[str, object]:
+        assert access_token == "write-token"
+        assert org_id == ORG_ID
+        return {"enabled": True, "mode": "both", "min_severity": "high"}
+
+    async def fake_enqueue(org_id: str, job_type: str, payload: dict[str, object], *, run_after=None):
+        enqueued.append({"org_id": org_id, "job_type": job_type, "payload": payload, "run_after": run_after})
+        return {"id": "job-1"}
+
+    monkeypatch.setattr(run_processor, "ensure_org_notification_rules", fake_ensure)
+    monkeypatch.setattr(run_processor, "get_org_notification_rules", fake_get_rules)
+    monkeypatch.setattr(run_processor, "enqueue_notification_job", fake_enqueue)
+
+    processor = run_processor.MonitorRunProcessor(
+        access_token="read-token",
+        write_access_token="write-token",
+    )
+    asyncio.run(
+        processor._enqueue_immediate_alert_if_needed(
+            org_id=ORG_ID,
+            alert_id=ALERT_ID,
+            severity="high",
+        )
+    )
+
+    assert ensured == [("write-token", ORG_ID)]
+    assert len(enqueued) == 1
+    assert enqueued[0]["org_id"] == ORG_ID
+    assert enqueued[0]["job_type"] == "immediate_alert"
+    assert enqueued[0]["payload"] == {"org_id": ORG_ID, "alert_id": ALERT_ID}

@@ -2609,6 +2609,37 @@ async def ensure_org_notification_rules(access_token: str, org_id: str) -> None:
         ) from exc
 
 
+async def upsert_my_email(access_token: str, org_id: str) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/upsert_my_email"
+    payload = {"p_org_id": org_id}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to update org member email."
+        normalized_detail = error_detail.lower()
+        if "not authenticated" in normalized_detail:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        if "not a member of org" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_detail) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update org member email.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update org member email.",
+        ) from exc
+
+
 async def get_org_notification_rules(access_token: str, org_id: str) -> dict[str, Any] | None:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_notification_rules"
@@ -2812,6 +2843,31 @@ async def select_org_member_user_ids_service(org_id: str) -> list[str]:
     return user_ids
 
 
+async def list_org_member_emails(org_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_members"
+    params = {
+        "select": "user_id,user_email",
+        "org_id": f"eq.{org_id}",
+        "user_email": "not.is.null",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch organization member emails from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(
+        response.json(),
+        "Invalid organization member emails response from Supabase.",
+    )
+
+
 async def select_user_notification_prefs_for_users_service(user_ids: list[str]) -> dict[str, bool]:
     if not user_ids:
         return {}
@@ -2843,6 +2899,113 @@ async def select_user_notification_prefs_for_users_service(user_ids: list[str]) 
         if isinstance(user_id, str) and user_id.strip():
             prefs[user_id.strip()] = bool(row.get("email_enabled", True))
     return prefs
+
+
+async def enqueue_notification_job(
+    org_id: str,
+    job_type: str,
+    payload: dict[str, Any],
+    *,
+    run_after: str | None = None,
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/notification_jobs"
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "return=representation"
+    body: dict[str, Any] = {
+        "org_id": org_id,
+        "type": job_type,
+        "payload": payload,
+    }
+    if run_after:
+        body["run_after"] = run_after
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=body, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to enqueue notification job in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid notification job response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def fetch_due_notification_jobs(limit: int = 50) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/notification_jobs"
+    now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    params = {
+        "select": "id,org_id,type,payload,status,attempts,last_error,run_after,created_at,updated_at",
+        "status": "eq.queued",
+        "run_after": f"lte.{now_iso}",
+        "order": "run_after.asc",
+        "limit": str(max(1, limit)),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch notification jobs from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid notification jobs response from Supabase.")
+
+
+async def mark_notification_job_running(job_id: str, attempts: int) -> None:
+    await _service_role_patch(
+        "notification_jobs",
+        job_id,
+        {
+            "status": "running",
+            "attempts": attempts,
+            "last_error": None,
+        },
+        error_detail="Failed to mark notification job as running in Supabase.",
+    )
+
+
+async def mark_notification_job_sent(job_id: str, attempts: int) -> None:
+    await _service_role_patch(
+        "notification_jobs",
+        job_id,
+        {
+            "status": "sent",
+            "attempts": attempts,
+            "last_error": None,
+        },
+        error_detail="Failed to mark notification job as sent in Supabase.",
+    )
+
+
+async def mark_notification_job_failed(
+    job_id: str,
+    attempts: int,
+    last_error: str | None,
+    *,
+    run_after: str | None = None,
+    terminal: bool = False,
+) -> None:
+    payload: dict[str, Any] = {
+        "status": "failed" if terminal else "queued",
+        "attempts": attempts,
+        "last_error": last_error,
+    }
+    if run_after:
+        payload["run_after"] = run_after
+    await _service_role_patch(
+        "notification_jobs",
+        job_id,
+        payload,
+        error_detail="Failed to update notification job in Supabase.",
+    )
 
 
 async def select_org_name_service(org_id: str) -> str | None:

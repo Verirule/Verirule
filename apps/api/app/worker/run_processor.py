@@ -11,6 +11,9 @@ from app.core.logging import get_logger
 from app.core.settings import get_settings
 from app.core.supabase_rest import (
     clear_monitor_run_error_state,
+    enqueue_notification_job,
+    ensure_org_notification_rules,
+    get_org_notification_rules,
     mark_monitor_run_attempt_started,
     mark_monitor_run_dead_letter,
     mark_monitor_run_for_retry,
@@ -37,6 +40,7 @@ from app.worker.retry import backoff_seconds, sanitize_error
 
 MAX_RUN_ATTEMPTS = 5
 logger = get_logger("worker.runs")
+_SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3}
 
 
 @dataclass
@@ -205,6 +209,7 @@ class MonitorRunProcessor:
                 finding_fingerprint = hashlib.sha256(
                     f"{source_id}:{current_fingerprint}".encode()
                 ).hexdigest()
+                finding_severity = "medium"
                 previous_text = ""
                 if previous_snapshot:
                     previous_text = previous_snapshot.canonical_text or previous_snapshot.text_preview or ""
@@ -217,7 +222,7 @@ class MonitorRunProcessor:
                         "p_run_id": run_id,
                         "p_title": "Source content changed",
                         "p_summary": str(explanation["summary"]),
-                        "p_severity": "medium",
+                        "p_severity": finding_severity,
                         "p_fingerprint": finding_fingerprint,
                         "p_raw_url": adapter_result.fetched_url or source_url,
                         "p_raw_hash": current_fingerprint,
@@ -237,6 +242,27 @@ class MonitorRunProcessor:
                     self.write_token,
                     {"p_org_id": org_id, "p_finding_id": finding_id},
                 )
+                alert_id = str(alert_result.get("id") or "").strip()
+                if alert_id:
+                    try:
+                        await self._enqueue_immediate_alert_if_needed(
+                            org_id=org_id,
+                            alert_id=alert_id,
+                            severity=finding_severity,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "run.immediate_alert_queue_failed",
+                            extra={
+                                "component": "worker",
+                                "org_id": org_id,
+                                "alert_id": alert_id,
+                                "error": sanitize_error(
+                                    exc,
+                                    default_message="immediate alert queue failed",
+                                ),
+                            },
+                        )
                 await rpc_append_audit(
                     self.write_token,
                     {
@@ -247,7 +273,7 @@ class MonitorRunProcessor:
                         "p_metadata": {
                             "source_id": source_id,
                             "finding_id": finding_id,
-                            "alert_id": alert_result["id"],
+                            "alert_id": alert_id,
                         },
                     },
                 )
@@ -308,6 +334,37 @@ class MonitorRunProcessor:
                 },
             )
 
+    async def _enqueue_immediate_alert_if_needed(
+        self,
+        *,
+        org_id: str,
+        alert_id: str,
+        severity: str,
+    ) -> None:
+        await ensure_org_notification_rules(self.write_token, org_id)
+        rules = await get_org_notification_rules(self.write_token, org_id)
+        if not isinstance(rules, dict):
+            return
+        if not bool(rules.get("enabled", True)):
+            return
+
+        mode = str(rules.get("mode") or "digest").strip().lower()
+        if mode not in {"immediate", "both"}:
+            return
+
+        min_severity = str(rules.get("min_severity") or "medium")
+        if not _severity_meets_minimum(severity=severity, min_severity=min_severity):
+            return
+
+        await enqueue_notification_job(
+            org_id,
+            "immediate_alert",
+            {
+                "org_id": org_id,
+                "alert_id": alert_id,
+            },
+        )
+
 
 async def run_worker_loop() -> None:
     settings = get_settings()
@@ -354,6 +411,12 @@ def _safe_int(value: object | None) -> int:
         except ValueError:
             return 0
     return 0
+
+
+def _severity_meets_minimum(*, severity: str, min_severity: str) -> bool:
+    threshold = _SEVERITY_RANK.get(min_severity.strip().lower(), _SEVERITY_RANK["medium"])
+    score = _SEVERITY_RANK.get(severity.strip().lower(), _SEVERITY_RANK["medium"])
+    return score >= threshold
 
 
 def _now_iso() -> str:

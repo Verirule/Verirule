@@ -9,7 +9,8 @@ def test_digest_email_renders_subject_and_summary() -> None:
             {"severity": "medium", "title": "Vendor terms updated"},
         ],
         findings={"open_alerts": 2, "findings_total": 5},
-        readiness_summary={"score": 81, "dashboard_url": "https://app.verirule.com/dashboard"},
+        readiness_summary={"score": 81},
+        dashboard_url="https://app.verirule.com/dashboard",
     )
 
     assert payload["subject"] == "Verirule digest: Acme"
@@ -24,11 +25,10 @@ def test_immediate_alert_email_renders_core_fields() -> None:
         {
             "severity": "high",
             "title": "Critical control gap detected",
-            "dashboard_url": "https://app.verirule.com/dashboard",
         },
+        "https://app.verirule.com/dashboard",
     )
 
     assert payload["subject"] == "Verirule alert (HIGH): Acme"
     assert "Critical control gap detected" in payload["text"]
     assert "https://app.verirule.com/dashboard" in payload["html"]
-

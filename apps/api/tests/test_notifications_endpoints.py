@@ -36,10 +36,15 @@ def test_get_org_notification_rules_enforces_admin_role(monkeypatch) -> None:
 
 
 def test_get_org_notification_rules_returns_defaults(monkeypatch) -> None:
+    upsert_calls: list[tuple[str, str]] = []
+
     async def fake_enforce(auth, org_id: str, min_role: str) -> OrgRoleContext:
         assert org_id == ORG_ID
         assert min_role == "admin"
         return OrgRoleContext(org_id=org_id, user_id=USER_ID, role="admin")
+
+    async def fake_upsert_email(access_token: str, org_id: str) -> None:
+        upsert_calls.append((access_token, org_id))
 
     async def fake_ensure(access_token: str, org_id: str) -> None:
         assert access_token == "token-123"
@@ -60,6 +65,7 @@ def test_get_org_notification_rules_returns_defaults(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(notifications_endpoint, "enforce_org_role", fake_enforce)
+    monkeypatch.setattr(notifications_endpoint, "upsert_my_email", fake_upsert_email)
     monkeypatch.setattr(notifications_endpoint, "ensure_org_notification_rules", fake_ensure)
     monkeypatch.setattr(notifications_endpoint, "get_org_notification_rules", fake_get)
     app.dependency_overrides[verify_supabase_auth] = _auth
@@ -81,10 +87,12 @@ def test_get_org_notification_rules_returns_defaults(monkeypatch) -> None:
         "created_at": "2026-02-14T00:00:00Z",
         "updated_at": "2026-02-14T00:00:00Z",
     }
+    assert upsert_calls == [("token-123", ORG_ID)]
 
 
 def test_put_org_notification_rules_records_audit(monkeypatch) -> None:
     audit_payloads: list[dict[str, object]] = []
+    upsert_calls: list[tuple[str, str]] = []
 
     async def fake_enforce(auth, org_id: str, min_role: str) -> OrgRoleContext:
         assert min_role == "admin"
@@ -93,6 +101,9 @@ def test_put_org_notification_rules_records_audit(monkeypatch) -> None:
     async def fake_ensure(access_token: str, org_id: str) -> None:
         assert access_token == "token-123"
         assert org_id == ORG_ID
+
+    async def fake_upsert_email(access_token: str, org_id: str) -> None:
+        upsert_calls.append((access_token, org_id))
 
     async def fake_update(access_token: str, org_id: str, patch: dict[str, object]):
         assert access_token == "token-123"
@@ -114,6 +125,7 @@ def test_put_org_notification_rules_records_audit(monkeypatch) -> None:
         audit_payloads.append(payload)
 
     monkeypatch.setattr(notifications_endpoint, "enforce_org_role", fake_enforce)
+    monkeypatch.setattr(notifications_endpoint, "upsert_my_email", fake_upsert_email)
     monkeypatch.setattr(notifications_endpoint, "ensure_org_notification_rules", fake_ensure)
     monkeypatch.setattr(notifications_endpoint, "update_org_notification_rules", fake_update)
     monkeypatch.setattr(notifications_endpoint, "rpc_record_audit_event", fake_audit)
@@ -133,6 +145,7 @@ def test_put_org_notification_rules_records_audit(monkeypatch) -> None:
     assert response.json()["min_severity"] == "high"
     assert len(audit_payloads) == 1
     assert audit_payloads[0]["p_action"] == "org_notification_rules_updated"
+    assert upsert_calls == [("token-123", ORG_ID)]
 
 
 def test_me_notifications_get_and_put(monkeypatch) -> None:
@@ -184,4 +197,3 @@ def test_me_notifications_get_and_put(monkeypatch) -> None:
         "created_at": "2026-02-14T00:00:00Z",
         "updated_at": "2026-02-14T01:00:00Z",
     }
-

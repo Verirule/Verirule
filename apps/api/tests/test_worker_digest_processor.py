@@ -8,8 +8,8 @@ USER_ID_1 = "11111111-1111-1111-1111-111111111112"
 USER_ID_2 = "11111111-1111-1111-1111-111111111113"
 
 
-def test_digest_processor_sends_digest_with_mocked_smtp_and_admin_lookup(monkeypatch) -> None:
-    sent_emails: list[dict[str, str]] = []
+def test_digest_processor_queues_digest_job(monkeypatch) -> None:
+    queued_jobs: list[dict[str, object]] = []
     updated_timestamps: list[tuple[str, str]] = []
     audit_events: list[dict[str, object]] = []
 
@@ -26,28 +26,27 @@ def test_digest_processor_sends_digest_with_mocked_smtp_and_admin_lookup(monkeyp
             }
         ]
 
-    async def fake_org_name(org_id: str) -> str:
+    async def fake_member_emails(org_id: str):
         assert org_id == ORG_ID
-        return "Acme"
-
-    async def fake_member_ids(org_id: str) -> list[str]:
-        assert org_id == ORG_ID
-        return [USER_ID_1, USER_ID_2]
+        return [
+            {"user_id": USER_ID_1, "user_email": "owner@example.com"},
+            {"user_id": USER_ID_2, "user_email": "member@example.com"},
+        ]
 
     async def fake_prefs(user_ids: list[str]) -> dict[str, bool]:
         assert user_ids == [USER_ID_1, USER_ID_2]
         return {USER_ID_1: True, USER_ID_2: False}
 
-    async def fake_email_lookup(user_id: str, *, cache=None) -> str | None:
-        assert user_id == USER_ID_1
-        return "owner@example.com"
+    async def fake_org_name(org_id: str) -> str:
+        assert org_id == ORG_ID
+        return "Acme"
 
     async def fake_findings(access_token: str, org_id: str):
         assert access_token == "service-role-token"
         assert org_id == ORG_ID
         return [
             {"id": "finding-1", "severity": "high", "title": "Critical control gap"},
-            {"id": "finding-2", "severity": "low", "title": "Minor policy typo"},
+            {"id": "finding-2", "severity": "low", "title": "Minor typo"},
         ]
 
     async def fake_alerts(access_token: str, org_id: str):
@@ -56,13 +55,19 @@ def test_digest_processor_sends_digest_with_mocked_smtp_and_admin_lookup(monkeyp
         return [
             {"id": "alert-1", "finding_id": "finding-1", "status": "open", "created_at": "2026-02-14T00:00:00Z"},
             {"id": "alert-2", "finding_id": "finding-2", "status": "open", "created_at": "2026-02-14T00:00:00Z"},
-            {"id": "alert-3", "finding_id": "finding-1", "status": "resolved", "created_at": "2026-02-14T00:00:00Z"},
         ]
 
     async def fake_readiness(access_token: str, org_id: str):
         assert access_token == "service-role-token"
         assert org_id == ORG_ID
         return {"score": 77}
+
+    async def fake_enqueue(org_id: str, job_type: str, payload: dict[str, object], *, run_after: str | None = None):
+        assert org_id == ORG_ID
+        assert job_type == "digest"
+        assert run_after is None
+        queued_jobs.append(payload)
+        return {"id": "job-1"}
 
     async def fake_update_timestamp(org_id: str, sent_at: str) -> None:
         updated_timestamps.append((org_id, sent_at))
@@ -71,26 +76,16 @@ def test_digest_processor_sends_digest_with_mocked_smtp_and_admin_lookup(monkeyp
         assert access_token == "service-role-token"
         audit_events.append(payload)
 
-    def fake_send_email(*, to: str, subject: str, html: str, text: str, request_id: str | None = None) -> None:
-        sent_emails.append(
-            {"to": to, "subject": subject, "html": html, "text": text, "request_id": request_id or ""}
-        )
-
-    async def fake_run_in_threadpool(func, *args, **kwargs):
-        return func(*args, **kwargs)
-
     monkeypatch.setattr(digest_processor, "list_digest_notification_rules_service", fake_list_rules)
-    monkeypatch.setattr(digest_processor, "select_org_name_service", fake_org_name)
-    monkeypatch.setattr(digest_processor, "select_org_member_user_ids_service", fake_member_ids)
+    monkeypatch.setattr(digest_processor, "list_org_member_emails", fake_member_emails)
     monkeypatch.setattr(digest_processor, "select_user_notification_prefs_for_users_service", fake_prefs)
-    monkeypatch.setattr(digest_processor, "fetch_user_email_by_id", fake_email_lookup)
+    monkeypatch.setattr(digest_processor, "select_org_name_service", fake_org_name)
     monkeypatch.setattr(digest_processor, "select_findings", fake_findings)
     monkeypatch.setattr(digest_processor, "select_alerts", fake_alerts)
     monkeypatch.setattr(digest_processor, "get_latest_org_readiness", fake_readiness)
+    monkeypatch.setattr(digest_processor, "enqueue_notification_job", fake_enqueue)
     monkeypatch.setattr(digest_processor, "update_org_notification_last_digest_sent_service", fake_update_timestamp)
     monkeypatch.setattr(digest_processor, "rpc_record_audit_event", fake_audit)
-    monkeypatch.setattr(digest_processor, "send_email", fake_send_email)
-    monkeypatch.setattr(digest_processor, "run_in_threadpool", fake_run_in_threadpool)
 
     processor = digest_processor.DigestProcessor(
         access_token="service-role-token",
@@ -101,13 +96,14 @@ def test_digest_processor_sends_digest_with_mocked_smtp_and_admin_lookup(monkeyp
     processed = asyncio.run(processor.process_if_due())
 
     assert processed == 1
-    assert len(sent_emails) == 1
-    assert sent_emails[0]["to"] == "owner@example.com"
-    assert "Verirule digest: Acme" in sent_emails[0]["subject"]
+    assert len(queued_jobs) == 1
+    assert queued_jobs[0]["org_id"] == ORG_ID
+    assert queued_jobs[0]["org_name"] == "Acme"
+    assert queued_jobs[0]["recipients"] == ["owner@example.com"]
     assert len(updated_timestamps) == 1
     assert updated_timestamps[0][0] == ORG_ID
     assert len(audit_events) == 1
-    assert audit_events[0]["p_action"] == "digest_sent"
+    assert audit_events[0]["p_action"] == "digest_queued"
 
 
 def test_digest_processor_skips_when_digest_already_sent_today(monkeypatch) -> None:
@@ -125,11 +121,11 @@ def test_digest_processor_skips_when_digest_already_sent_today(monkeypatch) -> N
             }
         ]
 
-    async def fail_send(self, *args, **kwargs):  # pragma: no cover
-        raise AssertionError("Digest should not send when already sent today")
+    async def fail_queue(self, *args, **kwargs):  # pragma: no cover
+        raise AssertionError("Digest should not queue when already sent today")
 
     monkeypatch.setattr(digest_processor, "list_digest_notification_rules_service", fake_list_rules)
-    monkeypatch.setattr(digest_processor.DigestProcessor, "_send_digest_for_org", fail_send)
+    monkeypatch.setattr(digest_processor.DigestProcessor, "_queue_digest_for_org", fail_queue)
 
     processor = digest_processor.DigestProcessor(
         access_token="service-role-token",

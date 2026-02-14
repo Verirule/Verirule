@@ -20,6 +20,7 @@ from app.core.supabase_rest import (
     rpc_record_audit_event,
     update_org_notification_rules,
     update_user_notification_prefs,
+    upsert_my_email,
 )
 
 router = APIRouter()
@@ -62,6 +63,7 @@ async def get_org_notifications_rules(
 ) -> OrgNotificationRulesOut:
     org_id_value = str(org_id)
     await enforce_org_role(auth, org_id_value, "admin")
+    await upsert_my_email(auth.access_token, org_id_value)
     await ensure_org_notification_rules(auth.access_token, org_id_value)
     row = await get_org_notification_rules(auth.access_token, org_id_value)
     if not isinstance(row, dict):
@@ -80,6 +82,7 @@ async def put_org_notifications_rules(
 ) -> OrgNotificationRulesOut:
     org_id_value = str(org_id)
     role_ctx: OrgRoleContext = await enforce_org_role(auth, org_id_value, "admin")
+    await upsert_my_email(auth.access_token, org_id_value)
     await ensure_org_notification_rules(auth.access_token, org_id_value)
 
     patch = payload.model_dump(exclude_none=True)
@@ -139,4 +142,3 @@ async def put_my_notification_prefs(
             detail="Failed to update notification preferences.",
         )
     return UserNotificationPrefsOut.model_validate(_user_prefs_payload(auth, row))
-

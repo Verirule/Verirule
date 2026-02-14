@@ -3,24 +3,20 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from fastapi.concurrency import run_in_threadpool
-
 from app.core.logging import get_logger
 from app.core.settings import get_settings
-from app.core.supabase_admin_auth import fetch_user_email_by_id
 from app.core.supabase_rest import (
+    enqueue_notification_job,
     get_latest_org_readiness,
     list_digest_notification_rules_service,
+    list_org_member_emails,
     rpc_record_audit_event,
     select_alerts,
     select_findings,
-    select_org_member_user_ids_service,
     select_org_name_service,
     select_user_notification_prefs_for_users_service,
     update_org_notification_last_digest_sent_service,
 )
-from app.notifications.emailer import EmailNotConfiguredError, EmailSendError, send_email
-from app.notifications.templates import digest_email
 from app.worker.retry import sanitize_error
 
 logger = get_logger("worker.digest")
@@ -106,9 +102,7 @@ class DigestProcessor:
         if not self._scan_due(now):
             return 0
 
-        sent_count = 0
-        email_cache: dict[str, str | None] = {}
-
+        queued_count = 0
         try:
             rules = await list_digest_notification_rules_service(limit=self.batch_limit)
         except Exception as exc:  # pragma: no cover - defensive guard
@@ -130,34 +124,33 @@ class DigestProcessor:
                 continue
 
             try:
-                sent = await self._send_digest_for_org(org_id.strip(), rule, now, email_cache=email_cache)
-                if sent:
-                    sent_count += 1
+                queued = await self._queue_digest_for_org(org_id.strip(), rule, now)
+                if queued:
+                    queued_count += 1
             except Exception as exc:  # pragma: no cover - defensive guard
                 logger.warning(
-                    "digest.org_send_failed",
+                    "digest.org_queue_failed",
                     extra={
                         "component": "worker",
                         "org_id": org_id,
-                        "error": sanitize_error(exc, default_message="digest send failed"),
+                        "error": sanitize_error(exc, default_message="digest queue failed"),
                     },
                 )
 
         self._next_run_at = now + timedelta(seconds=self.interval_seconds)
-        return sent_count
+        return queued_count
 
-    async def _send_digest_for_org(
+    async def _queue_digest_for_org(
         self,
         org_id: str,
         rule: dict[str, Any],
         now: datetime,
-        *,
-        email_cache: dict[str, str | None],
     ) -> bool:
-        org_name = await select_org_name_service(org_id) or org_id
-        recipients = await self._collect_recipients(org_id, email_cache=email_cache)
-        request_id = f"digest-{org_id}-{now.date().isoformat()}"
+        recipients = await self._collect_recipients(org_id)
+        if not recipients:
+            return False
 
+        org_name = await select_org_name_service(org_id) or org_id
         findings = await select_findings(self.access_token, org_id)
         findings_by_id: dict[str, dict[str, Any]] = {}
         for finding in findings:
@@ -190,44 +183,27 @@ class DigestProcessor:
         readiness = await get_latest_org_readiness(self.access_token, org_id)
         settings = get_settings()
         dashboard_url = f"{settings.NEXT_PUBLIC_SITE_URL.rstrip('/')}/dashboard?org={org_id}"
+        readiness_score = readiness.get("score") if isinstance(readiness, dict) else None
 
-        message = digest_email(
-            org_name,
-            digest_alerts,
+        job = await enqueue_notification_job(
+            org_id,
+            "digest",
             {
-                "open_alerts": open_alerts,
-                "findings_total": len(findings),
-            },
-            {
-                "score": readiness.get("score") if isinstance(readiness, dict) else None,
+                "org_id": org_id,
+                "org_name": org_name,
+                "recipients": recipients,
+                "alerts": digest_alerts,
+                "findings": {
+                    "open_alerts": open_alerts,
+                    "findings_total": len(findings),
+                },
+                "readiness_summary": {
+                    "score": readiness_score,
+                },
                 "dashboard_url": dashboard_url,
             },
         )
-
-        delivered_count = 0
-        for recipient in recipients:
-            try:
-                await run_in_threadpool(
-                    send_email,
-                    to=recipient,
-                    subject=message["subject"],
-                    html=message["html"],
-                    text=message["text"],
-                    request_id=request_id,
-                )
-                delivered_count += 1
-            except (EmailNotConfiguredError, EmailSendError) as exc:
-                logger.warning(
-                    "digest.email_delivery_failed",
-                    extra={
-                        "component": "worker",
-                        "org_id": org_id,
-                        "request_id": request_id,
-                        "error": sanitize_error(exc, default_message="email delivery failed"),
-                    },
-                )
-
-        if delivered_count == 0 and recipients:
+        if not isinstance(job, dict):
             return False
 
         sent_at = now.isoformat().replace("+00:00", "Z")
@@ -236,11 +212,12 @@ class DigestProcessor:
             self.access_token,
             {
                 "p_org_id": org_id,
-                "p_action": "digest_sent",
-                "p_entity_type": "notification_digest",
-                "p_entity_id": None,
+                "p_action": "digest_queued",
+                "p_entity_type": "notification_job",
+                "p_entity_id": job.get("id"),
                 "p_metadata": {
-                    "count": delivered_count,
+                    "recipient_count": len(recipients),
+                    "open_alerts": open_alerts,
                     "mode": rule.get("mode"),
                     "digest_cadence": rule.get("digest_cadence"),
                     "min_severity": min_severity,
@@ -249,18 +226,24 @@ class DigestProcessor:
         )
         return True
 
-    async def _collect_recipients(
-        self, org_id: str, *, email_cache: dict[str, str | None]
-    ) -> list[str]:
-        user_ids = await select_org_member_user_ids_service(org_id)
+    async def _collect_recipients(self, org_id: str) -> list[str]:
+        member_rows = await list_org_member_emails(org_id)
+        user_ids: list[str] = []
+        for row in member_rows:
+            user_id = row.get("user_id")
+            if isinstance(user_id, str) and user_id.strip():
+                user_ids.append(user_id.strip())
+
         prefs = await select_user_notification_prefs_for_users_service(user_ids)
         recipients: list[str] = []
-        for user_id in user_ids:
-            email_enabled = prefs.get(user_id, True)
-            if not email_enabled:
+        for row in member_rows:
+            user_id = row.get("user_id")
+            email = row.get("user_email")
+            if not isinstance(user_id, str) or not user_id.strip():
                 continue
-            email = await fetch_user_email_by_id(user_id, cache=email_cache)
-            if isinstance(email, str) and email.strip():
-                recipients.append(email.strip().lower())
+            if not isinstance(email, str) or not email.strip():
+                continue
+            if not prefs.get(user_id.strip(), True):
+                continue
+            recipients.append(email.strip().lower())
         return sorted(set(recipients))
-
