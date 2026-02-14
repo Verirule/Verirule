@@ -3008,6 +3008,296 @@ async def mark_notification_job_failed(
     )
 
 
+async def get_notification_job_service(job_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/notification_jobs"
+    params = {
+        "select": "id,org_id,type,status,attempts,last_error,run_after,created_at,updated_at",
+        "id": f"eq.{job_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch notification job from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid notification job response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def requeue_notification_job(job_id: str) -> None:
+    await _service_role_patch(
+        "notification_jobs",
+        job_id,
+        {
+            "status": "queued",
+            "attempts": 0,
+            "last_error": None,
+            "run_after": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        },
+        error_detail="Failed to requeue notification job in Supabase.",
+    )
+
+
+async def list_notification_events(
+    access_token: str,
+    *,
+    org_id: str,
+    user_id: str,
+    limit: int = 50,
+    status_filter: str | None = None,
+) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/notification_events"
+    params = {
+        "select": "id,org_id,user_id,job_id,type,entity_type,entity_id,subject,status,attempts,last_error,sent_at,created_at",
+        "org_id": f"eq.{org_id}",
+        "user_id": f"eq.{user_id}",
+        "order": "created_at.desc",
+        "limit": str(max(1, min(limit, 200))),
+    }
+    if status_filter:
+        params["status"] = f"eq.{status_filter}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch notification inbox from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid notification inbox response from Supabase.")
+    if not rows:
+        return []
+
+    event_ids = [row["id"] for row in rows if isinstance(row.get("id"), str)]
+    read_by_event_id = await _select_notification_reads(access_token, user_id=user_id, event_ids=event_ids)
+    for row in rows:
+        event_id = row.get("id")
+        if isinstance(event_id, str) and event_id in read_by_event_id:
+            row["read_at"] = read_by_event_id[event_id]
+            row["is_read"] = True
+        else:
+            row["read_at"] = None
+            row["is_read"] = False
+    return rows
+
+
+async def get_notification_event(
+    access_token: str,
+    event_id: str,
+    *,
+    include_read_for_user_id: str | None = None,
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/notification_events"
+    params = {
+        "select": "id,org_id,user_id,job_id,type,entity_type,entity_id,subject,status,attempts,last_error,sent_at,created_at",
+        "id": f"eq.{event_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch notification event from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid notification event response from Supabase.")
+    if not rows:
+        return None
+    row = rows[0]
+
+    if include_read_for_user_id:
+        read_by_event_id = await _select_notification_reads(
+            access_token,
+            user_id=include_read_for_user_id,
+            event_ids=[event_id],
+        )
+        read_at = read_by_event_id.get(event_id)
+        row["read_at"] = read_at
+        row["is_read"] = bool(read_at)
+
+    return row
+
+
+async def mark_notification_read(access_token: str, *, user_id: str, event_id: str) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/notification_reads"
+    headers = supabase_rest_headers(access_token)
+    headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+
+    payload = {"user_id": user_id, "event_id": event_id}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                url,
+                params={"on_conflict": "user_id,event_id"},
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to mark notification as read.",
+        ) from exc
+
+
+async def mark_notification_unread(access_token: str, *, user_id: str, event_id: str) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/notification_reads"
+    params = {"user_id": f"eq.{user_id}", "event_id": f"eq.{event_id}"}
+    headers = supabase_rest_headers(access_token)
+    headers["Prefer"] = "return=minimal"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.delete(url, params=params, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to mark notification as unread.",
+        ) from exc
+
+
+async def upsert_notification_event_service(
+    *,
+    org_id: str,
+    user_id: str | None,
+    job_id: str,
+    event_type: str,
+    subject: str,
+    status_value: str,
+    attempts: int,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    last_error: str | None = None,
+    sent_at: str | None = None,
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/notification_events"
+    payload: dict[str, Any] = {
+        "org_id": org_id,
+        "user_id": user_id,
+        "job_id": job_id,
+        "type": event_type,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "subject": subject,
+        "status": status_value,
+        "attempts": attempts,
+        "last_error": last_error,
+        "sent_at": sent_at,
+    }
+
+    if user_id:
+        lookup_params = {
+            "select": "id",
+            "job_id": f"eq.{job_id}",
+            "user_id": f"eq.{user_id}",
+            "limit": "1",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                lookup_response = await client.get(
+                    url,
+                    params=lookup_params,
+                    headers=supabase_service_role_headers(),
+                )
+                lookup_response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to fetch notification event from Supabase.",
+            ) from exc
+
+        rows = _validated_list_payload(
+            lookup_response.json(),
+            "Invalid notification event response from Supabase.",
+        )
+        if rows:
+            existing_id = rows[0].get("id")
+            if isinstance(existing_id, str) and existing_id.strip():
+                await _service_role_patch(
+                    "notification_events",
+                    existing_id.strip(),
+                    payload,
+                    error_detail="Failed to update notification event in Supabase.",
+                )
+                return {"id": existing_id.strip()}
+
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "return=representation"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                url,
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to insert notification event in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid notification event response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def _select_notification_reads(
+    access_token: str,
+    *,
+    user_id: str,
+    event_ids: list[str],
+) -> dict[str, str]:
+    if not event_ids:
+        return {}
+
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/notification_reads"
+    params = {
+        "select": "event_id,read_at",
+        "user_id": f"eq.{user_id}",
+        "event_id": f"in.({','.join(event_ids)})",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch notification read states from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid notification read state response from Supabase.")
+    mapped: dict[str, str] = {}
+    for row in rows:
+        event_id = row.get("event_id")
+        read_at = row.get("read_at")
+        if isinstance(event_id, str) and isinstance(read_at, str) and event_id.strip() and read_at.strip():
+            mapped[event_id.strip()] = read_at.strip()
+    return mapped
+
+
 async def select_org_name_service(org_id: str) -> str | None:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/orgs"

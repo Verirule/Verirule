@@ -591,4 +591,9 @@ def test_enqueue_immediate_alert_if_needed_enqueues_when_rules_match(monkeypatch
     assert len(enqueued) == 1
     assert enqueued[0]["org_id"] == ORG_ID
     assert enqueued[0]["job_type"] == "immediate_alert"
-    assert enqueued[0]["payload"] == {"org_id": ORG_ID, "alert_id": ALERT_ID}
+    assert enqueued[0]["payload"] == {
+        "org_id": ORG_ID,
+        "alert_id": ALERT_ID,
+        "entity_type": "alert",
+        "entity_id": ALERT_ID,
+    }

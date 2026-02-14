@@ -362,6 +362,8 @@ class MonitorRunProcessor:
             {
                 "org_id": org_id,
                 "alert_id": alert_id,
+                "entity_type": "alert",
+                "entity_id": alert_id,
             },
         )
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 from fastapi.concurrency import run_in_threadpool
 
@@ -20,6 +21,7 @@ from app.core.supabase_rest import (
     select_finding_by_id,
     select_org_name_service,
     select_user_notification_prefs_for_users_service,
+    upsert_notification_event_service,
 )
 from app.notifications.emailer import EmailNotConfiguredError, EmailSendError, send_email
 from app.notifications.templates import digest_email, immediate_alert_email
@@ -73,10 +75,18 @@ class NotificationSender:
 
         try:
             if job_type == "digest":
-                delivered = await self._send_digest_job(org_id, payload, request_id=f"notify-{job_id}")
+                delivered = await self._send_digest_job(
+                    org_id,
+                    job_id,
+                    next_attempt,
+                    payload,
+                    request_id=f"notify-{job_id}",
+                )
             else:
                 delivered = await self._send_immediate_alert_job(
                     org_id,
+                    job_id,
+                    next_attempt,
                     payload,
                     request_id=f"notify-{job_id}",
                 )
@@ -131,12 +141,19 @@ class NotificationSender:
     async def _send_digest_job(
         self,
         org_id: str,
+        job_id: str,
+        attempt: int,
         payload: dict[str, Any],
         *,
         request_id: str,
     ) -> int:
         org_name = str(payload.get("org_name") or "").strip() or (await select_org_name_service(org_id) or org_id)
-        recipients = _normalized_recipients(payload.get("recipients"))
+        recipients = _normalized_recipient_targets(payload.get("recipient_targets"))
+        if not recipients:
+            recipients = await self._recipient_targets_from_emails(
+                org_id,
+                _normalized_recipients(payload.get("recipients")),
+            )
         alerts = payload.get("alerts") if isinstance(payload.get("alerts"), list) else []
         findings = payload.get("findings") if isinstance(payload.get("findings"), dict) else {}
         readiness_summary = (
@@ -157,16 +174,23 @@ class NotificationSender:
             dashboard_url,
         )
         return await self._send_message_to_recipients(
-            recipients,
-            message["subject"],
-            message["html"],
-            message["text"],
+            org_id=org_id,
+            job_id=job_id,
+            attempt=attempt,
+            job_type="digest",
+            payload=payload,
+            recipients=recipients,
+            subject=message["subject"],
+            html=message["html"],
+            text=message["text"],
             request_id=request_id,
         )
 
     async def _send_immediate_alert_job(
         self,
         org_id: str,
+        job_id: str,
+        attempt: int,
         payload: dict[str, Any],
         *,
         request_id: str,
@@ -217,14 +241,19 @@ class NotificationSender:
             dashboard_url,
         )
         return await self._send_message_to_recipients(
-            recipients,
-            message["subject"],
-            message["html"],
-            message["text"],
+            org_id=org_id,
+            job_id=job_id,
+            attempt=attempt,
+            job_type="immediate_alert",
+            payload=payload,
+            recipients=recipients,
+            subject=message["subject"],
+            html=message["html"],
+            text=message["text"],
             request_id=request_id,
         )
 
-    async def _collect_recipients(self, org_id: str) -> list[str]:
+    async def _collect_recipients(self, org_id: str) -> list[dict[str, str]]:
         member_rows = await list_org_member_emails(org_id)
         user_ids: list[str] = []
         for row in member_rows:
@@ -233,7 +262,7 @@ class NotificationSender:
                 user_ids.append(user_id.strip())
 
         prefs = await select_user_notification_prefs_for_users_service(user_ids)
-        recipients: list[str] = []
+        recipients: list[dict[str, str]] = []
         for row in member_rows:
             user_id = row.get("user_id")
             email = row.get("user_email")
@@ -243,31 +272,109 @@ class NotificationSender:
                 continue
             if not prefs.get(user_id.strip(), True):
                 continue
-            recipients.append(email.strip().lower())
-        return sorted(set(recipients))
+            recipients.append({"user_id": user_id.strip(), "email": email.strip().lower()})
+        return _dedupe_recipient_targets(recipients)
+
+    async def _recipient_targets_from_emails(
+        self,
+        org_id: str,
+        emails: list[str],
+    ) -> list[dict[str, str]]:
+        if not emails:
+            return []
+        email_set = {email.strip().lower() for email in emails if email.strip()}
+        if not email_set:
+            return []
+
+        member_rows = await list_org_member_emails(org_id)
+        targets: list[dict[str, str]] = []
+        for row in member_rows:
+            user_id = row.get("user_id")
+            email = row.get("user_email")
+            if not isinstance(user_id, str) or not user_id.strip():
+                continue
+            if not isinstance(email, str) or not email.strip():
+                continue
+            normalized = email.strip().lower()
+            if normalized not in email_set:
+                continue
+            targets.append({"user_id": user_id.strip(), "email": normalized})
+        return _dedupe_recipient_targets(targets)
 
     async def _send_message_to_recipients(
         self,
-        recipients: list[str],
+        *,
+        org_id: str,
+        job_id: str,
+        attempt: int,
+        job_type: str,
+        payload: dict[str, Any],
+        recipients: list[dict[str, str]],
         subject: str,
         html: str,
         text: str,
-        *,
         request_id: str,
     ) -> int:
         delivered = 0
+        entity_type, entity_id = _event_ref(job_type, payload)
         for recipient in recipients:
+            recipient_email = recipient.get("email")
+            recipient_user_id = recipient.get("user_id")
+            if not isinstance(recipient_email, str) or not recipient_email.strip():
+                continue
+            if not isinstance(recipient_user_id, str) or not recipient_user_id.strip():
+                continue
+
+            await upsert_notification_event_service(
+                org_id=org_id,
+                user_id=recipient_user_id.strip(),
+                job_id=job_id,
+                event_type=job_type,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                subject=subject,
+                status_value="queued",
+                attempts=attempt,
+                last_error=None,
+                sent_at=None,
+            )
             try:
                 await run_in_threadpool(
                     send_email,
-                    to=recipient,
+                    to=recipient_email.strip().lower(),
                     subject=subject,
                     html=html,
                     text=text,
                     request_id=request_id,
                 )
+                await upsert_notification_event_service(
+                    org_id=org_id,
+                    user_id=recipient_user_id.strip(),
+                    job_id=job_id,
+                    event_type=job_type,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    subject=subject,
+                    status_value="sent",
+                    attempts=attempt,
+                    last_error=None,
+                    sent_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                )
                 delivered += 1
-            except (EmailNotConfiguredError, EmailSendError):
+            except (EmailNotConfiguredError, EmailSendError) as exc:
+                await upsert_notification_event_service(
+                    org_id=org_id,
+                    user_id=recipient_user_id.strip(),
+                    job_id=job_id,
+                    event_type=job_type,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    subject=subject,
+                    status_value="failed",
+                    attempts=attempt,
+                    last_error=sanitize_error(exc, default_message="email delivery failed"),
+                    sent_at=None,
+                )
                 raise
         return delivered
 
@@ -293,6 +400,60 @@ def _normalized_recipients(value: object) -> list[str]:
         if isinstance(item, str) and item.strip():
             recipients.append(item.strip().lower())
     return sorted(set(recipients))
+
+
+def _normalized_recipient_targets(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    recipients: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        user_id = item.get("user_id")
+        email = item.get("email")
+        if not isinstance(user_id, str) or not user_id.strip():
+            continue
+        if not isinstance(email, str) or not email.strip():
+            continue
+        recipients.append({"user_id": user_id.strip(), "email": email.strip().lower()})
+    return _dedupe_recipient_targets(recipients)
+
+
+def _dedupe_recipient_targets(value: list[dict[str, str]]) -> list[dict[str, str]]:
+    seen: set[str] = set()
+    deduped: list[dict[str, str]] = []
+    for row in sorted(value, key=lambda item: (item["email"], item["user_id"])):
+        email = row["email"]
+        if email in seen:
+            continue
+        seen.add(email)
+        deduped.append(row)
+    return deduped
+
+
+def _event_ref(job_type: str, payload: dict[str, Any]) -> tuple[str | None, str | None]:
+    entity_type = str(payload.get("entity_type") or "").strip().lower()
+    if not entity_type:
+        entity_type = "alert" if job_type == "immediate_alert" else "system"
+    if entity_type not in {"alert", "task", "export", "system"}:
+        entity_type = "system"
+
+    candidate_entity_id = payload.get("entity_id")
+    if (not isinstance(candidate_entity_id, str) or not candidate_entity_id.strip()) and job_type == "immediate_alert":
+        candidate_entity_id = payload.get("alert_id")
+
+    entity_id = _as_uuid_string(candidate_entity_id)
+    return entity_type, entity_id
+
+
+def _as_uuid_string(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    try:
+        return str(UUID(text))
+    except ValueError:
+        return None
 
 
 def _normalized_findings(value: dict[str, Any]) -> dict[str, int]:

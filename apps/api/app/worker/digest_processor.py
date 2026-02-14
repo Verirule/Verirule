@@ -146,9 +146,10 @@ class DigestProcessor:
         rule: dict[str, Any],
         now: datetime,
     ) -> bool:
-        recipients = await self._collect_recipients(org_id)
-        if not recipients:
+        recipient_targets = await self._collect_recipients(org_id)
+        if not recipient_targets:
             return False
+        recipients = [target["email"] for target in recipient_targets]
 
         org_name = await select_org_name_service(org_id) or org_id
         findings = await select_findings(self.access_token, org_id)
@@ -192,6 +193,7 @@ class DigestProcessor:
                 "org_id": org_id,
                 "org_name": org_name,
                 "recipients": recipients,
+                "recipient_targets": recipient_targets,
                 "alerts": digest_alerts,
                 "findings": {
                     "open_alerts": open_alerts,
@@ -226,7 +228,7 @@ class DigestProcessor:
         )
         return True
 
-    async def _collect_recipients(self, org_id: str) -> list[str]:
+    async def _collect_recipients(self, org_id: str) -> list[dict[str, str]]:
         member_rows = await list_org_member_emails(org_id)
         user_ids: list[str] = []
         for row in member_rows:
@@ -235,7 +237,7 @@ class DigestProcessor:
                 user_ids.append(user_id.strip())
 
         prefs = await select_user_notification_prefs_for_users_service(user_ids)
-        recipients: list[str] = []
+        recipients: list[dict[str, str]] = []
         for row in member_rows:
             user_id = row.get("user_id")
             email = row.get("user_email")
@@ -245,5 +247,19 @@ class DigestProcessor:
                 continue
             if not prefs.get(user_id.strip(), True):
                 continue
-            recipients.append(email.strip().lower())
-        return sorted(set(recipients))
+            recipients.append(
+                {
+                    "user_id": user_id.strip(),
+                    "email": email.strip().lower(),
+                }
+            )
+        # Deduplicate by lower-cased email while preserving deterministic order.
+        seen: set[str] = set()
+        deduped: list[dict[str, str]] = []
+        for item in sorted(recipients, key=lambda value: (value["email"], value["user_id"])):
+            email = item["email"]
+            if email in seen:
+                continue
+            seen.add(email)
+            deduped.append(item)
+        return deduped

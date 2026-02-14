@@ -10,6 +10,7 @@ def test_notification_sender_sends_digest_job(monkeypatch) -> None:
     running_calls: list[tuple[str, int]] = []
     sent_calls: list[tuple[str, int]] = []
     failed_calls: list[dict[str, object]] = []
+    event_rows: list[dict[str, object]] = []
     sent_messages: list[dict[str, str]] = []
     audit_events: list[dict[str, object]] = []
 
@@ -23,6 +24,9 @@ def test_notification_sender_sends_digest_job(monkeypatch) -> None:
                 "payload": {
                     "org_name": "Acme",
                     "recipients": ["owner@example.com"],
+                    "recipient_targets": [
+                        {"user_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "email": "owner@example.com"}
+                    ],
                     "alerts": [{"severity": "high", "title": "Critical gap"}],
                     "findings": {"open_alerts": 1, "findings_total": 2},
                     "readiness_summary": {"score": 83},
@@ -74,6 +78,10 @@ def test_notification_sender_sends_digest_job(monkeypatch) -> None:
         assert access_token == "service-role-token"
         audit_events.append(payload)
 
+    async def fake_upsert_event(**kwargs):
+        event_rows.append(kwargs)
+        return {"id": "event-1"}
+
     monkeypatch.setattr(notification_sender, "fetch_due_notification_jobs", fake_fetch_due)
     monkeypatch.setattr(notification_sender, "mark_notification_job_running", fake_mark_running)
     monkeypatch.setattr(notification_sender, "mark_notification_job_sent", fake_mark_sent)
@@ -81,6 +89,7 @@ def test_notification_sender_sends_digest_job(monkeypatch) -> None:
     monkeypatch.setattr(notification_sender, "send_email", fake_send_email)
     monkeypatch.setattr(notification_sender, "run_in_threadpool", fake_run_in_threadpool)
     monkeypatch.setattr(notification_sender, "rpc_record_audit_event", fake_audit)
+    monkeypatch.setattr(notification_sender, "upsert_notification_event_service", fake_upsert_event)
 
     sender = notification_sender.NotificationSender(
         access_token="service-role-token",
@@ -97,12 +106,14 @@ def test_notification_sender_sends_digest_job(monkeypatch) -> None:
     assert sent_messages[0]["to"] == "owner@example.com"
     assert len(audit_events) == 1
     assert audit_events[0]["p_action"] == "email_sent"
+    assert [row["status_value"] for row in event_rows] == ["queued", "sent"]
 
 
 def test_notification_sender_retries_on_email_failure(monkeypatch) -> None:
     running_calls: list[tuple[str, int]] = []
     sent_calls: list[tuple[str, int]] = []
     failed_calls: list[dict[str, object]] = []
+    event_rows: list[dict[str, object]] = []
 
     async def fake_fetch_due(limit: int = 50):
         return [
@@ -113,6 +124,9 @@ def test_notification_sender_retries_on_email_failure(monkeypatch) -> None:
                 "payload": {
                     "org_name": "Acme",
                     "recipients": ["owner@example.com"],
+                    "recipient_targets": [
+                        {"user_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "email": "owner@example.com"}
+                    ],
                     "alerts": [],
                     "findings": {"open_alerts": 0, "findings_total": 0},
                     "readiness_summary": {"score": 50},
@@ -152,12 +166,17 @@ def test_notification_sender_retries_on_email_failure(monkeypatch) -> None:
     async def fake_run_in_threadpool(func, *args, **kwargs):
         return func(*args, **kwargs)
 
+    async def fake_upsert_event(**kwargs):
+        event_rows.append(kwargs)
+        return {"id": "event-2"}
+
     monkeypatch.setattr(notification_sender, "fetch_due_notification_jobs", fake_fetch_due)
     monkeypatch.setattr(notification_sender, "mark_notification_job_running", fake_mark_running)
     monkeypatch.setattr(notification_sender, "mark_notification_job_sent", fake_mark_sent)
     monkeypatch.setattr(notification_sender, "mark_notification_job_failed", fake_mark_failed)
     monkeypatch.setattr(notification_sender, "send_email", fake_send_email)
     monkeypatch.setattr(notification_sender, "run_in_threadpool", fake_run_in_threadpool)
+    monkeypatch.setattr(notification_sender, "upsert_notification_event_service", fake_upsert_event)
 
     sender = notification_sender.NotificationSender(
         access_token="service-role-token",
@@ -174,3 +193,4 @@ def test_notification_sender_retries_on_email_failure(monkeypatch) -> None:
     assert failed_calls[0]["attempts"] == 1
     assert failed_calls[0]["terminal"] is False
     assert isinstance(failed_calls[0]["run_after"], str)
+    assert [row["status_value"] for row in event_rows] == ["queued", "failed"]
