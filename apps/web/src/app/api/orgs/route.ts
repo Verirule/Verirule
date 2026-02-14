@@ -103,6 +103,29 @@ function toOrgRecord(value: unknown): OrgRecord | null {
   };
 }
 
+function extractCreateOrgId(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const row = value as Record<string, unknown>;
+    for (const key of ["create_org", "id", "org_id"]) {
+      const candidate = row[key];
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+    return null;
+  }
+
+  if (Array.isArray(value) && value.length > 0) {
+    return extractCreateOrgId(value[0]);
+  }
+
+  return null;
+}
+
 function parseJsonObject(value: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(value) as unknown;
@@ -265,18 +288,19 @@ async function createOrgInSupabase(
     return mapPostgrestFailure(error, "Failed to create organization", requestId);
   }
 
-  if (typeof data !== "string" || !data) {
+  const orgId = extractCreateOrgId(data);
+  if (!orgId) {
     return apiError(502, "Invalid create organization response", "supabase_error", requestId);
   }
 
   const { data: orgRow } = await supabase
     .from("orgs")
     .select("id,name,created_at")
-    .eq("id", data)
+    .eq("id", orgId)
     .maybeSingle();
 
   const created = toOrgRecord(orgRow);
-  return withRequestId(NextResponse.json({ id: data, org: created }, { status: 200 }), requestId);
+  return withRequestId(NextResponse.json({ id: orgId, org: created }, { status: 200 }), requestId);
 }
 
 export async function GET(request: NextRequest) {

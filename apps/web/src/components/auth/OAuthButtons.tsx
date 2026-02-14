@@ -5,26 +5,40 @@ import { getSiteUrl } from "@/lib/env";
 import { createClient } from "@/lib/supabase/client";
 import type { ComponentType, SVGProps } from "react";
 import { useState } from "react";
-import { GitHubIcon, GoogleIcon } from "./ProviderIcons";
+import { AppleIcon, GitHubIcon, GoogleIcon, MicrosoftIcon } from "./ProviderIcons";
 
 type OAuthMode = "login" | "signup";
-type OAuthProvider = "google" | "github";
+type OAuthProvider = "google" | "github" | "apple" | "azure";
 
 type OAuthButtonsProps = {
   mode: OAuthMode;
 };
 
-const allProviders: OAuthProvider[] = ["google", "github"];
+const allProviders: OAuthProvider[] = ["google", "github", "apple", "azure"];
 
 const providerLabels: Record<OAuthProvider, string> = {
   google: "Google",
   github: "GitHub",
+  apple: "Apple",
+  azure: "Microsoft",
 };
 
 const providerIcons: Record<OAuthProvider, ComponentType<SVGProps<SVGSVGElement>>> = {
   google: GoogleIcon,
   github: GitHubIcon,
+  apple: AppleIcon,
+  azure: MicrosoftIcon,
 };
+
+function normalizeProviderToken(token: string): OAuthProvider | null {
+  if (token === "azure_oidc") {
+    return "azure";
+  }
+  if (allProviders.includes(token as OAuthProvider)) {
+    return token as OAuthProvider;
+  }
+  return null;
+}
 
 export function getEnabledOAuthProviders(): OAuthProvider[] {
   const raw = process.env.NEXT_PUBLIC_SUPABASE_OAUTH_PROVIDERS?.trim();
@@ -35,7 +49,8 @@ export function getEnabledOAuthProviders(): OAuthProvider[] {
   const requested = raw
     .split(",")
     .map((item) => item.trim().toLowerCase())
-    .filter((item): item is OAuthProvider => allProviders.includes(item as OAuthProvider));
+    .map((item) => normalizeProviderToken(item))
+    .filter((item): item is OAuthProvider => item !== null);
 
   return Array.from(new Set(requested));
 }

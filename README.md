@@ -20,13 +20,17 @@ Set these variables for `apps/web`:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (or `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
-- `NEXT_PUBLIC_SUPABASE_OAUTH_PROVIDERS` (example: `google,github`)
+- `NEXT_PUBLIC_SUPABASE_OAUTH_PROVIDERS` (example: `google,github,apple,azure`)
 - `NEXT_PUBLIC_SITE_URL` (your public app URL, required in production)
 
 Supabase dashboard checklist:
 
 - `Authentication` -> `Providers`: enable the same providers listed in `NEXT_PUBLIC_SUPABASE_OAUTH_PROVIDERS`
 - `Authentication` -> `URL Configuration`: add callback URL `https://YOUR_DOMAIN/auth/callback`
+
+Deployment env and secrets guidance:
+
+- `docs/DEPLOYMENT_ENV.md`
 
 ## Socials
 

@@ -12,6 +12,11 @@ Desktop.ini
 .env.*
 !.env.example
 !.env.*.example
+.envrc
+*.secrets
+*.secret
+*.pem
+*.p12
 
 # ==========
 # Python
