@@ -527,7 +527,7 @@ export default function DashboardNotificationsSettingsPage() {
                 <div>
                   <p className="text-sm font-medium">Enable notifications</p>
                   <p className="text-xs text-muted-foreground">
-                    Master switch for digest-based workspace emails.
+                    Master switch for workspace notification emails.
                   </p>
                 </div>
                 <input
@@ -554,16 +554,9 @@ export default function DashboardNotificationsSettingsPage() {
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
                   <option value="digest">Digest</option>
-                  <option value="immediate" disabled>
-                    Immediate (coming next)
-                  </option>
-                  <option value="both" disabled>
-                    Both (coming next)
-                  </option>
+                  <option value="immediate">Immediate</option>
+                  <option value="both">Both</option>
                 </select>
-                <p className="text-xs text-muted-foreground">
-                  Immediate delivery for high-severity alerts is planned for the next iteration.
-                </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -664,4 +657,3 @@ export default function DashboardNotificationsSettingsPage() {
     </div>
   );
 }
-
