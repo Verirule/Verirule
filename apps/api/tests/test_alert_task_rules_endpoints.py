@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints import automation as automation_endpoint
@@ -5,6 +6,14 @@ from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.main import app
 
 ORG_ID = "11111111-1111-1111-1111-111111111111"
+
+
+@pytest.fixture(autouse=True)
+def _default_admin_guard(monkeypatch) -> None:
+    async def fake_enforce(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(automation_endpoint, "enforce_org_role", fake_enforce)
 
 
 def test_get_alert_task_rules_returns_defaults(monkeypatch) -> None:

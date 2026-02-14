@@ -30,12 +30,16 @@ def _zip_json(data: bytes, path: str) -> dict[str, object]:
 
 
 def test_create_zip_export_queues(monkeypatch) -> None:
+    async def fake_enforce(*args, **kwargs) -> None:
+        return None
+
     async def fake_create_export(access_token: str, payload: dict[str, object]) -> str:
         assert access_token == "token-123"
         assert payload["p_org_id"] == ORG_ID
         assert payload["p_format"] == "zip"
         return EXPORT_ID
 
+    monkeypatch.setattr(exports_endpoint, "enforce_org_role", fake_enforce)
     monkeypatch.setattr(exports_endpoint, "rpc_create_audit_export", fake_create_export)
     monkeypatch.setattr(
         exports_endpoint,

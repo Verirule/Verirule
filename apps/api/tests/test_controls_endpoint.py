@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints import controls as controls_endpoint
@@ -7,6 +8,14 @@ from app.main import app
 ORG_ID = "11111111-1111-1111-1111-111111111111"
 FINDING_ID = "22222222-2222-2222-2222-222222222222"
 CONTROL_ID = "33333333-3333-3333-3333-333333333333"
+
+
+@pytest.fixture(autouse=True)
+def _default_member_guard(monkeypatch) -> None:
+    async def fake_enforce(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(controls_endpoint, "enforce_org_role", fake_enforce)
 
 
 def test_controls_list_returns_catalog(monkeypatch) -> None:
@@ -231,4 +240,3 @@ def test_suggest_controls_returns_stable_ranking(monkeypatch) -> None:
     assert isinstance(body.get("suggestions"), list)
     assert body["suggestions"][0]["control_key"] == "CC6.1"
     assert body["suggestions"][0]["confidence"] in {"high", "medium"}
-

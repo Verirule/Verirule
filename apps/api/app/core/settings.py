@@ -20,6 +20,14 @@ class Settings(BaseSettings):
     SLACK_ALERT_NOTIFICATIONS_ENABLED: bool = True
     VERIRULE_SECRETS_KEY: str | None = None
     INTEGRATIONS_ENCRYPTION_KEY: str | None = None
+    NEXT_PUBLIC_SITE_URL: str = "https://www.verirule.com"
+    EMAIL_FROM: str | None = None
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
     SUPABASE_URL: str
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_ROLE_KEY: str | None = None

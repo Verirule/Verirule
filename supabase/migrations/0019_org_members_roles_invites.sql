@@ -54,6 +54,72 @@ begin
 end
 $$;
 
+alter table if exists public.org_members enable row level security;
+
+drop policy if exists "org_members_select_self" on public.org_members;
+drop policy if exists "org_members_select_member" on public.org_members;
+create policy "org_members_select_member"
+on public.org_members for select
+using (
+  exists (
+    select 1
+    from public.org_members m
+    where m.org_id = org_members.org_id
+      and m.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "org_members_insert_owner_admin" on public.org_members;
+create policy "org_members_insert_owner_admin"
+on public.org_members for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.org_members m
+    where m.org_id = org_members.org_id
+      and m.user_id = auth.uid()
+      and m.role in ('owner', 'admin')
+  )
+);
+
+drop policy if exists "org_members_update_owner_admin" on public.org_members;
+create policy "org_members_update_owner_admin"
+on public.org_members for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.org_members m
+    where m.org_id = org_members.org_id
+      and m.user_id = auth.uid()
+      and m.role in ('owner', 'admin')
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.org_members m
+    where m.org_id = org_members.org_id
+      and m.user_id = auth.uid()
+      and m.role in ('owner', 'admin')
+  )
+);
+
+drop policy if exists "org_members_delete_owner_admin" on public.org_members;
+create policy "org_members_delete_owner_admin"
+on public.org_members for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.org_members m
+    where m.org_id = org_members.org_id
+      and m.user_id = auth.uid()
+      and m.role in ('owner', 'admin')
+  )
+);
+
 create table if not exists public.org_invites (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.orgs(id) on delete cascade,

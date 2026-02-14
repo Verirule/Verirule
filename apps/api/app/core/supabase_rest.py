@@ -140,6 +140,327 @@ async def supabase_select_orgs(access_token: str) -> list[dict[str, Any]]:
     return payload
 
 
+async def select_org_member_role(access_token: str, org_id: str, user_id: str) -> str | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_members"
+    params = {
+        "select": "role",
+        "org_id": f"eq.{org_id}",
+        "user_id": f"eq.{user_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch organization membership from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid membership response from Supabase.")
+    role = rows[0].get("role") if rows else None
+    return role if isinstance(role, str) else None
+
+
+async def select_org_members_service(org_id: str) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_members"
+    params = {
+        "select": "org_id,user_id,role,created_at",
+        "org_id": f"eq.{org_id}",
+        "order": "created_at.asc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch organization members from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid organization members response from Supabase.")
+
+
+async def select_org_member_service(org_id: str, user_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_members"
+    params = {
+        "select": "org_id,user_id,role,created_at",
+        "org_id": f"eq.{org_id}",
+        "user_id": f"eq.{user_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch organization member from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid organization member response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def update_org_member_role_service(org_id: str, user_id: str, role: str) -> dict[str, Any]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_members"
+    params = {
+        "org_id": f"eq.{org_id}",
+        "user_id": f"eq.{user_id}",
+        "select": "org_id,user_id,role,created_at",
+    }
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "return=representation"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(url, params=params, json={"role": role}, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update organization member role in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid organization member update response from Supabase.")
+    updated = rows[0] if rows else None
+    if not isinstance(updated, dict):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization member not found.")
+    return updated
+
+
+async def delete_org_member_service(org_id: str, user_id: str) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_members"
+    params = {"org_id": f"eq.{org_id}", "user_id": f"eq.{user_id}", "select": "user_id"}
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "return=representation"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.delete(url, params=params, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to remove organization member in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid organization member delete response from Supabase.")
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization member not found.")
+
+
+async def count_org_members_by_role_service(org_id: str, role: str) -> int:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_members"
+    params = {
+        "select": "user_id",
+        "org_id": f"eq.{org_id}",
+        "role": f"eq.{role}",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to count organization members in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid member count response from Supabase.")
+    return len(rows)
+
+
+async def select_org_invites(
+    access_token: str,
+    org_id: str,
+    *,
+    pending_only: bool = False,
+) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_invites"
+    params: dict[str, str] = {
+        "select": "id,org_id,email,role,invited_by,expires_at,accepted_at,created_at",
+        "org_id": f"eq.{org_id}",
+        "order": "created_at.desc",
+    }
+    if pending_only:
+        params["accepted_at"] = "is.null"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch organization invites from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid organization invites response from Supabase.")
+
+
+async def select_org_invite_by_id(
+    access_token: str,
+    org_id: str,
+    invite_id: str,
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_invites"
+    params = {
+        "select": "id,org_id,email,role,invited_by,expires_at,accepted_at,created_at",
+        "org_id": f"eq.{org_id}",
+        "id": f"eq.{invite_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch organization invite from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid organization invite response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def delete_org_invite(access_token: str, org_id: str, invite_id: str) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_invites"
+    params = {"org_id": f"eq.{org_id}", "id": f"eq.{invite_id}", "select": "id"}
+    headers = supabase_rest_headers(access_token)
+    headers["Prefer"] = "return=representation"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.delete(url, params=params, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to delete organization invite in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid organization invite delete response from Supabase.")
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found.")
+
+
+async def rpc_require_org_role(access_token: str, payload: dict[str, Any]) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/require_org_role"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Forbidden"
+        detail_lower = error_detail.lower()
+        if "insufficient org role" in detail_lower or "not a member of org" in detail_lower:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
+        if "not authenticated" in detail_lower:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to validate organization role in Supabase.",
+        ) from exc
+
+
+async def rpc_create_org_invite(access_token: str, payload: dict[str, Any]) -> dict[str, Any]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/create_org_invite"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to create invite."
+        detail_lower = error_detail.lower()
+        if "insufficient org role" in detail_lower or "not a member of org" in detail_lower:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
+        if "not authenticated" in detail_lower:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create organization invite in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid create invite response from Supabase.")
+    created = rows[0] if rows else None
+    if not isinstance(created, dict):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid create invite response from Supabase.",
+        )
+    return created
+
+
+async def rpc_accept_org_invite(access_token: str, payload: dict[str, Any]) -> str:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/accept_org_invite"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to accept invite."
+        detail_lower = error_detail.lower()
+        if "not authenticated" in detail_lower:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        if "invalid or expired" in detail_lower:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to accept organization invite in Supabase.",
+        ) from exc
+
+    response_payload = response.json()
+    if not isinstance(response_payload, str):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid accept invite response from Supabase.",
+        )
+    return response_payload
+
+
 async def supabase_rpc_create_org(access_token: str, name: str) -> str:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/create_org"

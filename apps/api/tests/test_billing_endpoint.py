@@ -1,3 +1,5 @@
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints import billing as billing_endpoint
@@ -5,6 +7,14 @@ from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.main import app
 
 ORG_ID = "11111111-1111-1111-1111-111111111111"
+
+
+@pytest.fixture(autouse=True)
+def _default_owner_guard(monkeypatch) -> None:
+    async def fake_enforce(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(billing_endpoint, "enforce_org_role", fake_enforce)
 
 
 def test_billing_requires_token() -> None:
@@ -137,3 +147,30 @@ def test_billing_events_returns_list(monkeypatch) -> None:
             }
         ]
     }
+
+
+def test_billing_routes_require_owner(monkeypatch) -> None:
+    async def fake_enforce(*args, **kwargs) -> None:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    async def fail_select(*args, **kwargs):
+        raise AssertionError("billing query should not run when owner guard fails")
+
+    monkeypatch.setattr(billing_endpoint, "enforce_org_role", fake_enforce)
+    monkeypatch.setattr(billing_endpoint, "select_org_billing", fail_select)
+    monkeypatch.setattr(billing_endpoint, "select_billing_events", fail_select)
+
+    app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
+        access_token="token-123",
+        claims={"sub": "user-1"},
+    )
+
+    try:
+        client = TestClient(app)
+        billing_response = client.get(f"/api/v1/orgs/{ORG_ID}/billing")
+        events_response = client.get(f"/api/v1/orgs/{ORG_ID}/billing/events")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert billing_response.status_code == 403
+    assert events_response.status_code == 403

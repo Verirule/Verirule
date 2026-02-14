@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     exports,
     health,
     integrations,
+    members,
     monitoring,
     orgs,
     readiness,
@@ -34,5 +35,6 @@ router.include_router(task_files.router)
 router.include_router(evidence_files.router)
 router.include_router(readiness.router)
 router.include_router(integrations.router)
+router.include_router(members.router)
 router.include_router(exports.router)
 router.include_router(system.router)

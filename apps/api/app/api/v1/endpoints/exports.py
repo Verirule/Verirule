@@ -8,6 +8,7 @@ from app.api.v1.schemas.exports import (
     ExportDownloadUrlOut,
     ExportOut,
 )
+from app.auth.roles import enforce_org_role
 from app.billing.guard import ensure_feature_enabled, require_feature
 from app.core.settings import get_settings
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
@@ -37,6 +38,7 @@ async def create_export(
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
     _feature: None = require_feature("exports_enabled"),
 ) -> ExportCreateOut:
+    await enforce_org_role(auth, str(payload.org_id), "member")
     _ensure_exports_configured()
 
     scope: dict[str, object] = {}
@@ -64,6 +66,7 @@ async def list_exports(
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
     _feature: None = require_feature("exports_enabled"),
 ) -> dict[str, list[ExportOut]]:
+    await enforce_org_role(auth, str(org_id), "member")
     _ensure_exports_configured()
     rows = await select_audit_exports(auth.access_token, str(org_id))
     return {"exports": [ExportOut.model_validate(row) for row in rows]}
@@ -84,6 +87,7 @@ async def export_download_url(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Invalid export response from Supabase.",
         )
+    await enforce_org_role(auth, org_id, "member")
     await ensure_feature_enabled(
         access_token=auth.access_token,
         org_id=org_id,

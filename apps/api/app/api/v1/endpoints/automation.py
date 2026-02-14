@@ -10,6 +10,7 @@ from app.api.v1.schemas.automation import (
     AlertTaskRulesOut,
     AlertTaskRulesUpdateIn,
 )
+from app.auth.roles import enforce_org_role
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.core.supabase_rest import (
     bulk_insert_task_controls,
@@ -111,6 +112,7 @@ async def get_org_alert_task_rules(
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
 ) -> AlertTaskRulesOut:
     org_id_value = str(org_id)
+    await enforce_org_role(auth, org_id_value, "admin")
     await ensure_alert_task_rules(auth.access_token, org_id_value)
     row = await get_alert_task_rules(auth.access_token, org_id_value)
     if not isinstance(row, dict):
@@ -128,6 +130,7 @@ async def put_org_alert_task_rules(
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
 ) -> AlertTaskRulesOut:
     org_id_value = str(org_id)
+    await enforce_org_role(auth, org_id_value, "admin")
     await ensure_alert_task_rules(auth.access_token, org_id_value)
 
     patch = payload.model_dump(exclude_none=True)

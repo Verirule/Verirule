@@ -11,6 +11,7 @@ from app.api.v1.schemas.integrations import (
     SlackConnectIn,
     SlackNotifyIn,
 )
+from app.auth.roles import enforce_org_role
 from app.billing.guard import require_feature
 from app.core.crypto import decrypt_json, encrypt_json
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
@@ -90,6 +91,7 @@ async def integrations(
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
     _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, list[IntegrationOut]]:
+    await enforce_org_role(auth, str(org_id), "admin")
     rows = await select_integrations(auth.access_token, str(org_id))
     return {
         "integrations": [
@@ -114,6 +116,7 @@ async def connect_slack(
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
     _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, bool]:
+    await enforce_org_role(auth, str(payload.org_id), "admin")
     ciphertext = encrypt_json({"webhook_url": payload.webhook_url.strip()})
     await rpc_upsert_integration(
         auth.access_token,
@@ -134,6 +137,7 @@ async def connect_jira(
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
     _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, bool]:
+    await enforce_org_role(auth, str(payload.org_id), "admin")
     base_url = payload.base_url.strip().rstrip("/")
     email = payload.email.strip()
     api_token = payload.api_token.strip()
@@ -166,6 +170,7 @@ async def test_slack(
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
     _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, bool]:
+    await enforce_org_role(auth, str(payload.org_id), "admin")
     row = await select_integration_secret(auth.access_token, str(payload.org_id), "slack")
     _, ciphertext = _ensure_connected_secret(row, "Slack")
 
@@ -181,6 +186,7 @@ async def test_jira(
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
     _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, bool]:
+    await enforce_org_role(auth, str(payload.org_id), "admin")
     row = await select_integration_secret(auth.access_token, str(payload.org_id), "jira")
     _, ciphertext = _ensure_connected_secret(row, "Jira")
 
@@ -198,6 +204,7 @@ async def notify_slack(
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
     _feature: None = require_feature("integrations_enabled"),
 ) -> dict[str, bool]:
+    await enforce_org_role(auth, str(payload.org_id), "admin")
     row = await select_integration_secret(auth.access_token, str(payload.org_id), "slack")
     _, ciphertext = _ensure_connected_secret(row, "Slack")
     secret = decrypt_json(ciphertext)
@@ -231,6 +238,7 @@ async def create_jira_issue(
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
     _feature: None = require_feature("integrations_enabled"),
 ) -> JiraCreateIssueOut:
+    await enforce_org_role(auth, str(payload.org_id), "admin")
     row = await select_integration_secret(auth.access_token, str(payload.org_id), "jira")
     _, ciphertext = _ensure_connected_secret(row, "Jira")
     secret = decrypt_json(ciphertext)
@@ -270,6 +278,7 @@ async def disable_integration(
 ) -> dict[str, bool]:
     if integration_type not in {"slack", "jira"}:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found.")
+    await enforce_org_role(auth, str(payload.org_id), "admin")
     await rpc_disable_integration(
         auth.access_token,
         {"p_org_id": str(payload.org_id), "p_type": integration_type},

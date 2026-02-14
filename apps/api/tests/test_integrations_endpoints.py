@@ -36,6 +36,11 @@ async def fake_free_plan(access_token: str, org_id: str) -> dict[str, str]:
 def _default_paid_plan(monkeypatch) -> None:
     monkeypatch.setattr(billing_guard, "select_org_billing", fake_paid_plan)
 
+    async def fake_enforce(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(integrations_endpoint, "enforce_org_role", fake_enforce)
+
 
 def test_integrations_requires_token() -> None:
     client = TestClient(app)

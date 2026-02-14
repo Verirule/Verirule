@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from app.api.v1.schemas.billing import BillingEventOut, BillingOut
+from app.auth.roles import enforce_org_role
 from app.billing.entitlements import get_entitlements, parse_plan
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.core.supabase_rest import select_billing_events, select_org_billing
@@ -15,6 +16,7 @@ supabase_auth_dependency = Depends(verify_supabase_auth)
 async def billing(
     org_id: UUID, auth: VerifiedSupabaseAuth = supabase_auth_dependency
 ) -> BillingOut:
+    await enforce_org_role(auth, str(org_id), "owner")
     row = await select_org_billing(auth.access_token, str(org_id))
     raw_plan = row.get("plan") if isinstance(row, dict) else None
     plan = parse_plan(raw_plan if isinstance(raw_plan, str) else None)
@@ -44,6 +46,7 @@ async def billing_events(
     limit: int = Query(default=25, ge=1, le=100),
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
 ) -> dict[str, list[BillingEventOut]]:
+    await enforce_org_role(auth, str(org_id), "owner")
     rows = await select_billing_events(auth.access_token, str(org_id), limit=limit)
     events = [
         BillingEventOut.model_validate(

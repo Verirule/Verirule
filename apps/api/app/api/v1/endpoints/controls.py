@@ -19,6 +19,7 @@ from app.api.v1.schemas.controls import (
     OrgControlOut,
     OrgControlPatchIn,
 )
+from app.auth.roles import enforce_org_role
 from app.core.supabase_jwt import VerifiedSupabaseAuth, verify_supabase_auth
 from app.core.supabase_rest import (
     get_control_by_id,
@@ -119,6 +120,7 @@ async def install_controls_from_template(
     payload: InstallControlsFromTemplateIn,
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
 ) -> InstallControlsFromTemplateOut:
+    await enforce_org_role(auth, str(org_id), "member")
     installed = await rpc_install_controls_for_template(
         auth.access_token,
         str(org_id),
@@ -132,6 +134,7 @@ async def org_controls(
     org_id: UUID,
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
 ) -> dict[str, list[OrgControlOut]]:
+    await enforce_org_role(auth, str(org_id), "member")
     org_control_rows = await list_org_controls(auth.access_token, str(org_id))
     if not org_control_rows:
         return {"controls": []}
@@ -279,6 +282,7 @@ async def finding_controls(
     org_id: UUID,
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
 ) -> dict[str, list[FindingControlOut]]:
+    await enforce_org_role(auth, str(org_id), "member")
     finding_row = await select_finding_by_id(auth.access_token, str(finding_id))
     _ensure_finding_in_org(finding_row, org_id)
 
@@ -334,6 +338,7 @@ async def link_finding_to_control(
     payload: LinkFindingToControlIn,
     auth: VerifiedSupabaseAuth = supabase_auth_dependency,
 ) -> LinkFindingToControlOut:
+    await enforce_org_role(auth, str(payload.org_id), "member")
     finding_row = await select_finding_by_id(auth.access_token, str(finding_id))
     _ensure_finding_in_org(finding_row, payload.org_id)
 
@@ -409,4 +414,3 @@ async def suggest_finding_controls(
         )
 
     return {"suggestions": payload}
-
