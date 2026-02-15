@@ -4,129 +4,94 @@
 
 @layer base {
   :root {
-    --vr-bg: 238 247 255;
-    --vr-fg: 16 62 95;
-    --vr-card: 255 255 255;
-    --vr-user-accent: #0465A8;
-    --vr-user-accent-foreground: #FFFFFF;
-    --background: 203 100% 98%;
-    --foreground: 208 76% 22%;
+    --vr-user-accent: #2563eb;
+    --vr-user-accent-foreground: #ffffff;
+    --background: 0 0% 100%;
+    --foreground: 222.2 47.4% 11.2%;
     --card: 0 0% 100%;
-    --card-foreground: 208 76% 22%;
+    --card-foreground: 222.2 47.4% 11.2%;
     --popover: 0 0% 100%;
-    --popover-foreground: 208 76% 22%;
-    --primary: 204 94% 34%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+    --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 204 82% 94%;
-    --secondary-foreground: 208 76% 22%;
-    --muted: 205 52% 94%;
-    --muted-foreground: 205 30% 38%;
-    --accent: 206 100% 93%;
-    --accent-foreground: 208 76% 22%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 214 100% 97%;
+    --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 204 37% 76%;
-    --input: 204 37% 76%;
-    --ring: 204 94% 34%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.65rem;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 217.2 91.2% 59.8%;
+    --chart-1: 221.2 83.2% 53.3%;
+    --chart-2: 212.7 26.8% 83.9%;
+    --chart-3: 215.4 16.3% 46.9%;
+    --chart-4: 199.4 89.3% 48.4%;
+    --chart-5: 173.4 58.4% 39.2%;
+    --radius: 0.5rem;
   }
-  .dark {
-    --vr-bg: 7 34 60;
-    --vr-fg: 228 246 255;
-    --vr-card: 10 47 80;
-    --vr-user-accent: #6cb6ff;
-    --vr-user-accent-foreground: #06223d;
-    --background: 210 76% 16%;
-    --foreground: 0 0% 98%;
-    --card: 207 73% 22%;
-    --card-foreground: 0 0% 98%;
-    --popover: 207 73% 22%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 206 96% 68%;
-    --primary-foreground: 209 78% 14%;
-    --secondary: 206 57% 32%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 206 56% 28%;
-    --muted-foreground: 205 24% 72%;
-    --accent: 206 66% 40%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 207 47% 35%;
-    --input: 207 47% 35%;
-    --ring: 206 96% 68%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-  }
-}
 
-@layer base {
   html {
     scroll-behavior: smooth;
   }
+
   * {
     @apply border-border;
   }
+
   body {
-    @apply text-foreground;
-    font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-    font-feature-settings: "cv03", "cv04", "ss01", "ss03";
-    background-color: rgb(var(--vr-bg));
-    color: rgb(var(--vr-fg));
-    background-image:
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.72), rgba(233, 245, 255, 0.92)),
-      radial-gradient(circle at 12% 14%, rgba(4, 101, 168, 0.2), transparent 34%),
-      radial-gradient(circle at 85% 12%, rgba(57, 134, 198, 0.18), transparent 37%),
-      radial-gradient(circle at 60% 85%, rgba(158, 212, 255, 0.2), transparent 34%);
+    @apply bg-white text-slate-900 antialiased;
+    font-family:
+      "Segoe UI",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Helvetica Neue",
+      Arial,
+      "Noto Sans",
+      sans-serif;
   }
-  .dark body {
-    background-image:
-      linear-gradient(to bottom, rgba(6, 26, 48, 0.72), rgba(7, 34, 60, 0.98)),
-      radial-gradient(circle at 12% 14%, rgba(4, 101, 168, 0.22), transparent 38%),
-      radial-gradient(circle at 80% 16%, rgba(64, 146, 219, 0.2), transparent 42%),
-      radial-gradient(circle at 60% 85%, rgba(118, 190, 255, 0.16), transparent 38%);
+
+  a {
+    @apply text-blue-700;
   }
-  h1,
-  h2,
-  h3,
-  h4 {
-    font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-    letter-spacing: -0.02em;
-    text-wrap: balance;
+
+  a:hover {
+    @apply text-blue-800;
   }
-  p,
-  li {
-    text-wrap: pretty;
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-blue-500 ring-offset-2 ring-offset-white;
+  }
+
+  table {
+    @apply w-full border-collapse overflow-hidden rounded-lg border border-gray-200 bg-white;
+  }
+
+  thead {
+    @apply bg-slate-50;
+  }
+
+  th {
+    @apply border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-700;
+  }
+
+  td {
+    @apply border-b border-gray-100 px-4 py-3 text-sm text-slate-700;
   }
 }
 
 @layer components {
   .vr-page {
-    background-color: rgb(var(--vr-bg));
-    color: rgb(var(--vr-fg));
+    @apply bg-white text-slate-900;
   }
 
   .vr-surface {
-    background-color: rgb(var(--vr-card));
-    box-shadow: 0 2px 0 rgba(4, 101, 168, 0.14);
-  }
-  .dark .vr-surface {
-    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+    @apply bg-white shadow-sm;
   }
 
   .vr-brand-chip {
-    @apply inline-flex items-center justify-center rounded-full border border-border bg-card p-1;
-    box-shadow: 0 2px 0 rgba(4, 101, 168, 0.16);
-  }
-  .dark .vr-brand-chip {
-    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.34);
+    @apply inline-flex items-center justify-center rounded-md border border-gray-200 bg-slate-50 p-2;
   }
 }

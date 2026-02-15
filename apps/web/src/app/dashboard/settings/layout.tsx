@@ -49,7 +49,7 @@ export default function DashboardSettingsLayout({
     <div className="space-y-4">
       <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
-          <Settings className="h-4 w-4 text-primary" />
+          <Settings className="h-4 w-4 text-blue-600" />
           <p className="text-sm font-semibold">Settings Navigation</p>
         </div>
         <nav className="flex gap-2 overflow-x-auto pb-1">
@@ -63,16 +63,9 @@ export default function DashboardSettingsLayout({
                 className={cn(
                   "inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-md border px-3 text-sm transition-colors",
                   active
-                    ? "border-transparent text-[var(--vr-user-accent-foreground)]"
-                    : "border-input hover:bg-accent",
+                    ? "border-blue-600 bg-blue-600 text-white"
+                    : "border-gray-300 bg-white text-slate-700 hover:bg-blue-50",
                 )}
-                style={
-                  active
-                    ? {
-                        backgroundColor: "var(--vr-user-accent)",
-                      }
-                    : undefined
-                }
               >
                 <Icon className="h-4 w-4" />
                 {link.label}

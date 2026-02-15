@@ -8,7 +8,7 @@ import {
 
 export default function Page() {
   return (
-    <div className="flex min-h-svh w-full items-center justify-center bg-gradient-to-br from-blue-100 via-white to-blue-50 p-6 text-blue-950 md:p-10">
+    <div className="flex min-h-svh w-full items-center justify-center bg-white p-6 text-blue-950 md:p-10">
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
           <Card className="border-blue-200 bg-white text-blue-950">
@@ -27,3 +27,4 @@ export default function Page() {
     </div>
   );
 }
+

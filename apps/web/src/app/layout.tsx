@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import { AccentThemeManager } from "@/src/components/theme/AccentThemeManager";
-import { ThemeProvider } from "@/src/components/theme/ThemeProvider";
 import { getSiteUrl } from "@/lib/env";
 import "./globals.css";
 
@@ -16,7 +14,8 @@ export const metadata: Metadata = {
     default: "Verirule",
     template: "%s | Verirule",
   },
-  description: "Enterprise compliance monitoring, workflow management, and audit-ready evidence tracking.",
+  description:
+    "Compliance operations workspace for controls, findings, readiness, alerts, tasks, and audit evidence.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
@@ -26,7 +25,8 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     title: "Verirule",
-    description: "Enterprise compliance monitoring, workflow management, and audit-ready evidence tracking.",
+    description:
+      "Compliance operations workspace for controls, findings, readiness, alerts, tasks, and audit evidence.",
     url: siteUrl,
     siteName: "Verirule",
     images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Verirule logo" }],
@@ -34,7 +34,8 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Verirule",
-    description: "Enterprise compliance monitoring, workflow management, and audit-ready evidence tracking.",
+    description:
+      "Compliance operations workspace for controls, findings, readiness, alerts, tasks, and audit evidence.",
     images: ["/twitter-image"],
   },
 };
@@ -61,7 +62,7 @@ export default function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="font-sans antialiased">
+      <body className="antialiased">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
@@ -70,8 +71,7 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
         />
-        <ThemeProvider>{children}</ThemeProvider>
-        <AccentThemeManager />
+        {children}
       </body>
     </html>
   );

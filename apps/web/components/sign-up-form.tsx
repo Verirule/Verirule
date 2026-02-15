@@ -13,7 +13,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OAuthButtons, getEnabledOAuthProviders } from "@/src/components/auth/OAuthButtons";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -128,22 +127,18 @@ export function SignUpForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card className="border-[#b9dcc8] bg-white text-[#0f3f2b] shadow-[0_16px_40px_rgba(15,61,42,0.12)]">
+      <Card className="border-gray-200 bg-white text-slate-900 shadow-sm">
         <CardHeader>
           <Link
             href="/"
-            className="inline-flex w-fit items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b7a3f]"
+            className="inline-flex w-fit items-center gap-2 rounded-sm"
           >
-            <Image
-              src="/brand/icon.svg"
-              alt="Verirule logo"
-              width={24}
-              height={24}
-              className="h-6 w-6 object-contain"
-            />
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-slate-50 p-2">
+              <img src="/logo.svg" alt="Verirule" className="h-full w-full object-contain" />
+            </span>
           </Link>
           <CardTitle className="text-2xl">Create account</CardTitle>
-          <CardDescription className="text-[#1d5a3d]/80">
+          <CardDescription className="text-slate-600">
             Register a workspace account for your compliance team.
           </CardDescription>
         </CardHeader>
@@ -151,10 +146,10 @@ export function SignUpForm({
           {hasOAuthProviders ? (
             <>
               <OAuthButtons mode="signup" />
-              <div className="my-4 flex items-center gap-2 text-xs text-[#1d5a3d]/80">
-                <span className="h-px flex-1 bg-[#d7ecdf]" />
+              <div className="my-4 flex items-center gap-2 text-xs text-slate-500">
+                <span className="h-px flex-1 bg-gray-200" />
                 <span>or</span>
-                <span className="h-px flex-1 bg-[#d7ecdf]" />
+                <span className="h-px flex-1 bg-gray-200" />
               </div>
             </>
           ) : null}
@@ -173,7 +168,7 @@ export function SignUpForm({
                   onChange={(e) => setEmail(e.target.value)}
                   aria-invalid={Boolean(emailError)}
                   className={cn(
-                    "border-[#cde6d8] bg-white text-[#0f3f2b] placeholder:text-[#73a58a]",
+                    "border-gray-300 bg-white text-slate-900 placeholder:text-slate-400",
                     emailError ? "border-red-500 focus-visible:ring-red-500" : undefined,
                   )}
                 />
@@ -193,14 +188,14 @@ export function SignUpForm({
                   onChange={(e) => setPassword(e.target.value)}
                   aria-invalid={Boolean(passwordError)}
                   className={cn(
-                    "border-[#cde6d8] bg-white text-[#0f3f2b] placeholder:text-[#73a58a]",
+                    "border-gray-300 bg-white text-slate-900 placeholder:text-slate-400",
                     passwordError ? "border-red-500 focus-visible:ring-red-500" : undefined,
                   )}
                 />
                 {passwordError ? (
                   <p className="text-xs text-red-500">{passwordError}</p>
                 ) : (
-                  <p className="text-xs text-[#1d5a3d]/80">Use at least 8 characters.</p>
+                  <p className="text-xs text-slate-500">Use at least 8 characters.</p>
                 )}
               </div>
 
@@ -216,7 +211,7 @@ export function SignUpForm({
                   onChange={(e) => setRepeatPassword(e.target.value)}
                   aria-invalid={Boolean(repeatPasswordError)}
                   className={cn(
-                    "border-[#cde6d8] bg-white text-[#0f3f2b] placeholder:text-[#73a58a]",
+                    "border-gray-300 bg-white text-slate-900 placeholder:text-slate-400",
                     repeatPasswordError ? "border-red-500 focus-visible:ring-red-500" : undefined,
                   )}
                 />
@@ -226,7 +221,7 @@ export function SignUpForm({
               {error ? (
                 <div
                   role="alert"
-                  className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
+                  className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
                 >
                   {error}
                 </div>
@@ -235,7 +230,7 @@ export function SignUpForm({
               {message ? (
                 <div
                   aria-live="polite"
-                  className="rounded-md border border-[#9fd4b5] bg-[#ecf8f2] px-3 py-2 text-sm text-[#145836]"
+                  className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800"
                 >
                   {message}
                 </div>
@@ -243,7 +238,7 @@ export function SignUpForm({
 
               <Button
                 type="submit"
-                className="relative z-20 w-full bg-[#0b7a3f] text-white hover:bg-[#086332] pointer-events-auto"
+                className="w-full"
                 disabled={submitDisabled}
               >
                 {loading ? "Creating account..." : "Create account"}
@@ -263,7 +258,7 @@ export function SignUpForm({
             </div>
             <div className="mt-4 text-center text-sm">
               Already have an account?{" "}
-              <Link href="/auth/login" className="text-[#0b7a3f] underline underline-offset-4 hover:text-[#07592e]">
+              <Link href="/auth/login" className="text-blue-700 underline underline-offset-4 hover:text-blue-800">
                 Sign in
               </Link>
             </div>

@@ -4,14 +4,11 @@ import {
   Clock3,
   CircleDollarSign,
   FileText,
-  Palette,
   Shield,
   Users,
   Workflow,
   Zap,
 } from "lucide-react";
-
-import { AccentThemePicker } from "@/src/components/theme/AccentThemePicker";
 
 export default function DashboardSettingsPage() {
   const workspaceTools = [
@@ -80,17 +77,6 @@ export default function DashboardSettingsPage() {
           );
         })}
       </section>
-
-      <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
-        <div className="flex items-center gap-2">
-          <Palette className="h-4 w-4 text-primary" />
-          <h2 className="text-lg font-semibold tracking-tight">Appearance</h2>
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Personalize accent preferences without changing shared workspace data.
-        </p>
-      </section>
-      <AccentThemePicker />
 
       <section className="rounded-xl border border-border/70 bg-card p-6 shadow-sm">
         <div className="flex items-center gap-2">

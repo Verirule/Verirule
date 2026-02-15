@@ -1,7 +1,5 @@
 import { AuthButton } from "@/components/auth-button";
 import { EnvVarWarning } from "@/components/env-var-warning";
-import { LogoMark } from "@/src/components/brand/LogoMark";
-import { ThemeToggle } from "@/src/components/theme/ThemeToggle";
 import { hasEnvVars } from "@/lib/utils";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -12,13 +10,13 @@ export default function ProtectedLayout({
   children: React.ReactNode;
 }) {
   return (
-    <main className="min-h-screen flex flex-col items-center">
-      <div className="flex-1 w-full flex flex-col gap-12 items-center">
-        <nav className="vr-surface w-full flex justify-center border-b-2 border-b-foreground/15 h-20">
+    <main className="min-h-screen flex flex-col items-center bg-white">
+      <div className="flex-1 w-full flex flex-col gap-10 items-center">
+        <nav className="vr-surface h-20 w-full border-b border-gray-200">
           <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
             <Link href="/" className="flex items-center gap-3 font-semibold">
               <span className="vr-brand-chip h-11 w-11">
-                <LogoMark className="h-full w-full" />
+                <img src="/logo.svg" alt="Verirule" className="h-full w-full object-contain" />
               </span>
               <span className="text-lg font-bold">Verirule</span>
             </Link>
@@ -32,9 +30,8 @@ export default function ProtectedLayout({
           </div>
         </nav>
         <div className="flex-1 flex flex-col gap-8 w-full max-w-5xl p-5">{children}</div>
-        <footer className="vr-surface w-full flex items-center justify-center border-t mx-auto text-center text-xs gap-8 py-8">
+        <footer className="vr-surface mx-auto flex w-full items-center justify-center border-t border-gray-200 py-8 text-center text-xs text-slate-600">
           <p>Verirule dashboard</p>
-          <ThemeToggle />
         </footer>
       </div>
     </main>

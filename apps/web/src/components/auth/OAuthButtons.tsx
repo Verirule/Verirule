@@ -116,7 +116,7 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
             key={provider}
             type="button"
             variant="outline"
-            className="relative z-20 flex h-11 w-full items-center justify-center gap-2 border border-blue-200 bg-white text-blue-900 hover:bg-blue-50 pointer-events-auto"
+            className="flex h-11 w-full items-center justify-center gap-2 border border-gray-300 bg-white text-slate-700 hover:bg-blue-50"
             disabled={loadingProvider !== null}
             onClick={() => handleOAuth(provider)}
           >
@@ -130,7 +130,7 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
       {error ? (
         <div
           role="alert"
-          className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
+          className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
         >
           {error}
         </div>

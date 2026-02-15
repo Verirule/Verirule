@@ -1,7 +1,5 @@
 "use client";
 
-import { LogoMark } from "@/src/components/brand/LogoMark";
-import { ThemeToggle } from "@/src/components/theme/ThemeToggle";
 import { LogoutButton } from "@/components/logout-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -191,17 +189,9 @@ function SidebarLinks({ onNavigate }: { onNavigate?: () => void }) {
                   className={cn(
                     "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
                     isActive
-                      ? "font-medium"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                      ? "bg-blue-600 font-medium text-white"
+                      : "text-slate-600 hover:bg-blue-50 hover:text-slate-900",
                   )}
-                  style={
-                    isActive
-                      ? {
-                          backgroundColor: "var(--vr-user-accent)",
-                          color: "var(--vr-user-accent-foreground)",
-                        }
-                      : undefined
-                  }
                 >
                   <Icon className="h-4 w-4" />
                   <span>{link.label}</span>
@@ -224,8 +214,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
-    <div className="vr-page min-h-screen bg-background">
-      <header className="vr-surface sticky top-0 z-40 border-b-2 border-border/70 bg-background">
+    <div className="vr-page min-h-screen bg-white">
+      <header className="vr-surface sticky top-0 z-40 border-b border-gray-200 bg-white">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2">
             <Button
@@ -238,15 +228,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             >
               {mobileSidebarOpen ? <X /> : <Menu />}
             </Button>
-            <Link href="/" className="flex items-center gap-3 font-semibold">
-              <span className="vr-brand-chip h-12 w-12 sm:h-14 sm:w-14">
-                <LogoMark className="h-full w-full" />
+            <Link href="/" className="flex items-center gap-3 font-semibold text-slate-900">
+              <span className="vr-brand-chip h-11 w-11">
+                <img src="/logo.svg" alt="Verirule" className="h-full w-full object-contain" />
               </span>
               <span className="text-xl font-bold tracking-tight">Verirule</span>
             </Link>
           </div>
           <div className="flex items-center gap-2">
-            <ThemeToggle />
             <LogoutButton />
           </div>
         </div>
@@ -255,11 +244,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       <div className="mx-auto flex max-w-6xl">
         <aside
           className={cn(
-            "vr-surface fixed inset-y-0 left-0 z-30 w-72 border-r-2 border-border/70 bg-background px-4 pb-6 pt-20 transition-transform duration-200 lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:translate-x-0 lg:pt-6",
+            "vr-surface fixed inset-y-0 left-0 z-30 w-72 border-r border-gray-200 bg-white px-4 pb-6 pt-20 transition-transform duration-200 lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:translate-x-0 lg:pt-6",
             mobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Navigation</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Navigation</p>
           <SidebarLinks onNavigate={() => setMobileSidebarOpen(false)} />
         </aside>
 
@@ -267,7 +256,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             aria-label="Close dashboard sidebar"
-            className="fixed inset-0 z-20 bg-black/40 lg:hidden"
+            className="fixed inset-0 z-20 bg-slate-900/20 lg:hidden"
             onClick={() => setMobileSidebarOpen(false)}
           />
         ) : null}
