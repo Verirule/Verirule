@@ -53,3 +53,6 @@ class ReadinessProcessor:
 
         self._next_compute_at = now + timedelta(seconds=self.interval_seconds)
         return computed_count
+
+    async def run_once(self) -> int:
+        return await self.process_if_due()

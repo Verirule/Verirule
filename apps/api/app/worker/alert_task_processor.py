@@ -52,6 +52,9 @@ class AlertTaskProcessor:
                 created_count += 1
         return created_count
 
+    async def run_once(self, *, limit: int = ALERT_TASK_BATCH_LIMIT) -> int:
+        return await self.process_alerts_once(limit=limit)
+
     async def _process_single_alert(self, alert_row: dict[str, Any]) -> bool:
         alert_id = str(alert_row.get("id") or "").strip()
         org_id = str(alert_row.get("org_id") or "").strip()

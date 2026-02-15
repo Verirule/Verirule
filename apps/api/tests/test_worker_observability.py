@@ -241,47 +241,52 @@ def test_worker_heartbeat_upsert_called(monkeypatch) -> None:
     upserts: list[tuple[str, dict[str, object]]] = []
 
     class FakeMonitorProcessor:
-        async def count_due_sources_once(self) -> int:
-            return 4
-
-        async def queue_due_sources_once(self, limit: int = 10) -> int:
-            assert limit == 10
-            return 2
-
-        async def process_queued_runs_once(self, limit: int = 5) -> int:
-            assert limit == 5
-            return 1
+        async def run_once(self, *, queue_limit: int = 10, process_limit: int = 5) -> dict[str, int]:
+            assert queue_limit == 10
+            assert process_limit == 5
+            return {
+                "due_sources": 4,
+                "runs_queued": 2,
+                "runs_processed": 1,
+            }
 
     class FakeExportProcessor:
-        async def process_queued_exports_once(self, limit: int = 3) -> int:
+        async def run_once(self, *, limit: int = 3) -> int:
             assert limit == 3
             return 1
 
     class FakeAlertTaskProcessor:
-        async def process_alerts_once(self, limit: int = 25) -> int:
+        async def run_once(self, *, limit: int = 25) -> int:
             assert limit == 25
             return 2
 
     class FakeReadinessProcessor:
-        async def process_if_due(self) -> int:
+        async def run_once(self) -> int:
             return 3
 
     class FakeDigestProcessor:
-        async def process_if_due(self) -> int:
+        async def run_once(self) -> int:
             return 1
 
     class FakeSlaProcessor:
-        async def process_if_due(self) -> int:
+        async def run_once(self) -> int:
             return 4
 
     class FakeNotificationSender:
-        async def process_queued_jobs_once(self) -> int:
+        async def run_once(self) -> int:
             return 2
 
     async def fake_upsert_system_status(status_id: str, payload: dict[str, object]) -> None:
         upserts.append((status_id, payload))
 
+    async def fake_rpc_acquire_worker_lock(key: str, holder: str, ttl_seconds: int) -> bool:
+        assert key.startswith("worker:")
+        assert holder == "alloc-1:123"
+        assert ttl_seconds == 120
+        return True
+
     monkeypatch.setattr(app_main, "upsert_system_status", fake_upsert_system_status)
+    monkeypatch.setattr(app_main, "rpc_acquire_worker_lock", fake_rpc_acquire_worker_lock)
 
     payload = asyncio.run(
         app_main.run_worker_tick(
@@ -294,6 +299,8 @@ def test_worker_heartbeat_upsert_called(monkeypatch) -> None:
             FakeNotificationSender(),  # type: ignore[arg-type]
             run_batch_limit=5,
             heartbeat_enabled=True,
+            lock_holder="alloc-1:123",
+            lock_ttl_seconds=120,
         )
     )
 
@@ -312,3 +319,68 @@ def test_worker_heartbeat_upsert_called(monkeypatch) -> None:
     assert str(payload["tick_finished_at"]).endswith("Z")
     assert len(upserts) == 1
     assert upserts[0][0] == "worker"
+
+
+def test_worker_tick_skips_processors_when_lock_not_acquired(monkeypatch) -> None:
+    class FailIfCalledMonitor:
+        async def run_once(self, *, queue_limit: int = 10, process_limit: int = 5) -> dict[str, int]:
+            raise AssertionError("monitor processor should be skipped")
+
+    class FailIfCalledExport:
+        async def run_once(self, *, limit: int = 3) -> int:
+            raise AssertionError("export processor should be skipped")
+
+    class FailIfCalledAlertTask:
+        async def run_once(self, *, limit: int = 25) -> int:
+            raise AssertionError("alert task processor should be skipped")
+
+    class FailIfCalledReadiness:
+        async def run_once(self) -> int:
+            raise AssertionError("readiness processor should be skipped")
+
+    class FailIfCalledDigest:
+        async def run_once(self) -> int:
+            raise AssertionError("digest processor should be skipped")
+
+    class FailIfCalledSla:
+        async def run_once(self) -> int:
+            raise AssertionError("sla processor should be skipped")
+
+    class FailIfCalledNotificationSender:
+        async def run_once(self) -> int:
+            raise AssertionError("notification sender should be skipped")
+
+    async def fake_rpc_acquire_worker_lock(key: str, holder: str, ttl_seconds: int) -> bool:
+        assert key.startswith("worker:")
+        assert holder == "alloc-2:999"
+        assert ttl_seconds == 120
+        return False
+
+    monkeypatch.setattr(app_main, "rpc_acquire_worker_lock", fake_rpc_acquire_worker_lock)
+
+    payload = asyncio.run(
+        app_main.run_worker_tick(
+            FailIfCalledMonitor(),  # type: ignore[arg-type]
+            FailIfCalledExport(),  # type: ignore[arg-type]
+            FailIfCalledAlertTask(),  # type: ignore[arg-type]
+            FailIfCalledReadiness(),  # type: ignore[arg-type]
+            FailIfCalledDigest(),  # type: ignore[arg-type]
+            FailIfCalledSla(),  # type: ignore[arg-type]
+            FailIfCalledNotificationSender(),  # type: ignore[arg-type]
+            run_batch_limit=5,
+            heartbeat_enabled=False,
+            lock_holder="alloc-2:999",
+            lock_ttl_seconds=120,
+        )
+    )
+
+    assert payload["runs_processed"] == 0
+    assert payload["exports_processed"] == 0
+    assert payload["alert_tasks_processed"] == 0
+    assert payload["runs_queued"] == 0
+    assert payload["due_sources"] == 0
+    assert payload["readiness_computed"] == 0
+    assert payload["digests_sent"] == 0
+    assert payload["sla_escalations_queued"] == 0
+    assert payload["notification_emails_sent"] == 0
+    assert payload["errors"] == 0

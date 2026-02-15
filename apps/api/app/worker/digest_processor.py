@@ -140,6 +140,9 @@ class DigestProcessor:
         self._next_run_at = now + timedelta(seconds=self.interval_seconds)
         return queued_count
 
+    async def run_once(self) -> int:
+        return await self.process_if_due()
+
     async def _queue_digest_for_org(
         self,
         org_id: str,

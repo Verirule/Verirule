@@ -100,6 +100,9 @@ class SLAProcessor:
         self._next_run_at = now + timedelta(seconds=self.interval_seconds)
         return queued_count
 
+    async def run_once(self) -> int:
+        return await self.process_if_due()
+
     async def _process_org(self, org_id: str, rules: dict[str, Any], now: datetime) -> int:
         due_soon_threshold_hours = max(1, int(rules.get("due_soon_threshold_hours") or 12))
         overdue_remind_every_hours = max(1, int(rules.get("overdue_remind_every_hours") or 24))

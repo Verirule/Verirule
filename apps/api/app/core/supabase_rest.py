@@ -166,6 +166,42 @@ async def select_org_member_role(access_token: str, org_id: str, user_id: str) -
     return role if isinstance(role, str) else None
 
 
+async def select_org_ids_for_roles(
+    access_token: str,
+    user_id: str,
+    *,
+    roles: tuple[str, ...] = ("owner", "admin"),
+) -> list[str]:
+    normalized_user_id = user_id.strip()
+    normalized_roles = [role.strip().lower() for role in roles if role.strip()]
+    if not normalized_user_id or not normalized_roles:
+        return []
+
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_members"
+    params = {
+        "select": "org_id",
+        "user_id": f"eq.{normalized_user_id}",
+        "role": f"in.({','.join(normalized_roles)})",
+        "order": "created_at.asc",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=SUPABASE_HTTP_TIMEOUT) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except (httpx.TimeoutException, httpx.HTTPError) as exc:
+        raise _supabase_gateway_error("Failed to fetch organization roles from Supabase.") from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid organization role response from Supabase.")
+    org_ids: list[str] = []
+    for row in rows:
+        org_id = row.get("org_id")
+        if isinstance(org_id, str) and org_id.strip():
+            org_ids.append(org_id.strip())
+    return sorted(set(org_ids))
+
+
 async def select_org_members_service(org_id: str) -> list[dict[str, Any]]:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_members"
@@ -1607,6 +1643,122 @@ async def select_system_status(access_token: str) -> list[dict[str, Any]]:
         ) from exc
 
     return _validated_list_payload(response.json(), "Invalid system status response from Supabase.")
+
+
+async def rpc_acquire_worker_lock(key: str, holder: str, ttl_seconds: int) -> bool:
+    normalized_key = key.strip()
+    normalized_holder = holder.strip()
+    if not normalized_key or not normalized_holder:
+        return False
+
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/acquire_worker_lock"
+    payload = {
+        "p_key": normalized_key,
+        "p_holder": normalized_holder,
+        "p_ttl_seconds": max(1, int(ttl_seconds)),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=SUPABASE_HTTP_TIMEOUT) as client:
+            response = await client.post(url, json=payload, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except (ValueError, httpx.TimeoutException, httpx.HTTPError) as exc:
+        raise _supabase_gateway_error("Failed to acquire worker lock.") from exc
+
+    body = response.json()
+    if isinstance(body, bool):
+        return body
+    raise _supabase_gateway_error("Invalid worker lock response from Supabase.")
+
+
+def _org_ids_in_filter(org_ids: list[str]) -> str:
+    normalized = [org_id.strip() for org_id in org_ids if org_id.strip()]
+    return f"in.({','.join(normalized)})"
+
+
+async def select_failed_notification_jobs_service(
+    *,
+    org_ids: list[str],
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    if not org_ids:
+        return []
+
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/notification_jobs"
+    params = {
+        "select": "id,org_id,type,status,attempts,last_error,updated_at",
+        "status": "eq.failed",
+        "org_id": _org_ids_in_filter(org_ids),
+        "order": "updated_at.desc",
+        "limit": str(max(1, min(limit, 500))),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=SUPABASE_HTTP_TIMEOUT) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except (httpx.TimeoutException, httpx.HTTPError) as exc:
+        raise _supabase_gateway_error("Failed to fetch failed notification jobs.") from exc
+
+    return _validated_list_payload(response.json(), "Invalid failed notification jobs response from Supabase.")
+
+
+async def select_failed_audit_exports_service(
+    *,
+    org_ids: list[str],
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    if not org_ids:
+        return []
+
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/audit_exports"
+    params = {
+        "select": "id,org_id,status,attempts,last_error,completed_at,created_at",
+        "status": "eq.failed",
+        "org_id": _org_ids_in_filter(org_ids),
+        "order": "completed_at.desc.nullslast,created_at.desc",
+        "limit": str(max(1, min(limit, 500))),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=SUPABASE_HTTP_TIMEOUT) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except (httpx.TimeoutException, httpx.HTTPError) as exc:
+        raise _supabase_gateway_error("Failed to fetch failed export jobs.") from exc
+
+    return _validated_list_payload(response.json(), "Invalid failed export jobs response from Supabase.")
+
+
+async def select_failed_monitor_runs_service(
+    *,
+    org_ids: list[str],
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    if not org_ids:
+        return []
+
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/monitor_runs"
+    params = {
+        "select": "id,org_id,status,attempts,last_error,finished_at,created_at",
+        "status": "eq.failed",
+        "org_id": _org_ids_in_filter(org_ids),
+        "order": "finished_at.desc.nullslast,created_at.desc",
+        "limit": str(max(1, min(limit, 500))),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=SUPABASE_HTTP_TIMEOUT) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except (httpx.TimeoutException, httpx.HTTPError) as exc:
+        raise _supabase_gateway_error("Failed to fetch failed monitor runs.") from exc
+
+    return _validated_list_payload(response.json(), "Invalid failed monitor runs response from Supabase.")
 
 
 async def rpc_create_monitor_run(access_token: str, payload: dict[str, Any]) -> str:

@@ -8,7 +8,7 @@ import uvicorn
 
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import get_settings
-from app.core.supabase_rest import upsert_system_status
+from app.core.supabase_rest import rpc_acquire_worker_lock, upsert_system_status
 from app.worker.alert_task_processor import ALERT_TASK_BATCH_LIMIT, AlertTaskProcessor
 from app.worker.digest_processor import DigestProcessor
 from app.worker.export_processor import EXPORT_BATCH_LIMIT, ExportProcessor
@@ -25,6 +25,20 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+def _worker_holder() -> str:
+    alloc = os.getenv("FLY_ALLOC_ID") or os.getenv("HOSTNAME") or "worker"
+    return f"{alloc}:{os.getpid()}"
+
+
+def _worker_lock_ttl_seconds() -> int:
+    raw_value = os.getenv("WORKER_LOCK_TTL_SECONDS", "120").strip()
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        parsed = 120
+    return max(30, parsed)
+
+
 async def run_worker_tick(
     monitor_processor: MonitorRunProcessor,
     export_processor: ExportProcessor,
@@ -36,6 +50,8 @@ async def run_worker_tick(
     *,
     run_batch_limit: int,
     heartbeat_enabled: bool,
+    lock_holder: str,
+    lock_ttl_seconds: int,
 ) -> dict[str, object]:
     tick_started_at = _now_iso()
     errors = 0
@@ -49,86 +65,103 @@ async def run_worker_tick(
     sla_escalations_queued = 0
     notification_emails_sent = 0
 
-    try:
-        due_sources = await monitor_processor.count_due_sources_once()
-    except Exception as exc:  # pragma: no cover - defensive guard
-        errors += 1
-        logger.error(
-            "worker.tick_due_sources_error",
-            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
-        )
+    async def _lock_acquired(lock_key: str) -> bool:
+        nonlocal errors
+        try:
+            acquired = await rpc_acquire_worker_lock(lock_key, lock_holder, lock_ttl_seconds)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            errors += 1
+            logger.error(
+                "worker.tick_lock_error",
+                extra={
+                    "component": "worker",
+                    "lock_key": lock_key,
+                    "error": sanitize_error(exc, default_message="worker lock error"),
+                },
+            )
+            return False
+        if not acquired:
+            logger.info(
+                "worker.tick_lock_skipped",
+                extra={"component": "worker", "lock_key": lock_key, "holder": lock_holder},
+            )
+        return acquired
 
-    try:
-        runs_queued = await monitor_processor.queue_due_sources_once(limit=10)
-    except Exception as exc:  # pragma: no cover - defensive guard
-        errors += 1
-        logger.error(
-            "worker.tick_queue_runs_error",
-            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
-        )
+    if await _lock_acquired("worker:run_processor"):
+        try:
+            run_metrics = await monitor_processor.run_once(
+                queue_limit=10,
+                process_limit=run_batch_limit,
+            )
+            due_sources = int(run_metrics.get("due_sources") or 0)
+            runs_queued = int(run_metrics.get("runs_queued") or 0)
+            runs_processed = int(run_metrics.get("runs_processed") or 0)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            errors += 1
+            logger.error(
+                "worker.tick_process_runs_error",
+                extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
+            )
 
-    try:
-        runs_processed = await monitor_processor.process_queued_runs_once(limit=run_batch_limit)
-    except Exception as exc:  # pragma: no cover - defensive guard
-        errors += 1
-        logger.error(
-            "worker.tick_process_runs_error",
-            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
-        )
+    if await _lock_acquired("worker:export_processor"):
+        try:
+            exports_processed = await export_processor.run_once(limit=EXPORT_BATCH_LIMIT)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            errors += 1
+            logger.error(
+                "worker.tick_process_exports_error",
+                extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
+            )
 
-    try:
-        exports_processed = await export_processor.process_queued_exports_once(limit=EXPORT_BATCH_LIMIT)
-    except Exception as exc:  # pragma: no cover - defensive guard
-        errors += 1
-        logger.error(
-            "worker.tick_process_exports_error",
-            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
-        )
+    if await _lock_acquired("worker:alert_task_processor"):
+        try:
+            alert_tasks_processed = await alert_task_processor.run_once(limit=ALERT_TASK_BATCH_LIMIT)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            errors += 1
+            logger.error(
+                "worker.tick_process_alert_tasks_error",
+                extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
+            )
 
-    try:
-        alert_tasks_processed = await alert_task_processor.process_alerts_once(limit=ALERT_TASK_BATCH_LIMIT)
-    except Exception as exc:  # pragma: no cover - defensive guard
-        errors += 1
-        logger.error(
-            "worker.tick_process_alert_tasks_error",
-            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
-        )
+    if await _lock_acquired("worker:readiness_processor"):
+        try:
+            readiness_computed = await readiness_processor.run_once()
+        except Exception as exc:  # pragma: no cover - defensive guard
+            errors += 1
+            logger.error(
+                "worker.tick_process_readiness_error",
+                extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
+            )
 
-    try:
-        readiness_computed = await readiness_processor.process_if_due()
-    except Exception as exc:  # pragma: no cover - defensive guard
-        errors += 1
-        logger.error(
-            "worker.tick_process_readiness_error",
-            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
-        )
+    if await _lock_acquired("worker:digest_processor"):
+        try:
+            digests_sent = await digest_processor.run_once()
+        except Exception as exc:  # pragma: no cover - defensive guard
+            errors += 1
+            logger.error(
+                "worker.tick_process_digests_error",
+                extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
+            )
 
-    try:
-        digests_sent = await digest_processor.process_if_due()
-    except Exception as exc:  # pragma: no cover - defensive guard
-        errors += 1
-        logger.error(
-            "worker.tick_process_digests_error",
-            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
-        )
+    if await _lock_acquired("worker:sla_processor"):
+        try:
+            sla_escalations_queued = await sla_processor.run_once()
+        except Exception as exc:  # pragma: no cover - defensive guard
+            errors += 1
+            logger.error(
+                "worker.tick_process_sla_error",
+                extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
+            )
 
-    try:
-        sla_escalations_queued = await sla_processor.process_if_due()
-    except Exception as exc:  # pragma: no cover - defensive guard
-        errors += 1
-        logger.error(
-            "worker.tick_process_sla_error",
-            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
-        )
-
-    try:
-        notification_emails_sent = await notification_sender.process_queued_jobs_once()
-    except Exception as exc:  # pragma: no cover - defensive guard
-        errors += 1
-        logger.error(
-            "worker.tick_process_notification_jobs_error",
-            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
-        )
+    if await _lock_acquired("worker:notification_sender"):
+        try:
+            notification_emails_sent = await notification_sender.run_once()
+        except Exception as exc:  # pragma: no cover - defensive guard
+            errors += 1
+            logger.error(
+                "worker.tick_process_notification_jobs_error",
+                extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
+            )
 
     tick_finished_at = _now_iso()
     payload: dict[str, object] = {
@@ -164,19 +197,14 @@ async def run_worker_tick(
 
 async def run_worker_supervisor_loop() -> None:
     settings = get_settings()
-    read_access_token = settings.WORKER_SUPABASE_ACCESS_TOKEN or settings.SUPABASE_SERVICE_ROLE_KEY
-    if not read_access_token:
+    service_role_key = settings.SUPABASE_SERVICE_ROLE_KEY
+    if not service_role_key:
         raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY must be configured for worker mode")
-    write_access_token = settings.SUPABASE_SERVICE_ROLE_KEY or read_access_token
-    heartbeat_enabled = bool(settings.SUPABASE_SERVICE_ROLE_KEY)
-    if not heartbeat_enabled:
-        logger.error(
-            "worker.heartbeat_disabled",
-            extra={
-                "component": "worker",
-                "reason": "SUPABASE_SERVICE_ROLE_KEY missing; heartbeat skipped",
-            },
-        )
+    read_access_token = settings.WORKER_SUPABASE_ACCESS_TOKEN or service_role_key
+    write_access_token = service_role_key
+    heartbeat_enabled = True
+    worker_holder = _worker_holder()
+    lock_ttl_seconds = _worker_lock_ttl_seconds()
 
     monitor_processor = MonitorRunProcessor(
         access_token=read_access_token,
@@ -220,6 +248,8 @@ async def run_worker_supervisor_loop() -> None:
             notification_sender,
             run_batch_limit=settings.WORKER_BATCH_LIMIT,
             heartbeat_enabled=heartbeat_enabled,
+            lock_holder=worker_holder,
+            lock_ttl_seconds=lock_ttl_seconds,
         )
 
         if (

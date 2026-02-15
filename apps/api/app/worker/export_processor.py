@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -133,6 +132,9 @@ class ExportProcessor:
         for row in export_rows:
             await self._process_single_export(row)
         return len(export_rows)
+
+    async def run_once(self, *, limit: int = EXPORT_BATCH_LIMIT) -> int:
+        return await self.process_queued_exports_once(limit=limit)
 
     async def _process_single_export(self, row: dict[str, Any]) -> None:
         export_id = str(row.get("id") or "")
@@ -340,34 +342,3 @@ class ExportProcessor:
             total_evidence_bytes += len(file_bytes)
 
         return evidence_items
-
-
-async def run_export_worker_loop() -> None:
-    settings = get_settings()
-    service_role_key = settings.SUPABASE_SERVICE_ROLE_KEY
-    if not service_role_key:
-        logger.warning(
-            "export.worker_disabled",
-            extra={"component": "worker", "reason": "SUPABASE_SERVICE_ROLE_KEY missing"},
-        )
-        while True:
-            await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))
-
-    processor = ExportProcessor(
-        access_token=service_role_key,
-        bucket_name=settings.EXPORTS_BUCKET_NAME,
-    )
-
-    while True:
-        try:
-            processed = await processor.process_queued_exports_once(limit=EXPORT_BATCH_LIMIT)
-        except Exception as exc:  # pragma: no cover - loop resiliency
-            logger.error(
-                "export.worker_loop_error",
-                extra={"component": "worker", "error": _sanitize_error_text(exc)},
-            )
-            await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))
-            continue
-
-        if processed == 0:
-            await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))

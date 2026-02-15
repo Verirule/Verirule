@@ -67,6 +67,9 @@ class NotificationSender:
                 processed += 1
         return processed
 
+    async def run_once(self) -> int:
+        return await self.process_queued_jobs_once()
+
     async def _process_job(self, job: dict[str, Any]) -> bool:
         job_id = str(job.get("id") or "").strip()
         org_id = str(job.get("org_id") or "").strip()

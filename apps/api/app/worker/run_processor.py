@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -8,7 +7,6 @@ from datetime import UTC, datetime, timedelta
 import httpx
 
 from app.core.logging import get_logger
-from app.core.settings import get_settings
 from app.core.supabase_rest import (
     clear_monitor_run_error_state,
     enqueue_notification_job,
@@ -94,6 +92,16 @@ class MonitorRunProcessor:
         for run in runs:
             await self._process_single_run(run)
         return len(runs)
+
+    async def run_once(self, *, queue_limit: int = 10, process_limit: int = 5) -> dict[str, int]:
+        due_sources = await self.count_due_sources_once()
+        runs_queued = await self.queue_due_sources_once(limit=queue_limit)
+        runs_processed = await self.process_queued_runs_once(limit=process_limit)
+        return {
+            "due_sources": due_sources,
+            "runs_queued": runs_queued,
+            "runs_processed": runs_processed,
+        }
 
     async def _process_single_run(self, run: dict[str, object]) -> None:
         run_id = str(run["id"])
@@ -366,40 +374,6 @@ class MonitorRunProcessor:
                 "entity_id": alert_id,
             },
         )
-
-
-async def run_worker_loop() -> None:
-    settings = get_settings()
-    read_access_token = settings.WORKER_SUPABASE_ACCESS_TOKEN or settings.SUPABASE_SERVICE_ROLE_KEY
-    if not read_access_token:
-        raise RuntimeError(
-            "SUPABASE_SERVICE_ROLE_KEY must be configured for worker mode"
-        )
-    write_access_token = settings.SUPABASE_SERVICE_ROLE_KEY or read_access_token
-
-    processor = MonitorRunProcessor(
-        access_token=read_access_token,
-        write_access_token=write_access_token,
-        fetch_timeout_seconds=settings.WORKER_FETCH_TIMEOUT_SECONDS,
-        fetch_max_bytes=settings.WORKER_FETCH_MAX_BYTES,
-    )
-
-    while True:
-        try:
-            await processor.queue_due_sources_once(limit=10)
-            processed = await processor.process_queued_runs_once(limit=settings.WORKER_BATCH_LIMIT)
-        except Exception as exc:  # pragma: no cover - loop resiliency
-            logger.error(
-                "run.worker_loop_error",
-                extra={
-                    "component": "worker",
-                    "error": sanitize_error(exc, default_message="Monitor run loop failed."),
-                },
-            )
-            await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))
-            continue
-        if processed == 0:
-            await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))
 
 
 def _safe_int(value: object | None) -> int:
