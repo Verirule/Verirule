@@ -1,6 +1,7 @@
+import asyncio
 from datetime import UTC, datetime
-from typing import Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.v1.schemas.system import (
@@ -23,6 +24,7 @@ from app.core.supabase_rest import (
 router = APIRouter()
 supabase_auth_dependency = Depends(verify_supabase_auth)
 _SYSTEM_JOB_TYPES = {"notifications", "exports", "monitoring"}
+SYSTEM_HEALTH_TIMEOUT_SECONDS = 1.5
 
 
 def _claims_user_id(auth: VerifiedSupabaseAuth) -> str:
@@ -46,41 +48,39 @@ async def system_status(
 
 @router.get("/system/health")
 async def system_health(
-    auth: VerifiedSupabaseAuth = supabase_auth_dependency,
 ) -> SystemHealthOut:
     settings = get_settings()
-    rows = await select_system_status(auth.access_token)
-    stale_after_seconds = max(1, settings.WORKER_STALE_AFTER_SECONDS)
-
-    worker_row = next((row for row in rows if str(row.get("id") or "") == "worker"), None)
-    worker_last_seen_at: datetime | None = None
-    worker_status: Literal["ok", "stale", "unknown"] = "unknown"
-
-    if worker_row:
-        updated_at = worker_row.get("updated_at")
-        if isinstance(updated_at, str):
-            try:
-                parsed = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
-                if parsed.tzinfo is None:
-                    parsed = parsed.replace(tzinfo=UTC)
-                worker_last_seen_at = parsed.astimezone(UTC)
-            except ValueError:
-                worker_last_seen_at = None
-        elif isinstance(updated_at, datetime):
-            worker_last_seen_at = (
-                updated_at if updated_at.tzinfo is not None else updated_at.replace(tzinfo=UTC)
-            ).astimezone(UTC)
-
-    if worker_last_seen_at is not None:
-        age_seconds = (datetime.now(UTC) - worker_last_seen_at).total_seconds()
-        worker_status = "ok" if age_seconds <= stale_after_seconds else "stale"
-
-    return SystemHealthOut(
-        api="ok",
-        worker=worker_status,
-        worker_last_seen_at=worker_last_seen_at,
-        stale_after_seconds=stale_after_seconds,
+    supabase_ok = await _probe_supabase_health(
+        supabase_url=settings.SUPABASE_URL,
+        supabase_anon_key=settings.SUPABASE_ANON_KEY,
     )
+    return SystemHealthOut(
+        ok=True,
+        version="v1",
+        time_utc=datetime.now(UTC),
+        supabase_ok=supabase_ok,
+    )
+
+
+async def _probe_supabase_health(*, supabase_url: str, supabase_anon_key: str) -> bool:
+    url = f"{supabase_url.rstrip('/')}/auth/v1/health"
+    headers = {
+        "apikey": supabase_anon_key,
+        "Authorization": f"Bearer {supabase_anon_key}",
+        "Accept": "application/json",
+    }
+    timeout = httpx.Timeout(SYSTEM_HEALTH_TIMEOUT_SECONDS, connect=0.5)
+
+    async def _request() -> bool:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(url, headers=headers)
+            # Any non-5xx response indicates Supabase is reachable.
+            return response.status_code < 500
+
+    try:
+        return await asyncio.wait_for(_request(), timeout=SYSTEM_HEALTH_TIMEOUT_SECONDS)
+    except (TimeoutError, httpx.HTTPError):
+        return False
 
 
 @router.get("/system/jobs")

@@ -29,10 +29,13 @@ type ApiErrorResponse = {
   request_id?: unknown;
 };
 
-type SystemHealthResponse = {
-  api?: unknown;
-  worker?: unknown;
+type HealthzResponse = {
+  status?: unknown;
+  ok?: unknown;
 };
+
+const CONNECTIVITY_WARNING =
+  "Connectivity issue: API unreachable right now. You can still try creating a workspace.";
 
 function formatCreatedAt(value: string): string {
   const parsed = new Date(value);
@@ -128,6 +131,7 @@ export function OrgsPanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [connectivityWarning, setConnectivityWarning] = useState<string | null>(null);
   const [isCreateError, setIsCreateError] = useState(false);
   const [retryCreateName, setRetryCreateName] = useState<string | null>(null);
 
@@ -137,6 +141,7 @@ export function OrgsPanel() {
     setIsLoading(true);
     setError(null);
     setIsCreateError(false);
+    setConnectivityWarning(null);
     setRetryCreateName(null);
 
     try {
@@ -181,32 +186,19 @@ export function OrgsPanel() {
 
     setIsSubmitting(true);
     try {
-      let healthResult: {
-        ok: boolean;
-        status: number;
-        json: (SystemHealthResponse & ApiErrorResponse) | null;
-        requestId: string | null;
-      };
       try {
-        healthResult = await fetchWithTimeout<SystemHealthResponse & ApiErrorResponse>("/api/system/health", {
+        const healthResult = await fetchWithTimeout<HealthzResponse & ApiErrorResponse>("/api/healthz", {
           method: "GET",
           cache: "no-store",
-          timeoutMs: 5_000,
+          timeoutMs: 3_500,
         });
+        const healthPayload = healthResult.json ?? {};
+        const healthOk =
+          healthResult.ok &&
+          ((typeof healthPayload.status === "string" && healthPayload.status === "ok") || healthPayload.ok === true);
+        setConnectivityWarning(healthOk ? null : CONNECTIVITY_WARNING);
       } catch {
-        setError("Service unavailable");
-        setIsCreateError(true);
-        setRetryCreateName(workspaceName);
-        return;
-      }
-      const healthPayload = healthResult.json ?? {};
-      const healthOk = healthResult.ok && healthPayload.api === "ok" && healthPayload.worker === "ok";
-      if (!healthOk) {
-        const requestIdSuffix = healthResult.requestId ? ` (Request ID: ${healthResult.requestId})` : "";
-        setError(`Service unavailable${requestIdSuffix}`);
-        setIsCreateError(true);
-        setRetryCreateName(workspaceName);
-        return;
+        setConnectivityWarning(CONNECTIVITY_WARNING);
       }
 
       const createRequest = async () =>
@@ -251,6 +243,7 @@ export function OrgsPanel() {
       }
 
       setName("");
+      setConnectivityWarning(null);
       setIsCreateError(false);
       setRetryCreateName(null);
       await loadOrgs();
@@ -346,6 +339,11 @@ export function OrgsPanel() {
                   </Button>
                 )}
               </div>
+            ) : null}
+            {connectivityWarning ? (
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {connectivityWarning}
+              </p>
             ) : null}
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Creating..." : "Create workspace"}

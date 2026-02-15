@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -15,10 +15,10 @@ class SystemStatusListOut(BaseModel):
 
 
 class SystemHealthOut(BaseModel):
-    api: Literal["ok"]
-    worker: Literal["ok", "stale", "unknown"]
-    worker_last_seen_at: datetime | None = None
-    stale_after_seconds: int
+    ok: bool
+    version: str
+    time_utc: datetime
+    supabase_ok: bool
 
 
 class SystemJobRowOut(BaseModel):

@@ -47,6 +47,27 @@ function parseJsonObject(value: string): Record<string, unknown> | null {
   return null;
 }
 
+function normalizeSystemHealthPayload(payload: Record<string, unknown> | null): Record<string, unknown> {
+  if (payload && payload.api === "ok") {
+    return payload;
+  }
+
+  if (payload && payload.ok === true) {
+    const supabaseOk = payload.supabase_ok === true;
+    return {
+      api: "ok",
+      worker: supabaseOk ? "ok" : "unknown",
+      worker_last_seen_at: null,
+      stale_after_seconds: 180,
+      version: payload.version,
+      time_utc: payload.time_utc,
+      supabase_ok: supabaseOk,
+    };
+  }
+
+  return payload ?? {};
+}
+
 async function getAccessToken(requestId: string): Promise<{ token: string | null; response: NextResponse | null }> {
   let supabase: Awaited<ReturnType<typeof createClient>>;
   try {
@@ -95,7 +116,10 @@ export async function GET(request: Request) {
     const upstreamJson = parseJsonObject(upstreamBodyText);
 
     if (upstreamResponse.ok) {
-      return withRequestId(NextResponse.json(upstreamJson ?? {}, { status: upstreamResponse.status }), upstreamRequestId);
+      return withRequestId(
+        NextResponse.json(normalizeSystemHealthPayload(upstreamJson), { status: upstreamResponse.status }),
+        upstreamRequestId,
+      );
     }
 
     if (upstreamResponse.status === 502) {
