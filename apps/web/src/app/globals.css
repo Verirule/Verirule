@@ -123,8 +123,10 @@
   }
 
   .vr-brand-chip {
-    @apply inline-flex items-center justify-center p-0;
-    background: transparent;
-    box-shadow: none;
+    @apply inline-flex items-center justify-center rounded-full border border-border bg-card p-1;
+    box-shadow: 0 2px 0 rgba(4, 101, 168, 0.16);
+  }
+  .dark .vr-brand-chip {
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.34);
   }
 }

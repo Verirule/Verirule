@@ -21,14 +21,16 @@ export function MarketingNav() {
           href="/"
           className="inline-flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DEAD2D]"
         >
-          <Image
-            src="/logo.svg"
-            alt="Verirule"
-            width={320}
-            height={84}
-            className="h-11 w-auto mix-blend-multiply sm:h-12"
-            priority
-          />
+          <span className="vr-brand-chip h-12 w-12 sm:h-14 sm:w-14">
+            <Image
+              src="/logo.svg"
+              alt="Verirule"
+              width={320}
+              height={84}
+              className="h-full w-full object-contain"
+              priority
+            />
+          </span>
         </Link>
 
         <nav aria-label="Primary" className="hidden items-center gap-7 md:flex">

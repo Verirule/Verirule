@@ -30,13 +30,15 @@ export function SiteFooter() {
       <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_auto_auto] lg:px-8">
         <div className="space-y-4">
           <Link href="/" className="inline-flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DEAD2D]">
-            <Image
-              src="/logo.svg"
-              alt="Verirule"
-              width={320}
-              height={84}
-              className="h-10 w-auto mix-blend-multiply"
-            />
+            <span className="vr-brand-chip h-12 w-12">
+              <Image
+                src="/logo.svg"
+                alt="Verirule"
+                width={320}
+                height={84}
+                className="h-full w-full object-contain"
+              />
+            </span>
           </Link>
           <p className="max-w-sm text-sm text-[#D4EAFF]">
             Compliance monitoring and workflow evidence for teams operating in regulated environments.
