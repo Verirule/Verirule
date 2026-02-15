@@ -64,6 +64,42 @@ export type PlanFeatures = {
   maxMembers: number | null;
 };
 
+function readDisplayPrice(raw: string | undefined): string | null {
+  const value = raw?.trim();
+  return value ? value : null;
+}
+
+export function getPlanDisplayPrice(plan: BillingPlan): string | null {
+  if (plan === "free") {
+    return "£0";
+  }
+
+  if (plan === "pro") {
+    return readDisplayPrice(process.env.NEXT_PUBLIC_PRICE_PRO_DISPLAY);
+  }
+
+  return readDisplayPrice(process.env.NEXT_PUBLIC_PRICE_BUSINESS_DISPLAY);
+}
+
+function formatLimit(value: number | null): string {
+  return value === null ? "Unlimited" : String(value);
+}
+
+export function getPlanIncludedItems(plan: BillingPlan): string[] {
+  const features = getPlanFeatures(plan);
+  const integrationsText = features.canUseIntegrations
+    ? `Integrations: up to ${formatLimit(features.maxIntegrations)}`
+    : "Integrations: not included";
+
+  return [
+    `Sources: up to ${formatLimit(features.maxSources)}`,
+    `Members: up to ${formatLimit(features.maxMembers)}`,
+    `Exports per month: up to ${formatLimit(features.maxExportsPerMonth)}`,
+    integrationsText,
+    `Scheduled runs: ${features.canUseScheduledRuns ? "included" : "not included"}`,
+  ];
+}
+
 export function getPlanFeatures(plan: BillingPlan): PlanFeatures {
   if (plan === "business") {
     return {

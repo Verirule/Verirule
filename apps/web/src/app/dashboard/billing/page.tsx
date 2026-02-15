@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { usePlan } from "@/src/components/billing/usePlan";
-import type { BillingPlan } from "@/src/lib/billing";
+import { getPlanDisplayPrice, getPlanIncludedItems, type BillingPlan } from "@/src/lib/billing";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -28,6 +28,13 @@ type BillingEventRecord = {
 
 type OrgsResponse = { orgs: OrgRecord[] };
 type BillingEventsResponse = { events: BillingEventRecord[] };
+type PlanCard = { plan: BillingPlan; label: string };
+
+const PLAN_CARDS: PlanCard[] = [
+  { plan: "free", label: "Free" },
+  { plan: "pro", label: "Pro" },
+  { plan: "business", label: "Business" },
+];
 
 function planBadgeClass(plan: BillingPlan): string {
   if (plan === "business") {
@@ -88,6 +95,15 @@ export default function DashboardBillingPage() {
       { label: "Scheduling", enabled: features.canUseScheduledRuns },
     ],
     [features.canUseIntegrations, features.canUseExports, features.canUseScheduledRuns],
+  );
+  const planCards = useMemo(
+    () =>
+      PLAN_CARDS.map((item) => ({
+        ...item,
+        displayPrice: getPlanDisplayPrice(item.plan),
+        included: getPlanIncludedItems(item.plan),
+      })),
+    [],
   );
 
   const loadOrgs = async () => {
@@ -341,30 +357,71 @@ export default function DashboardBillingPage() {
 
       <Card className="border-border/70">
         <CardHeader>
-          <CardTitle>Actions</CardTitle>
-          <CardDescription>Start checkout for paid plans or manage an existing Stripe subscription.</CardDescription>
+          <CardTitle>Plans</CardTitle>
+          <CardDescription>
+            Free, Pro, and Business plans with Stripe checkout for paid upgrades.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {plan === "free" ? (
-              <>
-                <Button
-                  type="button"
-                  disabled={isCheckoutLoading !== null || !selectedOrgId}
-                  onClick={() => void startCheckout("pro")}
-                >
-                  {isCheckoutLoading === "pro" ? "Redirecting..." : "Upgrade to Pro"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isCheckoutLoading !== null || !selectedOrgId}
-                  onClick={() => void startCheckout("business")}
-                >
-                  {isCheckoutLoading === "business" ? "Redirecting..." : "Upgrade to Business"}
-                </Button>
-              </>
-            ) : null}
+          <div className="grid gap-3 md:grid-cols-3">
+            {planCards.map((card) => {
+              const isCurrentPlan = plan === card.plan;
+              const canCheckout = card.plan === "pro" || card.plan === "business";
+              const isLoadingTarget = canCheckout && isCheckoutLoading === card.plan;
+              return (
+                <article key={card.plan} className="rounded-lg border border-border/70 bg-card p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold">{card.label}</h3>
+                    {isCurrentPlan ? (
+                      <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        Current
+                      </span>
+                    ) : null}
+                  </div>
+                  {card.displayPrice ? (
+                    <p className="text-xl font-semibold">
+                      {card.displayPrice}
+                      <span className="ml-1 text-xs font-medium text-muted-foreground">/mo</span>
+                    </p>
+                  ) : (
+                    <p className="text-lg font-semibold">{card.label}</p>
+                  )}
+                  <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                    {card.included.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-4">
+                    {isCurrentPlan ? (
+                      <Button type="button" variant="outline" className="w-full" disabled>
+                        Current plan
+                      </Button>
+                    ) : canCheckout ? (
+                      <Button
+                        type="button"
+                        className="w-full"
+                        disabled={isCheckoutLoading !== null || !selectedOrgId}
+                        onClick={() => void startCheckout(card.plan as Exclude<BillingPlan, "free">)}
+                      >
+                        {isLoadingTarget ? "Redirecting..." : `Upgrade to ${card.label}`}
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        disabled={isPortalLoading || !selectedOrgId}
+                        onClick={openPortal}
+                      >
+                        {isPortalLoading ? "Opening..." : "Manage in Stripe"}
+                      </Button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          <div className="pt-1">
             <Button type="button" variant="outline" disabled={isPortalLoading || !selectedOrgId} onClick={openPortal}>
               {isPortalLoading ? "Opening..." : "Manage billing"}
             </Button>

@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Footer } from "@/src/components/landing/Footer";
 import { Nav } from "@/src/components/landing/Nav";
+import { getPlanDisplayPrice, getPlanIncludedItems, type BillingPlan } from "@/src/lib/billing";
 import Link from "next/link";
 
 const platformHighlights = [
@@ -26,10 +27,10 @@ const workflowSteps = [
   "Export audit-ready history and reports",
 ];
 
-const plans = [
-  { name: "Free", price: 0, users: "Up to 3 users", cta: "Start free" },
-  { name: "Pro", price: 99, users: "Up to 25 users", cta: "Choose Pro" },
-  { name: "Business", price: 299, users: "Up to 100 users", cta: "Choose Business" },
+const plans: Array<{ plan: BillingPlan; name: string; cta: string }> = [
+  { plan: "free", name: "Free", cta: "Start free" },
+  { plan: "pro", name: "Pro", cta: "Choose Pro" },
+  { plan: "business", name: "Business", cta: "Choose Business" },
 ];
 
 export default function Home() {
@@ -133,11 +134,19 @@ export default function Home() {
               {plans.map((plan) => (
                 <article key={plan.name} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                   <h3 className="text-base font-semibold text-slate-900">{plan.name}</h3>
-                  <p className="mt-3 text-3xl font-semibold text-slate-900">
-                    ${plan.price}
-                    <span className="ml-1 text-sm font-medium text-slate-500">/month</span>
-                  </p>
-                  <p className="mt-2 text-sm text-slate-600">{plan.users}</p>
+                  {getPlanDisplayPrice(plan.plan) ? (
+                    <p className="mt-3 text-3xl font-semibold text-slate-900">
+                      {getPlanDisplayPrice(plan.plan)}
+                      <span className="ml-1 text-sm font-medium text-slate-500">/mo</span>
+                    </p>
+                  ) : (
+                    <p className="mt-3 text-2xl font-semibold text-slate-900">{plan.name}</p>
+                  )}
+                  <ul className="mt-3 space-y-1 text-sm text-slate-600">
+                    {getPlanIncludedItems(plan.plan).map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
                   <Button asChild className="mt-5 w-full">
                     <Link href="/auth/sign-up">{plan.cta}</Link>
                   </Button>
