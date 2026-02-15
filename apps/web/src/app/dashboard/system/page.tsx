@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEffect, useMemo, useState } from "react";
 
@@ -19,6 +20,28 @@ type SystemStatusRow = {
 type SystemStatusResponse = {
   status: SystemStatusRow[];
 };
+
+type FailedJobType = "notifications" | "exports" | "monitoring";
+
+type FailedJobRow = {
+  id: string;
+  org_id: string;
+  type: string;
+  status: string;
+  attempts: number;
+  last_error: string | null;
+  updated_at: string | null;
+};
+
+type SystemJobsResponse = {
+  jobs: FailedJobRow[];
+};
+
+const FAILED_JOB_TABS: { key: FailedJobType; label: string }[] = [
+  { key: "notifications", label: "Notifications" },
+  { key: "exports", label: "Exports" },
+  { key: "monitoring", label: "Monitoring" },
+];
 
 function formatUtc(value: string | null): string {
   if (!value) return "n/a";
@@ -56,11 +79,34 @@ function asNumber(value: unknown): number {
   return 0;
 }
 
+function messageFromBody(body: unknown, fallback: string): string {
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    const objectBody = body as Record<string, unknown>;
+    if (typeof objectBody.error === "string" && objectBody.error.trim()) {
+      return objectBody.error.trim();
+    }
+    if (typeof objectBody.message === "string" && objectBody.message.trim()) {
+      return objectBody.message.trim();
+    }
+  }
+  return fallback;
+}
+
 export default function DashboardSystemPage() {
   const [health, setHealth] = useState<SystemHealthResponse | null>(null);
   const [statusRows, setStatusRows] = useState<SystemStatusRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [jobsByType, setJobsByType] = useState<Record<FailedJobType, FailedJobRow[]>>({
+    notifications: [],
+    exports: [],
+    monitoring: [],
+  });
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [activeJobsTab, setActiveJobsTab] = useState<FailedJobType>("notifications");
+  const [copiedJobId, setCopiedJobId] = useState<string | null>(null);
 
   const loadSystemStatus = async () => {
     try {
@@ -74,12 +120,8 @@ export default function DashboardSystemPage() {
         return;
       }
 
-      const healthBody = (await healthResponse.json().catch(() => ({}))) as
-        | Partial<SystemHealthResponse>
-        | { message?: unknown };
-      const statusBody = (await statusResponse.json().catch(() => ({}))) as
-        | Partial<SystemStatusResponse>
-        | { message?: unknown };
+      const healthBody = (await healthResponse.json().catch(() => ({}))) as unknown;
+      const statusBody = (await statusResponse.json().catch(() => ({}))) as unknown;
       const healthData = healthBody as Partial<SystemHealthResponse>;
       const statusData = statusBody as Partial<SystemStatusResponse>;
 
@@ -88,20 +130,12 @@ export default function DashboardSystemPage() {
         healthData.api !== "ok" ||
         (healthData.worker !== "ok" && healthData.worker !== "stale" && healthData.worker !== "unknown")
       ) {
-        const message =
-          typeof (healthBody as { message?: unknown }).message === "string"
-            ? (healthBody as { message: string }).message
-            : "Unable to load system health.";
-        setError(message);
+        setError(messageFromBody(healthBody, "Unable to load system health."));
         return;
       }
 
       if (!statusResponse.ok || !Array.isArray(statusData.status)) {
-        const message =
-          typeof (statusBody as { message?: unknown }).message === "string"
-            ? (statusBody as { message: string }).message
-            : "Unable to load system status.";
-        setError(message);
+        setError(messageFromBody(statusBody, "Unable to load system status."));
         return;
       }
 
@@ -112,9 +146,7 @@ export default function DashboardSystemPage() {
         worker_last_seen_at:
           typeof healthData.worker_last_seen_at === "string" ? healthData.worker_last_seen_at : null,
         stale_after_seconds:
-          typeof healthData.stale_after_seconds === "number"
-            ? healthData.stale_after_seconds
-            : 180,
+          typeof healthData.stale_after_seconds === "number" ? healthData.stale_after_seconds : 180,
       });
       setStatusRows(statusData.status as SystemStatusRow[]);
     } catch {
@@ -124,16 +156,80 @@ export default function DashboardSystemPage() {
     }
   };
 
+  const loadFailedJobs = async () => {
+    try {
+      const next: Record<FailedJobType, FailedJobRow[]> = {
+        notifications: [],
+        exports: [],
+        monitoring: [],
+      };
+
+      await Promise.all(
+        FAILED_JOB_TABS.map(async ({ key }) => {
+          const response = await fetch(`/api/system/jobs?type=${key}&status=failed&limit=50`, {
+            method: "GET",
+            cache: "no-store",
+          });
+          if (response.status === 401) {
+            window.location.href = "/auth/login";
+            return;
+          }
+          const body = (await response.json().catch(() => ({}))) as unknown;
+          const parsed = body as Partial<SystemJobsResponse>;
+          if (!response.ok || !Array.isArray(parsed.jobs)) {
+            throw new Error(messageFromBody(body, "Unable to load failed jobs."));
+          }
+
+          next[key] = parsed.jobs
+            .filter((job): job is FailedJobRow => {
+              return Boolean(
+                job &&
+                  typeof job === "object" &&
+                  typeof job.id === "string" &&
+                  typeof job.org_id === "string",
+              );
+            })
+            .map((job) => ({
+              id: job.id,
+              org_id: job.org_id,
+              type: typeof job.type === "string" ? job.type : key,
+              status: typeof job.status === "string" ? job.status : "failed",
+              attempts: asNumber(job.attempts),
+              last_error: typeof job.last_error === "string" ? job.last_error : null,
+              updated_at: typeof job.updated_at === "string" ? job.updated_at : null,
+            }));
+        }),
+      );
+
+      setJobsByType(next);
+      setJobsError(null);
+    } catch (caughtError: unknown) {
+      if (caughtError instanceof Error && caughtError.message.trim()) {
+        setJobsError(caughtError.message);
+      } else {
+        setJobsError("Unable to load failed jobs right now.");
+      }
+    } finally {
+      setJobsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    void loadSystemStatus();
+    void Promise.all([loadSystemStatus(), loadFailedJobs()]);
   }, []);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      void loadSystemStatus();
+      void Promise.all([loadSystemStatus(), loadFailedJobs()]);
     }, 15000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!copiedJobId) return;
+    const timeout = window.setTimeout(() => setCopiedJobId(null), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [copiedJobId]);
 
   const workerStatusRow = useMemo(
     () => statusRows.find((row) => row.id === "worker") ?? null,
@@ -151,13 +247,23 @@ export default function DashboardSystemPage() {
     typeof workerPayload.tick_started_at === "string" ? workerPayload.tick_started_at : null;
   const tickFinishedAt =
     typeof workerPayload.tick_finished_at === "string" ? workerPayload.tick_finished_at : null;
+  const activeJobs = jobsByType[activeJobsTab];
+
+  const copyJobId = async (jobId: string) => {
+    try {
+      await navigator.clipboard.writeText(jobId);
+      setCopiedJobId(jobId);
+    } catch {
+      setCopiedJobId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <section>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">System</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          API and worker status, heartbeat freshness, and last processing tick metrics.
+          API and worker status, heartbeat freshness, and failed background jobs.
         </p>
       </section>
 
@@ -256,6 +362,83 @@ export default function DashboardSystemPage() {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/70">
+        <CardHeader>
+          <CardTitle>Failed Jobs</CardTitle>
+          <CardDescription>Recent dead-lettered or failed background jobs.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {FAILED_JOB_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveJobsTab(tab.key)}
+                className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+                  activeJobsTab === tab.key
+                    ? "border-blue-200 bg-blue-50 text-blue-700"
+                    : "border-gray-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {jobsLoading ? <p className="text-sm text-muted-foreground">Loading failed jobs...</p> : null}
+          {jobsError ? <p className="text-sm text-destructive">{jobsError}</p> : null}
+
+          {!jobsLoading && !jobsError ? (
+            activeJobs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No failed jobs.</p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-border/70">
+                <table className="min-w-[840px] w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">ID</th>
+                      <th className="px-3 py-2 font-medium">Org</th>
+                      <th className="px-3 py-2 font-medium">Attempts</th>
+                      <th className="px-3 py-2 font-medium">Updated</th>
+                      <th className="px-3 py-2 font-medium">Last Error</th>
+                      <th className="px-3 py-2 font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeJobs.map((job) => (
+                      <tr key={`${job.type}-${job.id}`} className="border-t border-gray-200 align-top">
+                        <td className="px-3 py-2 font-mono text-xs text-slate-800">{job.id}</td>
+                        <td className="px-3 py-2 text-slate-700">{job.org_id}</td>
+                        <td className="px-3 py-2 text-slate-700">{job.attempts}</td>
+                        <td className="px-3 py-2 text-slate-700">
+                          <p>{formatRelative(job.updated_at)}</p>
+                          <p className="text-xs text-muted-foreground">{formatUtc(job.updated_at)}</p>
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">
+                          <p className="max-w-[360px] truncate" title={job.last_error ?? "n/a"}>
+                            {job.last_error ?? "n/a"}
+                          </p>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" onClick={() => void copyJobId(job.id)}>
+                              Copy ID
+                            </Button>
+                            {copiedJobId === job.id ? (
+                              <span className="text-xs text-blue-700">Copied</span>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : null}
         </CardContent>
       </Card>
 
