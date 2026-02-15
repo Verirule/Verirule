@@ -36,6 +36,7 @@ type NavigationLink = {
   label: string;
   icon: ComponentType<{ className?: string }>;
   exact?: boolean;
+  aliases?: string[];
 };
 
 type NavigationSection = {
@@ -64,17 +65,23 @@ const navigationSections: NavigationSection[] = [
       { href: "/dashboard/tasks", label: "Tasks", icon: ListChecks },
       { href: "/dashboard/audit", label: "Audit", icon: ClipboardList },
       { href: "/dashboard/exports", label: "Exports", icon: FileOutput },
-      { href: "/dashboard/system", label: "System", icon: Activity },
     ],
   },
   {
-    title: "Admin",
+    title: "Settings",
     links: [
-      { href: "/dashboard/settings", label: "Settings", icon: Settings },
+      { href: "/dashboard/settings", label: "Settings Home", icon: Settings },
+      {
+        href: "/dashboard/settings/billing",
+        label: "Billing",
+        icon: CircleDollarSign,
+        aliases: ["/dashboard/billing"],
+      },
       { href: "/dashboard/settings/members", label: "Members", icon: Users },
-      { href: "/dashboard/billing", label: "Billing", icon: CircleDollarSign },
+      { href: "/dashboard/settings/notifications", label: "Notifications", icon: Bell },
       { href: "/dashboard/settings/automation", label: "Automation", icon: Zap },
       { href: "/dashboard/settings/integrations", label: "Integrations", icon: Workflow },
+      { href: "/dashboard/system", label: "System", icon: Activity },
     ],
   },
 ];
@@ -82,6 +89,9 @@ const navigationSections: NavigationSection[] = [
 function isActivePath(pathname: string, link: NavigationLink): boolean {
   if (link.exact) {
     return pathname === link.href;
+  }
+  if (Array.isArray(link.aliases) && link.aliases.some((alias) => pathname === alias || pathname.startsWith(`${alias}/`))) {
+    return true;
   }
   return pathname === link.href || pathname.startsWith(`${link.href}/`);
 }
@@ -229,10 +239,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               {mobileSidebarOpen ? <X /> : <Menu />}
             </Button>
             <Link href="/" className="flex items-center gap-3 font-semibold">
-              <span className="vr-brand-chip h-10 w-10 sm:h-11 sm:w-11">
+              <span className="vr-brand-chip h-12 w-12 sm:h-14 sm:w-14">
                 <LogoMark className="h-full w-full" />
               </span>
-              <span className="text-lg font-bold tracking-tight">Verirule</span>
+              <span className="text-xl font-bold tracking-tight">Verirule</span>
             </Link>
           </div>
           <div className="flex items-center gap-2">

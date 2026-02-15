@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { SocialIcons } from "@/src/components/SocialIcons";
@@ -25,13 +26,19 @@ const linkGroups = [
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-[#233656] bg-[#0a1424]">
+    <footer className="border-t border-[#2E7DB5] bg-[#082E4E]">
       <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_auto_auto] lg:px-8">
         <div className="space-y-4">
-          <Link href="/" className="inline-flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#86aefc]">
-            <img src="/logo.svg" alt="Verirule" className="h-8 w-auto" />
+          <Link href="/" className="inline-flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DEAD2D]">
+            <Image
+              src="/logo.svg"
+              alt="Verirule"
+              width={320}
+              height={84}
+              className="h-10 w-auto mix-blend-multiply"
+            />
           </Link>
-          <p className="max-w-sm text-sm text-[#b7c4dc]">
+          <p className="max-w-sm text-sm text-[#D4EAFF]">
             Compliance monitoring and workflow evidence for teams operating in regulated environments.
           </p>
           <SocialIcons />
@@ -45,7 +52,7 @@ export function SiteFooter() {
                 <li key={link.label}>
                   <Link
                     href={link.href}
-                    className="text-sm text-[#b7c4dc] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#86aefc]"
+                    className="text-sm text-[#D4EAFF] transition-colors hover:text-[#DEAD2D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DEAD2D]"
                   >
                     {link.label}
                   </Link>
@@ -55,7 +62,7 @@ export function SiteFooter() {
           </div>
         ))}
       </div>
-      <div className="border-t border-[#233656] px-4 py-4 text-center text-xs text-[#8fa4c8] sm:px-6 lg:px-8">
+      <div className="border-t border-[#2E7DB5] px-4 py-4 text-center text-xs text-[#A8D3F7] sm:px-6 lg:px-8">
         (c) Verirule. All rights reserved.
       </div>
     </footer>

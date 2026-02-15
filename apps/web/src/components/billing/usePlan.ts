@@ -33,12 +33,18 @@ function normalizeStatus(payload: unknown): BillingStatusResponse {
   const row = (payload ?? {}) as Partial<BillingStatusResponse>;
   const plan: BillingPlan =
     row.plan === "pro" || row.plan === "business" || row.plan === "free" ? row.plan : "free";
+  const legacyStatus = (payload as { status?: unknown } | null)?.status;
   const planStatus: BillingPlanStatus =
     row.plan_status === "past_due" ||
     row.plan_status === "canceled" ||
     row.plan_status === "trialing" ||
     row.plan_status === "active"
       ? row.plan_status
+      : legacyStatus === "past_due" ||
+          legacyStatus === "canceled" ||
+          legacyStatus === "trialing" ||
+          legacyStatus === "active"
+        ? legacyStatus
       : "active";
 
   const fallbackFeatures = getPlanFeatures(plan);
@@ -96,12 +102,17 @@ async function fetchPlanStatus(orgId: string, forceRefresh = false): Promise<Bil
   const pending = fetch(`/api/billing?org_id=${encodeURIComponent(orgId)}`, {
     method: "GET",
     cache: "no-store",
-  }).then(async (response) => {
-    if (!response.ok) {
-      throw new Error("Failed to load billing status");
-    }
-    return normalizeStatus(await response.json().catch(() => ({})));
-  });
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error("Failed to load billing status");
+      }
+      return normalizeStatus(await response.json().catch(() => ({})));
+    })
+    .catch((error: unknown) => {
+      statusPromiseCache.delete(orgId);
+      throw error;
+    });
 
   statusPromiseCache.set(orgId, pending);
   return pending;

@@ -380,7 +380,7 @@ export default function DashboardExportsPage() {
                 <div className="space-y-2 rounded-md border border-border/70 bg-muted/30 p-3">
                   <p className="text-sm text-muted-foreground">Exports are available on Pro and Business plans.</p>
                   <Button asChild size="sm">
-                    <Link href="/dashboard/billing">Upgrade plan</Link>
+                    <Link href="/dashboard/settings/billing">Upgrade plan</Link>
                   </Button>
                 </div>
               )}
@@ -392,7 +392,7 @@ export default function DashboardExportsPage() {
               <p className="text-sm text-destructive">{error}</p>
               {showUpgradeCta ? (
                 <Button asChild size="sm" variant="outline">
-                  <Link href="/dashboard/billing">Upgrade plan</Link>
+                  <Link href="/dashboard/settings/billing">Upgrade plan</Link>
                 </Button>
               ) : null}
             </div>

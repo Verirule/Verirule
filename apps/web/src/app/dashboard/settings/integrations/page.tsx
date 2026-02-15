@@ -390,7 +390,7 @@ export default function DashboardIntegrationsPage() {
           </CardHeader>
           <CardContent>
             <Button asChild size="sm">
-              <Link href="/dashboard/billing">Upgrade plan</Link>
+              <Link href="/dashboard/settings/billing">Upgrade plan</Link>
             </Button>
           </CardContent>
         </Card>

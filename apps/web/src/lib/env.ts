@@ -1,7 +1,6 @@
 import type { NextRequest } from "next/server";
 
 const CANONICAL_SITE_URL = "https://www.verirule.com";
-const CANONICAL_SITE_HOST = "www.verirule.com";
 const warnedSiteMessages = new Set<string>();
 
 function warnSiteConfig(message: string): void {
@@ -105,13 +104,8 @@ export function getSiteUrlConfig(): SiteUrlConfig {
     };
   }
 
-  if (parsed.protocol !== "https:") {
-    warnings.push("NEXT_PUBLIC_SITE_URL must use https; using canonical URL.");
-  }
-  if (parsed.host !== CANONICAL_SITE_HOST) {
-    warnings.push(
-      `NEXT_PUBLIC_SITE_URL host must be ${CANONICAL_SITE_HOST}; using canonical URL.`,
-    );
+  if (parsed.protocol !== "https:" && parsed.hostname !== "localhost") {
+    warnings.push("NEXT_PUBLIC_SITE_URL must use https (localhost allowed only for local dev); using canonical URL.");
   }
 
   if (warnings.length > 0) {
@@ -131,9 +125,40 @@ export function getSiteUrlConfig(): SiteUrlConfig {
   };
 }
 
-export function getSiteUrl(_req?: NextRequest) {
-  void _req;
+function getRequestOrigin(req?: NextRequest): string | null {
+  if (!req) {
+    return null;
+  }
+
+  const candidate = req.nextUrl.origin?.trim();
+  if (!candidate) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol === "https:" || parsed.hostname === "localhost") {
+      return parsed.origin;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export function getSiteUrl(req?: NextRequest) {
   const config = getSiteUrlConfig();
   config.warnings.forEach((warning) => warnSiteConfig(warning));
+  if (config.ok) {
+    return config.siteUrl;
+  }
+
+  const requestOrigin = getRequestOrigin(req);
+  if (requestOrigin) {
+    warnSiteConfig(`Using request origin fallback for site URL: ${requestOrigin}.`);
+    return requestOrigin;
+  }
+
   return config.siteUrl;
 }

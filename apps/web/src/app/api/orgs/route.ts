@@ -26,6 +26,7 @@ type ForwardedClientHeaders = {
 };
 
 const FAST_API_TIMEOUT_MS = 10_000;
+const RECOVERABLE_PROXY_ERROR_HEADER = "x-verirule-recoverable-proxy-error";
 
 function getApiBaseUrl(): string | null {
   const raw = process.env.VERIRULE_API_URL?.trim();
@@ -71,6 +72,16 @@ function isRlsOrMembershipError(error: PostgrestLikeError): boolean {
 
 function withRequestId(response: NextResponse, requestId: string): NextResponse {
   response.headers.set("X-Request-ID", requestId);
+  return response;
+}
+
+function markRecoverableProxyError(response: NextResponse): NextResponse {
+  response.headers.set(RECOVERABLE_PROXY_ERROR_HEADER, "1");
+  return response;
+}
+
+function markSupabaseFallback(response: NextResponse): NextResponse {
+  response.headers.set("X-Verirule-Orgs-Fallback", "supabase");
   return response;
 }
 
@@ -239,13 +250,24 @@ async function proxyFastApiOrgsRequest(
     if (!("request_id" in errorPayload)) {
       errorPayload.request_id = upstreamRequestId;
     }
-    return withRequestId(NextResponse.json(errorPayload, { status: upstream.status }), upstreamRequestId);
+    const response = withRequestId(
+      NextResponse.json(errorPayload, { status: upstream.status }),
+      upstreamRequestId,
+    );
+    if (upstream.status >= 500) {
+      return markRecoverableProxyError(response);
+    }
+    return response;
   } catch (error: unknown) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      return apiError(504, "Workspace request timed out", "upstream_timeout", requestId);
+      return markRecoverableProxyError(
+        apiError(504, "Workspace request timed out", "upstream_timeout", requestId),
+      );
     }
     logProxyFailure("api/orgs upstream failed", error, requestId);
-    return apiError(502, "Workspace service unavailable", "upstream_error", requestId);
+    return markRecoverableProxyError(
+      apiError(502, "Workspace service unavailable", "upstream_error", requestId),
+    );
   }
 }
 
@@ -328,7 +350,12 @@ export async function GET(request: NextRequest) {
 
   const fastApiResponse = await proxyFastApiOrgsRequest("GET", context.accessToken, requestId, clientHeaders);
   if (fastApiResponse) {
-    return fastApiResponse;
+    const recoverableProxyError =
+      fastApiResponse.headers.get(RECOVERABLE_PROXY_ERROR_HEADER) === "1";
+    if (!recoverableProxyError) {
+      return fastApiResponse;
+    }
+    return markSupabaseFallback(await listOrgsFromSupabase(context.supabase, requestId));
   }
 
   return listOrgsFromSupabase(context.supabase, requestId);
@@ -362,7 +389,12 @@ export async function POST(request: NextRequest) {
     { name: name.trim() },
   );
   if (fastApiResponse) {
-    return fastApiResponse;
+    const recoverableProxyError =
+      fastApiResponse.headers.get(RECOVERABLE_PROXY_ERROR_HEADER) === "1";
+    if (!recoverableProxyError) {
+      return fastApiResponse;
+    }
+    return markSupabaseFallback(await createOrgInSupabase(context.supabase, name, requestId));
   }
 
   return createOrgInSupabase(context.supabase, name, requestId);

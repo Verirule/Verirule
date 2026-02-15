@@ -4,30 +4,30 @@
 
 @layer base {
   :root {
-    --vr-bg: 241 249 244;
-    --vr-fg: 19 54 38;
+    --vr-bg: 238 247 255;
+    --vr-fg: 16 62 95;
     --vr-card: 255 255 255;
-    --vr-user-accent: #0b7a3f;
+    --vr-user-accent: #0465A8;
     --vr-user-accent-foreground: #FFFFFF;
-    --background: 140 39% 97%;
-    --foreground: 145 50% 17%;
+    --background: 203 100% 98%;
+    --foreground: 208 76% 22%;
     --card: 0 0% 100%;
-    --card-foreground: 145 50% 17%;
+    --card-foreground: 208 76% 22%;
     --popover: 0 0% 100%;
-    --popover-foreground: 145 50% 17%;
-    --primary: 142 70% 34%;
+    --popover-foreground: 208 76% 22%;
+    --primary: 204 94% 34%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 142 44% 94%;
-    --secondary-foreground: 145 50% 17%;
-    --muted: 135 43% 95%;
-    --muted-foreground: 149 23% 35%;
-    --accent: 140 38% 93%;
-    --accent-foreground: 145 50% 17%;
+    --secondary: 107 52% 92%;
+    --secondary-foreground: 208 76% 22%;
+    --muted: 205 52% 94%;
+    --muted-foreground: 205 30% 38%;
+    --accent: 46 89% 88%;
+    --accent-foreground: 208 76% 22%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 142 29% 74%;
-    --input: 142 29% 74%;
-    --ring: 142 70% 34%;
+    --border: 204 37% 76%;
+    --input: 204 37% 76%;
+    --ring: 204 94% 34%;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -36,30 +36,30 @@
     --radius: 0.65rem;
   }
   .dark {
-    --vr-bg: 15 38 29;
-    --vr-fg: 237 249 241;
-    --vr-card: 24 56 42;
-    --vr-user-accent: #8ad7a9;
-    --vr-user-accent-foreground: #0d3a23;
-    --background: 148 42% 13%;
+    --vr-bg: 7 34 60;
+    --vr-fg: 228 246 255;
+    --vr-card: 10 47 80;
+    --vr-user-accent: #4BAD2E;
+    --vr-user-accent-foreground: #07243f;
+    --background: 210 76% 16%;
     --foreground: 0 0% 98%;
-    --card: 149 38% 20%;
+    --card: 207 73% 22%;
     --card-foreground: 0 0% 98%;
-    --popover: 149 38% 20%;
+    --popover: 207 73% 22%;
     --popover-foreground: 0 0% 98%;
-    --primary: 143 62% 73%;
-    --primary-foreground: 149 42% 13%;
-    --secondary: 149 24% 30%;
+    --primary: 105 55% 52%;
+    --primary-foreground: 209 78% 14%;
+    --secondary: 206 57% 32%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 149 24% 28%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 149 24% 28%;
-    --accent-foreground: 0 0% 98%;
+    --muted: 206 56% 28%;
+    --muted-foreground: 205 24% 72%;
+    --accent: 45 70% 44%;
+    --accent-foreground: 210 66% 14%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 150 24% 35%;
-    --input: 150 24% 35%;
-    --ring: 143 62% 73%;
+    --border: 207 47% 35%;
+    --input: 207 47% 35%;
+    --ring: 105 55% 52%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -82,15 +82,17 @@
     background-color: rgb(var(--vr-bg));
     color: rgb(var(--vr-fg));
     background-image:
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.65), rgba(241, 249, 244, 0.92)),
-      repeating-linear-gradient(0deg, rgba(21, 78, 51, 0.05) 0 1px, transparent 1px 30px),
-      repeating-linear-gradient(90deg, rgba(21, 78, 51, 0.04) 0 1px, transparent 1px 30px);
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.72), rgba(233, 245, 255, 0.92)),
+      radial-gradient(circle at 12% 14%, rgba(4, 101, 168, 0.2), transparent 34%),
+      radial-gradient(circle at 85% 12%, rgba(75, 173, 46, 0.16), transparent 37%),
+      radial-gradient(circle at 60% 85%, rgba(222, 173, 45, 0.2), transparent 34%);
   }
   .dark body {
     background-image:
-      linear-gradient(to bottom, rgba(8, 26, 18, 0.68), rgba(15, 38, 29, 0.96)),
-      repeating-linear-gradient(0deg, rgba(180, 223, 198, 0.08) 0 1px, transparent 1px 30px),
-      repeating-linear-gradient(90deg, rgba(180, 223, 198, 0.07) 0 1px, transparent 1px 30px);
+      linear-gradient(to bottom, rgba(6, 26, 48, 0.72), rgba(7, 34, 60, 0.98)),
+      radial-gradient(circle at 12% 14%, rgba(4, 101, 168, 0.22), transparent 38%),
+      radial-gradient(circle at 80% 16%, rgba(75, 173, 46, 0.2), transparent 42%),
+      radial-gradient(circle at 60% 85%, rgba(222, 173, 45, 0.2), transparent 38%);
   }
   h1,
   h2,
@@ -114,14 +116,15 @@
 
   .vr-surface {
     background-color: rgb(var(--vr-card));
-    box-shadow: 0 2px 0 rgba(20, 78, 51, 0.14);
+    box-shadow: 0 2px 0 rgba(4, 101, 168, 0.14);
   }
   .dark .vr-surface {
-    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.34);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
   }
 
   .vr-brand-chip {
-    @apply inline-flex items-center justify-center rounded-lg border border-border bg-background p-1;
-    box-shadow: 0 2px 0 rgba(20, 78, 51, 0.16);
+    @apply inline-flex items-center justify-center p-0;
+    background: transparent;
+    box-shadow: none;
   }
 }

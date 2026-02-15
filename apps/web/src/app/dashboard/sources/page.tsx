@@ -643,7 +643,7 @@ export default function DashboardSourcesPage() {
                 <p className="text-sm text-destructive">{error}</p>
                 {showUpgradeCta ? (
                   <Button asChild size="sm" variant="outline">
-                    <Link href="/dashboard/billing">Upgrade plan</Link>
+                    <Link href="/dashboard/settings/billing">Upgrade plan</Link>
                   </Button>
                 ) : null}
               </div>
