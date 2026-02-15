@@ -64,6 +64,9 @@ export type PlanFeatures = {
   maxMembers: number | null;
 };
 
+const DEFAULT_PRO_DISPLAY_PRICE = "£19";
+const DEFAULT_BUSINESS_DISPLAY_PRICE = "£49";
+
 function readDisplayPrice(raw: string | undefined): string | null {
   const value = raw?.trim();
   return value ? value : null;
@@ -75,10 +78,10 @@ export function getPlanDisplayPrice(plan: BillingPlan): string | null {
   }
 
   if (plan === "pro") {
-    return readDisplayPrice(process.env.NEXT_PUBLIC_PRICE_PRO_DISPLAY);
+    return readDisplayPrice(process.env.NEXT_PUBLIC_PRICE_PRO_DISPLAY) ?? DEFAULT_PRO_DISPLAY_PRICE;
   }
 
-  return readDisplayPrice(process.env.NEXT_PUBLIC_PRICE_BUSINESS_DISPLAY);
+  return readDisplayPrice(process.env.NEXT_PUBLIC_PRICE_BUSINESS_DISPLAY) ?? DEFAULT_BUSINESS_DISPLAY_PRICE;
 }
 
 function formatLimit(value: number | null): string {
