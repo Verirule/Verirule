@@ -1,16 +1,14 @@
 "use client";
 
-import { LogoMark } from "@/src/components/brand/LogoMark";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 
 const sectionLinks = [
-  { href: "#problem", label: "Problem" },
-  { href: "#components", label: "System Components" },
-  { href: "#audit-ready", label: "Audit-Ready" },
-  { href: "#integrations", label: "Integrations" },
-  { href: "#who-its-for", label: "Who It's For" },
+  { href: "#results", label: "Outcomes" },
+  { href: "#components", label: "Workflow" },
+  { href: "#launch", label: "Get Started" },
 ];
 
 export function Nav() {
@@ -20,10 +18,14 @@ export function Nav() {
     <nav className="sticky top-0 z-50 border-b-2 border-[#9BC7AE] bg-white">
       <div className="mx-auto flex h-20 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-3 font-semibold tracking-tight">
-          <span className="vr-brand-chip h-12 w-12 sm:h-14 sm:w-14">
-            <LogoMark className="h-full w-full" />
-          </span>
-          <span className="text-xl font-bold text-[#0B3A27] sm:text-2xl">Verirule</span>
+          <Image
+            src="/brand/logo.svg"
+            alt="Verirule logo"
+            width={164}
+            height={52}
+            className="h-9 w-auto object-contain sm:h-10"
+            priority
+          />
         </Link>
 
         <div className="hidden items-center gap-6 text-sm md:flex">

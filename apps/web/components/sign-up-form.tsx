@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OAuthButtons, getEnabledOAuthProviders } from "@/src/components/auth/OAuthButtons";
 import { LogoMark } from "@/src/components/brand/LogoMark";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -128,14 +129,23 @@ export function SignUpForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card className="border-blue-200 bg-white text-blue-950">
+      <Card className="border-[#b9dcc8] bg-white text-[#0f3f2b] shadow-[0_16px_40px_rgba(15,61,42,0.12)]">
         <CardHeader>
-          <Link href="/" className="inline-flex w-fit items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006F34]">
+          <Link
+            href="/"
+            className="inline-flex w-fit items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b7a3f]"
+          >
             <LogoMark className="h-6 w-6" />
-            <span className="text-sm font-semibold tracking-wide text-[#0B3A27]">Verirule</span>
+            <Image
+              src="/brand/logo.svg"
+              alt="Verirule logo"
+              width={112}
+              height={30}
+              className="h-6 w-auto object-contain"
+            />
           </Link>
           <CardTitle className="text-2xl">Create account</CardTitle>
-          <CardDescription className="text-blue-800/80">
+          <CardDescription className="text-[#1d5a3d]/80">
             Register a workspace account for your compliance team.
           </CardDescription>
         </CardHeader>
@@ -143,10 +153,10 @@ export function SignUpForm({
           {hasOAuthProviders ? (
             <>
               <OAuthButtons mode="signup" />
-              <div className="my-4 flex items-center gap-2 text-xs text-blue-700/80">
-                <span className="h-px flex-1 bg-blue-200" />
+              <div className="my-4 flex items-center gap-2 text-xs text-[#1d5a3d]/80">
+                <span className="h-px flex-1 bg-[#d7ecdf]" />
                 <span>or</span>
-                <span className="h-px flex-1 bg-blue-200" />
+                <span className="h-px flex-1 bg-[#d7ecdf]" />
               </div>
             </>
           ) : null}
@@ -165,7 +175,7 @@ export function SignUpForm({
                   onChange={(e) => setEmail(e.target.value)}
                   aria-invalid={Boolean(emailError)}
                   className={cn(
-                    "border-blue-200 bg-white text-blue-950 placeholder:text-blue-400",
+                    "border-[#cde6d8] bg-white text-[#0f3f2b] placeholder:text-[#73a58a]",
                     emailError ? "border-red-500 focus-visible:ring-red-500" : undefined,
                   )}
                 />
@@ -185,14 +195,14 @@ export function SignUpForm({
                   onChange={(e) => setPassword(e.target.value)}
                   aria-invalid={Boolean(passwordError)}
                   className={cn(
-                    "border-blue-200 bg-white text-blue-950 placeholder:text-blue-400",
+                    "border-[#cde6d8] bg-white text-[#0f3f2b] placeholder:text-[#73a58a]",
                     passwordError ? "border-red-500 focus-visible:ring-red-500" : undefined,
                   )}
                 />
                 {passwordError ? (
                   <p className="text-xs text-red-500">{passwordError}</p>
                 ) : (
-                  <p className="text-xs text-blue-700/80">Use at least 8 characters.</p>
+                  <p className="text-xs text-[#1d5a3d]/80">Use at least 8 characters.</p>
                 )}
               </div>
 
@@ -208,7 +218,7 @@ export function SignUpForm({
                   onChange={(e) => setRepeatPassword(e.target.value)}
                   aria-invalid={Boolean(repeatPasswordError)}
                   className={cn(
-                    "border-blue-200 bg-white text-blue-950 placeholder:text-blue-400",
+                    "border-[#cde6d8] bg-white text-[#0f3f2b] placeholder:text-[#73a58a]",
                     repeatPasswordError ? "border-red-500 focus-visible:ring-red-500" : undefined,
                   )}
                 />
@@ -227,7 +237,7 @@ export function SignUpForm({
               {message ? (
                 <div
                   aria-live="polite"
-                  className="rounded-md border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-200"
+                  className="rounded-md border border-[#9fd4b5] bg-[#ecf8f2] px-3 py-2 text-sm text-[#145836]"
                 >
                   {message}
                 </div>
@@ -235,7 +245,7 @@ export function SignUpForm({
 
               <Button
                 type="submit"
-                className="relative z-20 w-full bg-blue-700 text-white hover:bg-blue-800 pointer-events-auto"
+                className="relative z-20 w-full bg-[#0b7a3f] text-white hover:bg-[#086332] pointer-events-auto"
                 disabled={submitDisabled}
               >
                 {loading ? "Creating account..." : "Create account"}
@@ -255,7 +265,7 @@ export function SignUpForm({
             </div>
             <div className="mt-4 text-center text-sm">
               Already have an account?{" "}
-              <Link href="/auth/login" className="text-blue-700 underline underline-offset-4 hover:text-blue-900">
+              <Link href="/auth/login" className="text-[#0b7a3f] underline underline-offset-4 hover:text-[#07592e]">
                 Sign in
               </Link>
             </div>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 import { LogoMark } from "@/src/components/brand/LogoMark";
 import { SocialIcons } from "@/src/components/SocialIcons";
@@ -12,7 +13,13 @@ export function Footer() {
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-[#2C7B56] bg-[#145636] p-1.5">
               <LogoMark className="h-full w-full" />
             </span>
-            <span className="text-2xl font-bold text-white">Verirule</span>
+            <Image
+              src="/brand/logo.svg"
+              alt="Verirule logo"
+              width={180}
+              height={56}
+              className="h-8 w-auto object-contain"
+            />
           </div>
           <p className="max-w-md text-sm text-[#D4F0E0]/85">
             Regulatory monitoring and evidence workflows for teams operating in audited environments.

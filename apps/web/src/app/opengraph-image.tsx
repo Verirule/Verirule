@@ -1,3 +1,8 @@
+﻿/* eslint-disable @next/next/no-img-element */
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { ImageResponse } from "next/og";
 
 export const contentType = "image/png";
@@ -6,6 +11,11 @@ export const size = {
   height: 630,
 };
 export const alt = "Verirule";
+
+const logoSvg = readFileSync(join(process.cwd(), "public", "brand", "logo.svg"), "utf8");
+const iconSvg = readFileSync(join(process.cwd(), "public", "brand", "icon.svg"), "utf8");
+const logoDataUrl = `data:image/svg+xml;base64,${Buffer.from(logoSvg).toString("base64")}`;
+const iconDataUrl = `data:image/svg+xml;base64,${Buffer.from(iconSvg).toString("base64")}`;
 
 export default function OpenGraphImage() {
   return new ImageResponse(
@@ -17,31 +27,32 @@ export default function OpenGraphImage() {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "64px 80px",
-          backgroundColor: "#F1F9F4",
-          backgroundImage:
-            "repeating-linear-gradient(0deg, rgba(18,83,52,0.08) 0 1px, transparent 1px 30px), repeating-linear-gradient(90deg, rgba(18,83,52,0.08) 0 1px, transparent 1px 30px)",
-          color: "#113D2A",
+          padding: "56px 72px",
+          background: "linear-gradient(140deg, #edf8f2 0%, #ffffff 52%, #dff4e9 100%)",
+          color: "#0f3d2a",
           fontFamily: "Arial, sans-serif",
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 650 }}>
-          <div
-            style={{
-              fontSize: 24,
-              letterSpacing: 6,
-              fontWeight: 700,
-              textTransform: "uppercase",
-              color: "#0B7A3F",
-            }}
-          >
-            Verirule
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 680 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <img src={iconDataUrl} alt="Verirule icon" width={74} height={74} />
+            <div
+              style={{
+                fontSize: 22,
+                letterSpacing: 4,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                color: "#0c7a3f",
+              }}
+            >
+              Verirule
+            </div>
           </div>
-          <div style={{ fontSize: 68, lineHeight: 1.05, fontWeight: 800 }}>
-            Regulatory workflows with audit-ready evidence
+          <div style={{ fontSize: 62, lineHeight: 1.04, fontWeight: 800 }}>
+            Regulatory operations with clear, audit-ready evidence.
           </div>
-          <div style={{ fontSize: 32, color: "#245A41" }}>
-            Unified monitoring, tasks, and controls.
+          <div style={{ fontSize: 30, color: "#1a5a3e" }}>
+            Monitor updates. Route action. Preserve traceability.
           </div>
         </div>
 
@@ -49,33 +60,17 @@ export default function OpenGraphImage() {
           style={{
             width: 360,
             height: 360,
-            borderRadius: 48,
-            border: "6px solid #B7D8C4",
-            backgroundColor: "#FFFFFF",
+            borderRadius: 44,
+            border: "5px solid #afd7be",
+            backgroundColor: "#ffffff",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            boxShadow: "0 14px 40px rgba(15, 61, 42, 0.18)",
             flexShrink: 0,
           }}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" style={{ width: 280, height: 280 }} fill="none">
-            <rect x="8" y="8" width="240" height="240" rx="56" fill="#E8F7EE" />
-            <defs>
-              <clipPath id="vrShieldClipOG2">
-                <path d="M128 28C151 44 177 51 208 58V124C208 171 179 210 128 230C77 210 48 171 48 124V58C79 51 105 44 128 28Z" />
-              </clipPath>
-            </defs>
-            <g clipPath="url(#vrShieldClipOG2)">
-              <rect x="0" y="0" width="128" height="256" fill="#0B7A3F" />
-              <rect x="128" y="0" width="128" height="256" fill="#16A34A" />
-            </g>
-            <path
-              d="M128 28C151 44 177 51 208 58V124C208 171 179 210 128 230C77 210 48 171 48 124V58C79 51 105 44 128 28Z"
-              stroke="#0F5132"
-              strokeWidth="8"
-            />
-            <path d="M84 139L113 110L137 133L192 78" stroke="#FFFFFF" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <img src={logoDataUrl} alt="Verirule logo" width={280} height={280} />
         </div>
       </div>
     ),

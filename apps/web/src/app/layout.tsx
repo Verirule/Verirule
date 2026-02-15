@@ -10,13 +10,30 @@ const metadataBase = new URL(siteUrl);
 
 export const metadata: Metadata = {
   metadataBase,
-  title: "Verirule",
-  description: "Regulatory monitoring and audit evidence workflow platform",
+  title: {
+    default: "Verirule",
+    template: "%s | Verirule",
+  },
+  description: "Audit-ready regulatory monitoring, workflows, and evidence operations.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [{ url: "/brand/icon.svg", type: "image/svg+xml" }],
     shortcut: "/brand/icon.svg",
     apple: [{ url: "/brand/icon.svg", type: "image/svg+xml" }],
+  },
+  openGraph: {
+    type: "website",
+    title: "Verirule",
+    description: "Audit-ready regulatory monitoring, workflows, and evidence operations.",
+    url: siteUrl,
+    siteName: "Verirule",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Verirule logo" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Verirule",
+    description: "Audit-ready regulatory monitoring, workflows, and evidence operations.",
+    images: ["/twitter-image"],
   },
 };
 

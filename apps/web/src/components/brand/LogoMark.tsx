@@ -8,7 +8,7 @@ type LogoMarkProps = {
 export function LogoMark({ className }: LogoMarkProps) {
   return (
     <Image
-      src="/brand/logo.svg"
+      src="/brand/icon.svg"
       alt="Verirule"
       width={256}
       height={256}

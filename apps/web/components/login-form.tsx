@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OAuthButtons, getEnabledOAuthProviders } from "@/src/components/auth/OAuthButtons";
 import { LogoMark } from "@/src/components/brand/LogoMark";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -68,14 +69,23 @@ export function LoginForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card className="border-blue-200 bg-white text-blue-950">
+      <Card className="border-[#b9dcc8] bg-white text-[#0f3f2b] shadow-[0_16px_40px_rgba(15,61,42,0.12)]">
         <CardHeader>
-          <Link href="/" className="inline-flex w-fit items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006F34]">
+          <Link
+            href="/"
+            className="inline-flex w-fit items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b7a3f]"
+          >
             <LogoMark className="h-6 w-6" />
-            <span className="text-sm font-semibold tracking-wide text-[#0B3A27]">Verirule</span>
+            <Image
+              src="/brand/logo.svg"
+              alt="Verirule logo"
+              width={112}
+              height={30}
+              className="h-6 w-auto object-contain"
+            />
           </Link>
           <CardTitle className="text-2xl">Sign in</CardTitle>
-          <CardDescription className="text-blue-800/80">
+          <CardDescription className="text-[#1d5a3d]/80">
             Access your workspace with your registered credentials.
           </CardDescription>
         </CardHeader>
@@ -83,10 +93,10 @@ export function LoginForm({
           {hasOAuthProviders ? (
             <>
               <OAuthButtons mode="login" />
-              <div className="my-4 flex items-center gap-2 text-xs text-blue-700/80">
-                <span className="h-px flex-1 bg-blue-200" />
+              <div className="my-4 flex items-center gap-2 text-xs text-[#1d5a3d]/80">
+                <span className="h-px flex-1 bg-[#d7ecdf]" />
                 <span>or</span>
-                <span className="h-px flex-1 bg-blue-200" />
+                <span className="h-px flex-1 bg-[#d7ecdf]" />
               </div>
             </>
           ) : null}
@@ -105,7 +115,7 @@ export function LoginForm({
                   onChange={(e) => setEmail(e.target.value)}
                   aria-invalid={Boolean(emailError)}
                   className={cn(
-                    "border-blue-200 bg-white text-blue-950 placeholder:text-blue-400",
+                    "border-[#cde6d8] bg-white text-[#0f3f2b] placeholder:text-[#73a58a]",
                     emailError ? "border-red-500 focus-visible:ring-red-500" : undefined,
                   )}
                 />
@@ -117,7 +127,7 @@ export function LoginForm({
                   <Label htmlFor="password">Password</Label>
                   <Link
                     href="/auth/forgot-password"
-                    className="ml-auto inline-block text-sm text-blue-700 underline-offset-4 hover:text-blue-900 hover:underline"
+                    className="ml-auto inline-block text-sm text-[#0b7a3f] underline-offset-4 hover:text-[#07592e] hover:underline"
                   >
                     Forgot your password?
                   </Link>
@@ -132,7 +142,7 @@ export function LoginForm({
                   onChange={(e) => setPassword(e.target.value)}
                   aria-invalid={Boolean(passwordError)}
                   className={cn(
-                    "border-blue-200 bg-white text-blue-950 placeholder:text-blue-400",
+                    "border-[#cde6d8] bg-white text-[#0f3f2b] placeholder:text-[#73a58a]",
                     passwordError ? "border-red-500 focus-visible:ring-red-500" : undefined,
                   )}
                 />
@@ -147,7 +157,7 @@ export function LoginForm({
 
               <Button
                 type="submit"
-                className="relative z-20 w-full bg-blue-700 text-white hover:bg-blue-800 pointer-events-auto"
+                className="relative z-20 w-full bg-[#0b7a3f] text-white hover:bg-[#086332] pointer-events-auto"
                 disabled={submitDisabled}
               >
                 {loading ? "Signing in..." : "Sign in"}
@@ -155,7 +165,7 @@ export function LoginForm({
             </div>
             <div className="mt-4 text-center text-sm">
               Don&apos;t have an account?{" "}
-              <Link href="/auth/sign-up" className="text-blue-700 underline underline-offset-4 hover:text-blue-900">
+              <Link href="/auth/sign-up" className="text-[#0b7a3f] underline underline-offset-4 hover:text-[#07592e]">
                 Sign up
               </Link>
             </div>

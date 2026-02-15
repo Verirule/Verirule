@@ -13,6 +13,7 @@ import {
   FileOutput,
   FlaskConical,
   Gauge,
+  Inbox,
   LayoutTemplate,
   LayoutDashboard,
   ListChecks,
@@ -27,8 +28,8 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { type ComponentType, type ReactNode, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { type ComponentType, type ReactNode, useEffect, useState } from "react";
 
 type NavigationLink = {
   href: string;
@@ -59,6 +60,7 @@ const navigationSections: NavigationSection[] = [
       { href: "/dashboard/controls", label: "Controls", icon: ShieldCheck },
       { href: "/dashboard/readiness", label: "Readiness", icon: Gauge },
       { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
+      { href: "/dashboard/inbox", label: "Inbox", icon: Inbox },
       { href: "/dashboard/tasks", label: "Tasks", icon: ListChecks },
       { href: "/dashboard/audit", label: "Audit", icon: ClipboardList },
       { href: "/dashboard/exports", label: "Exports", icon: FileOutput },
@@ -86,6 +88,80 @@ function isActivePath(pathname: string, link: NavigationLink): boolean {
 
 function SidebarLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedOrgId = searchParams.get("org_id")?.trim() ?? "";
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadUnreadCount = async () => {
+      try {
+        const orgsResponse = await fetch("/api/orgs", { method: "GET", cache: "no-store" });
+        if (!orgsResponse.ok) {
+          if (!cancelled) {
+            setUnreadCount(0);
+          }
+          return;
+        }
+        const orgBody = (await orgsResponse.json().catch(() => ({}))) as { orgs?: unknown };
+        const orgRows = Array.isArray(orgBody.orgs)
+          ? orgBody.orgs.filter((row): row is { id: string } => {
+              if (!row || typeof row !== "object") {
+                return false;
+              }
+              const org = row as Record<string, unknown>;
+              return typeof org.id === "string";
+            })
+          : [];
+        if (!orgRows.length) {
+          if (!cancelled) {
+            setUnreadCount(0);
+          }
+          return;
+        }
+
+        const selectedOrgId = orgRows.some((org) => org.id === requestedOrgId)
+          ? requestedOrgId
+          : orgRows[0].id;
+        const inboxResponse = await fetch(
+          `/api/orgs/${encodeURIComponent(selectedOrgId)}/notifications/inbox?limit=50`,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+        );
+        if (!inboxResponse.ok) {
+          if (!cancelled) {
+            setUnreadCount(0);
+          }
+          return;
+        }
+        const inboxBody = (await inboxResponse.json().catch(() => ({}))) as { events?: unknown };
+        const events = Array.isArray(inboxBody.events)
+          ? inboxBody.events.filter((row): row is { is_read?: unknown } => row !== null && typeof row === "object")
+          : [];
+        const unread = events.filter((event) => event.is_read !== true).length;
+        if (!cancelled) {
+          setUnreadCount(unread);
+        }
+      } catch {
+        if (!cancelled) {
+          setUnreadCount(0);
+        }
+      }
+    };
+
+    void loadUnreadCount();
+    const intervalId = setInterval(() => {
+      void loadUnreadCount();
+    }, 45_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [pathname, requestedOrgId]);
 
   return (
     <nav className="mt-6 space-y-5">
@@ -119,6 +195,11 @@ function SidebarLinks({ onNavigate }: { onNavigate?: () => void }) {
                 >
                   <Icon className="h-4 w-4" />
                   <span>{link.label}</span>
+                  {link.href === "/dashboard/inbox" && unreadCount > 0 ? (
+                    <span className="ml-auto rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                      {Math.min(unreadCount, 99)}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}
