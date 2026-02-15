@@ -25,11 +25,11 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
         type="button"
         className={
           className ??
-          "inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-foreground"
+          "inline-flex h-9 items-center rounded-md border border-border px-3 text-xs font-medium text-muted-foreground"
         }
         aria-hidden
       >
-        <Moon className="h-4 w-4" aria-hidden />
+        Theme
       </button>
     );
   }
@@ -40,12 +40,13 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
       onClick={() => setTheme(nextTheme)}
       className={
         className ??
-        "inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-accent"
+        "inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent"
       }
-      aria-label="Toggle theme"
+      aria-label={`Switch to ${nextTheme} theme`}
+      title={`Switch to ${nextTheme} theme`}
     >
       {isDark ? <Sun className="h-3.5 w-3.5" aria-hidden /> : <Moon className="h-3.5 w-3.5" aria-hidden />}
-      <span className="sr-only">{nextTheme}</span>
+      <span>{isDark ? "Light" : "Dark"}</span>
     </button>
   );
 }
