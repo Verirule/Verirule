@@ -33,6 +33,33 @@
     --radius: 0.5rem;
   }
 
+  .dark {
+    --background: 222.2 47.4% 7.5%;
+    --foreground: 210 40% 96%;
+    --card: 222.2 47.4% 9%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222.2 47.4% 9%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 72%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 96%;
+    --destructive: 0 62.8% 40%;
+    --destructive-foreground: 210 40% 96%;
+    --border: 217.2 32.6% 22%;
+    --input: 217.2 32.6% 22%;
+    --ring: 217.2 91.2% 59.8%;
+    --chart-1: 217.2 91.2% 59.8%;
+    --chart-2: 199.4 89.3% 48.4%;
+    --chart-3: 173.4 58.4% 39.2%;
+    --chart-4: 262.1 83.3% 57.8%;
+    --chart-5: 47.9 95.8% 53.1%;
+  }
+
   html {
     scroll-behavior: smooth;
   }
@@ -42,7 +69,7 @@
   }
 
   body {
-    @apply bg-white text-slate-900 antialiased;
+    @apply bg-background text-foreground antialiased;
     font-family:
       "Segoe UI",
       -apple-system,
@@ -54,44 +81,44 @@
   }
 
   a {
-    @apply text-blue-700;
+    @apply text-blue-700 dark:text-blue-400;
   }
 
   a:hover {
-    @apply text-blue-800;
+    @apply text-blue-800 dark:text-blue-300;
   }
 
   :focus-visible {
-    @apply outline-none ring-2 ring-blue-500 ring-offset-2 ring-offset-white;
+    @apply outline-none ring-2 ring-blue-500 ring-offset-2 ring-offset-background;
   }
 
   table {
-    @apply w-full border-collapse overflow-hidden rounded-lg border border-gray-200 bg-white;
+    @apply w-full border-collapse overflow-hidden rounded-lg border border-border bg-card;
   }
 
   thead {
-    @apply bg-slate-50;
+    @apply bg-muted;
   }
 
   th {
-    @apply border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-700;
+    @apply border-b border-border px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground;
   }
 
   td {
-    @apply border-b border-gray-100 px-4 py-3 text-sm text-slate-700;
+    @apply border-b border-border px-4 py-3 text-sm text-foreground;
   }
 }
 
 @layer components {
   .vr-page {
-    @apply bg-white text-slate-900;
+    @apply bg-background text-foreground;
   }
 
   .vr-surface {
-    @apply bg-white shadow-sm;
+    @apply bg-card shadow-sm;
   }
 
   .vr-brand-chip {
-    @apply inline-flex items-center justify-center rounded-md border border-gray-200 bg-slate-50 p-2;
+    @apply inline-flex items-center justify-center rounded-md border border-border bg-muted p-2;
   }
 }

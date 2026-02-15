@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/env";
+import { ThemeProvider } from "@/src/components/theme/ThemeProvider";
+import { ThemeToggle } from "@/src/components/theme/ThemeToggle";
 import "./globals.css";
 
 const siteUrl = getSiteUrl().replace(/\/$/, "");
@@ -63,15 +65,18 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
-        />
-        {children}
+        <ThemeProvider>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+          />
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+          />
+          {children}
+          <ThemeToggle className="fixed bottom-4 right-4 z-[60] inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-card-foreground shadow-md" />
+        </ThemeProvider>
       </body>
     </html>
   );

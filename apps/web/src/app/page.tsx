@@ -140,7 +140,7 @@ export default function Home() {
                       <span className="ml-1 text-sm font-medium text-slate-500">/mo</span>
                     </p>
                   ) : (
-                    <p className="mt-3 text-2xl font-semibold text-slate-900">{plan.name}</p>
+                    <p className="mt-3 text-sm font-medium text-slate-600">Price shown at checkout</p>
                   )}
                   <ul className="mt-3 space-y-1 text-sm text-slate-600">
                     {getPlanIncludedItems(plan.plan).map((item) => (
