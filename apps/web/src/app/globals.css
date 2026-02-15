@@ -77,7 +77,7 @@
   }
   body {
     @apply text-foreground;
-    font-family: var(--font-body), "Segoe UI", sans-serif;
+    font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     font-feature-settings: "cv03", "cv04", "ss01", "ss03";
     background-color: rgb(var(--vr-bg));
     color: rgb(var(--vr-fg));
@@ -96,7 +96,7 @@
   h2,
   h3,
   h4 {
-    font-family: var(--font-display), var(--font-body), sans-serif;
+    font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     letter-spacing: -0.02em;
     text-wrap: balance;
   }

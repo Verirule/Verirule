@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Manrope, Space_Grotesk } from "next/font/google";
 import { AccentThemeManager } from "@/src/components/theme/AccentThemeManager";
 import { ThemeProvider } from "@/src/components/theme/ThemeProvider";
 import { getSiteUrl } from "@/lib/env";
@@ -10,21 +9,24 @@ const metadataBase = new URL(siteUrl);
 
 export const metadata: Metadata = {
   metadataBase,
+  alternates: {
+    canonical: "/",
+  },
   title: {
     default: "Verirule",
     template: "%s | Verirule",
   },
-  description: "Audit-ready regulatory monitoring, workflows, and evidence operations.",
+  description: "Enterprise compliance monitoring, workflow management, and audit-ready evidence tracking.",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/brand/icon.svg", type: "image/svg+xml" }],
-    shortcut: "/brand/icon.svg",
-    apple: [{ url: "/brand/icon.svg", type: "image/svg+xml" }],
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    shortcut: "/icon.svg",
+    apple: [{ url: "/icon.svg", type: "image/svg+xml" }],
   },
   openGraph: {
     type: "website",
     title: "Verirule",
-    description: "Audit-ready regulatory monitoring, workflows, and evidence operations.",
+    description: "Enterprise compliance monitoring, workflow management, and audit-ready evidence tracking.",
     url: siteUrl,
     siteName: "Verirule",
     images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Verirule logo" }],
@@ -32,22 +34,10 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Verirule",
-    description: "Audit-ready regulatory monitoring, workflows, and evidence operations.",
+    description: "Enterprise compliance monitoring, workflow management, and audit-ready evidence tracking.",
     images: ["/twitter-image"],
   },
 };
-
-const manrope = Manrope({
-  variable: "--font-body",
-  display: "swap",
-  subsets: ["latin"],
-});
-
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-display",
-  display: "swap",
-  subsets: ["latin"],
-});
 
 export default function RootLayout({
   children,
@@ -59,7 +49,7 @@ export default function RootLayout({
     "@type": "Organization",
     name: "Verirule",
     url: siteUrl,
-    logo: `${siteUrl}/brand/icon.svg`,
+    logo: `${siteUrl}/logo.svg`,
   };
 
   const websiteJsonLd = {
@@ -71,7 +61,7 @@ export default function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${manrope.className} ${manrope.variable} ${spaceGrotesk.variable} antialiased`}>
+      <body className="font-sans antialiased">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}

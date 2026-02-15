@@ -7,14 +7,14 @@ type SocialIconsProps = {
 
 const links = [
   {
-    name: "LinkedIn",
-    href: "https://linkedin.com/in/verirule-xyz-0684273b0",
-    path: "M6.94 8.5H3.56V20h3.38V8.5ZM5.25 3A1.96 1.96 0 1 0 5.25 6.92 1.96 1.96 0 0 0 5.25 3ZM20.44 13.42c0-3.07-1.64-4.5-3.83-4.5-1.77 0-2.56.98-3 1.66V8.5h-3.38V20h3.38v-6.38c0-1.68.32-3.31 2.4-3.31 2.06 0 2.08 1.93 2.08 3.42V20h3.35v-6.58Z",
-  },
-  {
     name: "X",
     href: "https://x.com/verirule",
     path: "M18.901 1.153h3.68l-8.04 9.19L24 22.847h-7.406l-5.8-7.584-6.64 7.584H.474l8.6-9.83L0 1.153h7.594l5.243 6.932 6.064-6.932Zm-1.29 19.471h2.039L6.486 3.257H4.298Z",
+  },
+  {
+    name: "Discord",
+    href: "https://discord.gg/",
+    path: "M20.317 4.369A19.791 19.791 0 0 0 15.885 3c-.191.34-.404.798-.553 1.165a18.27 18.27 0 0 0-5.13 0A12.64 12.64 0 0 0 9.648 3a19.736 19.736 0 0 0-4.433 1.37C2.412 8.557 1.653 12.642 2.032 16.67a19.9 19.9 0 0 0 5.43 2.761c.44-.607.832-1.25 1.17-1.921a13.11 13.11 0 0 1-1.839-.879c.154-.113.305-.23.451-.35 3.548 1.662 7.395 1.662 10.901 0 .148.12.299.237.451.35-.588.342-1.203.636-1.842.88.338.67.729 1.314 1.17 1.92a19.851 19.851 0 0 0 5.43-2.76c.445-4.665-.759-8.713-3.035-12.3ZM9.47 14.212c-1.06 0-1.934-.971-1.934-2.165 0-1.194.853-2.165 1.934-2.165 1.091 0 1.945.982 1.934 2.165 0 1.194-.854 2.165-1.934 2.165Zm5.06 0c-1.06 0-1.934-.971-1.934-2.165 0-1.194.853-2.165 1.934-2.165 1.091 0 1.945.982 1.934 2.165 0 1.194-.843 2.165-1.934 2.165Z",
   },
   {
     name: "GitHub",
@@ -33,7 +33,7 @@ export function SocialIcons({ className, iconClassName }: SocialIconsProps) {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={item.name}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#7AB596]/70 text-[#D4F0E0] transition-colors hover:border-white hover:text-white"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#3a5277] text-[#c8d7f4] transition-colors hover:border-[#84a2d4] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#86aefc]"
         >
           <svg
             viewBox="0 0 24 24"
