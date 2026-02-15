@@ -19,13 +19,14 @@ export function Nav() {
       <div className="mx-auto flex h-20 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-3 font-semibold tracking-tight">
           <Image
-            src="/brand/logo.svg"
-            alt="Verirule logo"
-            width={164}
-            height={52}
-            className="h-9 w-auto object-contain sm:h-10"
+            src="/brand/icon.svg"
+            alt="Verirule icon"
+            width={40}
+            height={40}
+            className="h-10 w-10 object-contain"
             priority
           />
+          <span className="text-xl font-bold text-[#0B3A27] sm:text-2xl">Verirule</span>
         </Link>
 
         <div className="hidden items-center gap-6 text-sm md:flex">

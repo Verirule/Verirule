@@ -10,12 +10,13 @@ export function Footer() {
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <Image
-              src="/brand/logo.svg"
-              alt="Verirule logo"
-              width={180}
-              height={56}
-              className="h-8 w-auto object-contain"
+              src="/brand/icon.svg"
+              alt="Verirule icon"
+              width={32}
+              height={32}
+              className="h-8 w-8 object-contain"
             />
+            <span className="text-xl font-bold text-white">Verirule</span>
           </div>
           <p className="max-w-md text-sm text-[#D4F0E0]/85">
             Regulatory monitoring and evidence workflows for teams operating in audited environments.

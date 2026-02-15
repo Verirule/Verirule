@@ -12,9 +12,7 @@ export const size = {
 };
 export const alt = "Verirule";
 
-const logoSvg = readFileSync(join(process.cwd(), "public", "brand", "logo.svg"), "utf8");
 const iconSvg = readFileSync(join(process.cwd(), "public", "brand", "icon.svg"), "utf8");
-const logoDataUrl = `data:image/svg+xml;base64,${Buffer.from(logoSvg).toString("base64")}`;
 const iconDataUrl = `data:image/svg+xml;base64,${Buffer.from(iconSvg).toString("base64")}`;
 
 export default function OpenGraphImage() {
@@ -70,7 +68,7 @@ export default function OpenGraphImage() {
             flexShrink: 0,
           }}
         >
-          <img src={logoDataUrl} alt="Verirule logo" width={280} height={280} />
+          <img src={iconDataUrl} alt="Verirule icon" width={280} height={280} />
         </div>
       </div>
     ),

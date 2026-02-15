@@ -60,8 +60,8 @@ export default function Home() {
 
             <div className="relative rounded-3xl border-2 border-[#aed8bf] bg-white p-6 shadow-[0_18px_50px_rgba(14,67,43,0.15)] sm:p-8">
               <Image
-                src="/brand/logo.svg"
-                alt="Verirule logo"
+                src="/brand/icon.svg"
+                alt="Verirule icon"
                 width={620}
                 height={620}
                 className="mx-auto h-auto w-full max-w-[290px] object-contain"

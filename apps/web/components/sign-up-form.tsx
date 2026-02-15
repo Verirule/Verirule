@@ -135,11 +135,11 @@ export function SignUpForm({
             className="inline-flex w-fit items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b7a3f]"
           >
             <Image
-              src="/brand/logo.svg"
+              src="/brand/icon.svg"
               alt="Verirule logo"
-              width={112}
-              height={30}
-              className="h-6 w-auto object-contain"
+              width={24}
+              height={24}
+              className="h-6 w-6 object-contain"
             />
           </Link>
           <CardTitle className="text-2xl">Create account</CardTitle>

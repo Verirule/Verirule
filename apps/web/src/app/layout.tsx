@@ -59,7 +59,7 @@ export default function RootLayout({
     "@type": "Organization",
     name: "Verirule",
     url: siteUrl,
-    logo: `${siteUrl}/brand/logo.svg`,
+    logo: `${siteUrl}/brand/icon.svg`,
   };
 
   const websiteJsonLd = {
