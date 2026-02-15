@@ -17,11 +17,11 @@
     --popover-foreground: 208 76% 22%;
     --primary: 204 94% 34%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 107 52% 92%;
+    --secondary: 204 82% 94%;
     --secondary-foreground: 208 76% 22%;
     --muted: 205 52% 94%;
     --muted-foreground: 205 30% 38%;
-    --accent: 46 89% 88%;
+    --accent: 206 100% 93%;
     --accent-foreground: 208 76% 22%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
@@ -39,27 +39,27 @@
     --vr-bg: 7 34 60;
     --vr-fg: 228 246 255;
     --vr-card: 10 47 80;
-    --vr-user-accent: #4BAD2E;
-    --vr-user-accent-foreground: #07243f;
+    --vr-user-accent: #6cb6ff;
+    --vr-user-accent-foreground: #06223d;
     --background: 210 76% 16%;
     --foreground: 0 0% 98%;
     --card: 207 73% 22%;
     --card-foreground: 0 0% 98%;
     --popover: 207 73% 22%;
     --popover-foreground: 0 0% 98%;
-    --primary: 105 55% 52%;
+    --primary: 206 96% 68%;
     --primary-foreground: 209 78% 14%;
     --secondary: 206 57% 32%;
     --secondary-foreground: 0 0% 98%;
     --muted: 206 56% 28%;
     --muted-foreground: 205 24% 72%;
-    --accent: 45 70% 44%;
-    --accent-foreground: 210 66% 14%;
+    --accent: 206 66% 40%;
+    --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     --border: 207 47% 35%;
     --input: 207 47% 35%;
-    --ring: 105 55% 52%;
+    --ring: 206 96% 68%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -84,15 +84,15 @@
     background-image:
       linear-gradient(to bottom, rgba(255, 255, 255, 0.72), rgba(233, 245, 255, 0.92)),
       radial-gradient(circle at 12% 14%, rgba(4, 101, 168, 0.2), transparent 34%),
-      radial-gradient(circle at 85% 12%, rgba(75, 173, 46, 0.16), transparent 37%),
-      radial-gradient(circle at 60% 85%, rgba(222, 173, 45, 0.2), transparent 34%);
+      radial-gradient(circle at 85% 12%, rgba(57, 134, 198, 0.18), transparent 37%),
+      radial-gradient(circle at 60% 85%, rgba(158, 212, 255, 0.2), transparent 34%);
   }
   .dark body {
     background-image:
       linear-gradient(to bottom, rgba(6, 26, 48, 0.72), rgba(7, 34, 60, 0.98)),
       radial-gradient(circle at 12% 14%, rgba(4, 101, 168, 0.22), transparent 38%),
-      radial-gradient(circle at 80% 16%, rgba(75, 173, 46, 0.2), transparent 42%),
-      radial-gradient(circle at 60% 85%, rgba(222, 173, 45, 0.2), transparent 38%);
+      radial-gradient(circle at 80% 16%, rgba(64, 146, 219, 0.2), transparent 42%),
+      radial-gradient(circle at 60% 85%, rgba(118, 190, 255, 0.16), transparent 38%);
   }
   h1,
   h2,

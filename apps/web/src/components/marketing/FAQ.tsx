@@ -25,7 +25,7 @@ const faqs = [
 
 export function FAQ() {
   return (
-    <Section>
+    <Section id="faq">
       <div className="mb-8 max-w-3xl">
         <h2 className="text-3xl font-semibold text-white sm:text-4xl">Frequently asked questions</h2>
       </div>

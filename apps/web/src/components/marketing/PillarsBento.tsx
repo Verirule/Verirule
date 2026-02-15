@@ -6,12 +6,12 @@ const pillars = [
     text: "Track regulatory sources on schedule and receive structured alerts when language changes materially.",
   },
   {
-    title: "Plain-language impact",
+    title: "Plain language impact",
     text: "Translate legal updates into concise operational summaries so owners know what must change and why.",
   },
   {
     title: "Audit trail",
-    text: "Capture decisions, evidence, and approvals in a tamper-evident timeline that is ready for examiner review.",
+    text: "Capture decisions, evidence, and approvals in a tamper evident timeline that is ready for examiner review.",
   },
 ] as const;
 
@@ -21,7 +21,7 @@ export function PillarsBento() {
       <div className="mb-8 max-w-3xl">
         <h2 className="text-3xl font-semibold text-white sm:text-4xl">Three pillars for continuous compliance.</h2>
         <p className="mt-3 text-base text-[#b6c4df]">
-          Built to reduce ambiguity in day-to-day operations while preserving defensible records.
+          Built to reduce ambiguity in day to day operations while preserving defensible records.
         </p>
       </div>
 

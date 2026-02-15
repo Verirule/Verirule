@@ -2,12 +2,12 @@ import { Section } from "@/src/components/marketing/Section";
 
 const controls = [
   {
-    title: "Row-level security (RLS)",
-    text: "Organization data is isolated with policy-enforced access controls in the data layer.",
+    title: "Row level security (RLS)",
+    text: "Organization data is isolated with policy enforced access controls in the data layer.",
   },
   {
     title: "Signed URLs",
-    text: "Evidence files are delivered through time-bound signed URLs to limit exposure and replay risk.",
+    text: "Evidence files are delivered through time bound signed URLs to limit exposure and replay risk.",
   },
   {
     title: "Audit events",
@@ -15,7 +15,7 @@ const controls = [
   },
   {
     title: "Least privilege",
-    text: "Role-based access supports separation of duties and controlled review workflows.",
+    text: "Role based access supports separation of duties and controlled review workflows.",
   },
 ] as const;
 

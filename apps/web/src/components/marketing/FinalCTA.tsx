@@ -13,13 +13,13 @@ export function FinalCTA() {
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
             href="/auth/sign-up"
-            className="rounded-md bg-[#4BAD2E] px-5 py-3 text-sm font-semibold text-[#062A45] transition-colors hover:bg-[#59C239] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DEAD2D]"
+            className="rounded-md bg-[#1678C8] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#0F66AE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8CC9FF]"
           >
             Get started
           </Link>
           <Link
             href="/auth/login"
-            className="rounded-md border border-[#DEAD2D] bg-[#0B3154] px-5 py-3 text-sm font-semibold text-[#E7F5FF] transition-colors hover:border-[#F3C95C] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DEAD2D]"
+            className="rounded-md border border-[#4C9AD3] bg-[#0B3154] px-5 py-3 text-sm font-semibold text-[#E7F5FF] transition-colors hover:border-[#83C5F8] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8CC9FF]"
           >
             Sign in
           </Link>

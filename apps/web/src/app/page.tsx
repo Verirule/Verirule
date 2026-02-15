@@ -12,7 +12,7 @@ import { Workflows } from "@/src/components/marketing/Workflows";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_12%_18%,#0465A845_0%,transparent_38%),radial-gradient(circle_at_88%_10%,#4BAD2E30_0%,transparent_34%),radial-gradient(circle_at_62%_88%,#DEAD2D38_0%,transparent_32%),linear-gradient(180deg,#0A2A48_0%,#08365B_100%)] text-[#ecf7ff]">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_12%_18%,#0B6FBF50_0%,transparent_40%),radial-gradient(circle_at_88%_10%,#4B96D845_0%,transparent_36%),radial-gradient(circle_at_62%_88%,#9ED4FF36_0%,transparent_34%),linear-gradient(180deg,#08243D_0%,#0A3B63_100%)] text-[#ecf7ff]">
       <MarketingNav />
       <main>
         <Hero />

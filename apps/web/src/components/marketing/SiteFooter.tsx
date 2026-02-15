@@ -8,9 +8,10 @@ const linkGroups = [
     title: "Product",
     links: [
       { label: "Monitoring", href: "#product" },
+      { label: "Integrations", href: "#resources" },
       { label: "Pricing", href: "#pricing" },
       { label: "Security", href: "#security" },
-      { label: "Resources", href: "#resources" },
+      { label: "FAQ", href: "#faq" },
     ],
   },
   {
@@ -29,7 +30,7 @@ export function SiteFooter() {
     <footer className="border-t border-[#2E7DB5] bg-[#082E4E]">
       <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_auto_auto] lg:px-8">
         <div className="space-y-4">
-          <Link href="/" className="inline-flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DEAD2D]">
+          <Link href="/" className="inline-flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8CC9FF]">
             <span className="vr-brand-chip h-12 w-12">
               <Image
                 src="/logo.svg"
@@ -54,7 +55,7 @@ export function SiteFooter() {
                 <li key={link.label}>
                   <Link
                     href={link.href}
-                    className="text-sm text-[#D4EAFF] transition-colors hover:text-[#DEAD2D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DEAD2D]"
+                    className="text-sm text-[#D4EAFF] transition-colors hover:text-[#9ED4FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8CC9FF]"
                   >
                     {link.label}
                   </Link>

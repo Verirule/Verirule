@@ -20,7 +20,7 @@ export function HowItWorks() {
     <Section>
       <div className="mb-8 max-w-3xl">
         <h2 className="text-3xl font-semibold text-white sm:text-4xl">How it works</h2>
-        <p className="mt-3 text-base text-[#b6c4df]">A clear workflow from change detection to signed-off evidence.</p>
+        <p className="mt-3 text-base text-[#b6c4df]">A clear workflow from change detection to signed off evidence.</p>
       </div>
 
       <ol className="grid gap-4 md:grid-cols-3">

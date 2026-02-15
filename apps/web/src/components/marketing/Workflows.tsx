@@ -4,7 +4,7 @@ export function Workflows() {
   return (
     <Section>
       <div className="mb-8 max-w-3xl">
-        <h2 className="text-3xl font-semibold text-white sm:text-4xl">Audit-ready workflows</h2>
+        <h2 className="text-3xl font-semibold text-white sm:text-4xl">Audit ready workflows</h2>
         <p className="mt-3 text-base text-[#b6c4df]">
           Keep tasks, evidence, and exports connected so control execution is easy to inspect.
         </p>
@@ -30,7 +30,7 @@ export function Workflows() {
         <article className="rounded-xl border border-[#2b3f62] bg-[#111d34] p-6">
           <h3 className="text-xl font-semibold text-white">Exports</h3>
           <ul className="mt-3 space-y-2 text-sm text-[#b7c4dc] sm:text-base">
-            <li>Create auditor-ready packages on demand.</li>
+            <li>Create auditor ready packages on demand.</li>
             <li>Include related tasks and evidence records.</li>
             <li>Keep a reproducible chain of what was delivered.</li>
           </ul>

@@ -60,7 +60,10 @@ export function Pricing() {
             <p className="mt-3 text-sm text-[#b7c4dc] sm:text-base">{plan.detail}</p>
             <ul className="mt-4 space-y-2 text-sm text-[#d5dff2]">
               {plan.features.map((feature) => (
-                <li key={feature}>- {feature}</li>
+                <li key={feature} className="flex items-start gap-2">
+                  <span className="pt-0.5 text-[#9ED4FF]">&bull;</span>
+                  <span>{feature}</span>
+                </li>
               ))}
             </ul>
             <div className="mt-6">
