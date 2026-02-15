@@ -45,6 +45,7 @@ def test_create_task_now_returns_existing_task(monkeypatch) -> None:
 def test_create_task_now_creates_and_links_task(monkeypatch) -> None:
     links: list[tuple[str, str, str]] = []
     evidences: list[dict[str, str]] = []
+    updates: list[dict[str, object]] = []
 
     async def fake_select_alert(access_token: str, org_id: str, alert_id: str):
         return {
@@ -53,6 +54,7 @@ def test_create_task_now_creates_and_links_task(monkeypatch) -> None:
             "finding_id": FINDING_ID,
             "task_id": None,
             "status": "open",
+            "created_at": "2026-02-13T00:00:00Z",
         }
 
     async def fake_select_finding(access_token: str, finding_id: str):
@@ -71,7 +73,24 @@ def test_create_task_now_creates_and_links_task(monkeypatch) -> None:
         assert payload["p_org_id"] == ORG_ID
         assert payload["p_alert_id"] == ALERT_ID
         assert payload["p_finding_id"] == FINDING_ID
+        assert payload["p_due_at"] == "2026-02-14T00:00:00Z"
         return TASK_ID
+
+    async def fake_compute_due_at(
+        access_token: str,
+        *,
+        org_id: str,
+        severity: str,
+        created_at: str | None,
+    ) -> str:
+        assert access_token == "token-123"
+        assert org_id == ORG_ID
+        assert severity == "high"
+        assert created_at == "2026-02-13T00:00:00Z"
+        return "2026-02-14T00:00:00Z"
+
+    async def fake_update_task(task_id: str, patch: dict[str, object]) -> None:
+        updates.append({"task_id": task_id, "patch": patch})
 
     async def fake_link_alert(access_token: str, org_id: str, alert_id: str, task_id: str) -> None:
         links.append((org_id, alert_id, task_id))
@@ -122,7 +141,9 @@ def test_create_task_now_creates_and_links_task(monkeypatch) -> None:
     )
     monkeypatch.setattr(automation_endpoint, "select_alert_by_id_for_org", fake_select_alert)
     monkeypatch.setattr(automation_endpoint, "select_finding_by_id", fake_select_finding)
+    monkeypatch.setattr(automation_endpoint, "rpc_compute_task_due_at", fake_compute_due_at)
     monkeypatch.setattr(automation_endpoint, "rpc_create_task", fake_create_task)
+    monkeypatch.setattr(automation_endpoint, "update_task_service", fake_update_task)
     monkeypatch.setattr(automation_endpoint, "update_alert_task_id", fake_link_alert)
     monkeypatch.setattr(automation_endpoint, "ensure_alert_task_rules", fake_ensure)
     monkeypatch.setattr(automation_endpoint, "get_alert_task_rules", fake_rules)
@@ -143,5 +164,11 @@ def test_create_task_now_creates_and_links_task(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json() == {"task_id": TASK_ID}
     assert links == [(ORG_ID, ALERT_ID, TASK_ID)]
+    assert updates == [
+        {
+            "task_id": TASK_ID,
+            "patch": {"severity": "high", "sla_state": "on_track"},
+        }
+    ]
     assert len(evidences) == 1
     assert evidences[0]["p_task_id"] == TASK_ID

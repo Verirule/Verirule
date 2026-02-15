@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     NOTIFY_JOB_BATCH_LIMIT: int = 50
     NOTIFY_MAX_ATTEMPTS: int = 5
     DIGEST_PROCESSOR_INTERVAL_SECONDS: int = 300
+    SLA_CHECK_INTERVAL_SECONDS: int = 300
     SUPABASE_URL: str
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_ROLE_KEY: str | None = None

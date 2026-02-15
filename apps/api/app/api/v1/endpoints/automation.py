@@ -18,11 +18,13 @@ from app.core.supabase_rest import (
     get_alert_task_rules,
     list_control_evidence_items,
     rpc_add_task_evidence,
+    rpc_compute_task_due_at,
     rpc_create_task,
     select_alert_by_id_for_org,
     select_finding_by_id,
     update_alert_task_id,
     update_alert_task_rules,
+    update_task_service,
 )
 from app.services.alert_task import (
     build_task_description,
@@ -65,6 +67,24 @@ async def _create_task_now(access_token: str, org_id: str, alert_id: str) -> str
     if finding_row is None or finding_row.get("org_id") != org_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found.")
 
+    raw_severity = str(finding_row.get("severity") or "medium").strip().lower()
+    if raw_severity == "critical":
+        severity = "high"
+    elif raw_severity in {"low", "medium", "high"}:
+        severity = raw_severity
+    else:
+        severity = "medium"
+    due_at = await rpc_compute_task_due_at(
+        access_token,
+        org_id=org_id,
+        severity=severity,
+        created_at=(
+            str(alert_row.get("created_at")).strip()
+            if isinstance(alert_row.get("created_at"), str) and str(alert_row.get("created_at")).strip()
+            else None
+        ),
+    )
+
     task_id = await rpc_create_task(
         access_token,
         {
@@ -73,8 +93,12 @@ async def _create_task_now(access_token: str, org_id: str, alert_id: str) -> str
             "p_description": build_task_description(finding_row),
             "p_alert_id": alert_id,
             "p_finding_id": finding_id,
-            "p_due_at": None,
+            "p_due_at": due_at,
         },
+    )
+    await update_task_service(
+        task_id,
+        {"severity": severity, "sla_state": "on_track"},
     )
     await update_alert_task_id(access_token, org_id, alert_id, task_id)
 

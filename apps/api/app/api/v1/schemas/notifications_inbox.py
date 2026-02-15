@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-NotificationEventType = Literal["digest", "immediate_alert"]
+NotificationEventType = Literal["digest", "immediate_alert", "sla"]
 NotificationEntityType = Literal["alert", "task", "export", "system"]
 NotificationDeliveryStatus = Literal["queued", "sent", "failed"]
 

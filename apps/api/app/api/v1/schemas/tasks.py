@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 TaskStatus = Literal["open", "in_progress", "blocked", "done"]
 TaskEvidenceType = Literal["link", "file", "log"]
+TaskSlaState = Literal["none", "on_track", "due_soon", "overdue"]
 
 
 class TaskOut(BaseModel):
@@ -18,6 +19,8 @@ class TaskOut(BaseModel):
     alert_id: UUID | None = None
     finding_id: UUID | None = None
     due_at: datetime | None = None
+    severity: str | None = None
+    sla_state: TaskSlaState = "none"
     created_at: datetime
     updated_at: datetime
 

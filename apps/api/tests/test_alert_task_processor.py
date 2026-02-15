@@ -56,13 +56,32 @@ def test_processor_creates_task_links_controls_and_evidence(monkeypatch) -> None
         description: str | None,
         alert_id: str | None,
         finding_id: str | None,
+        due_at: str | None = None,
+        severity: str | None = None,
+        sla_state: str = "none",
     ) -> str:
         assert org_id == ORG_ID
         assert alert_id == ALERT_ID
         assert finding_id == FINDING_ID
         assert "remediation" in title.lower()
         assert isinstance(description, str)
+        assert due_at == "2026-02-14T00:00:00Z"
+        assert severity == "high"
+        assert sla_state == "on_track"
         return TASK_ID
+
+    async def fake_compute_due_at(
+        access_token: str,
+        *,
+        org_id: str,
+        severity: str,
+        created_at: str | None,
+    ) -> str:
+        assert access_token == "service-role-token"
+        assert org_id == ORG_ID
+        assert severity == "high"
+        assert created_at == "2026-02-13T00:00:00Z"
+        return "2026-02-14T00:00:00Z"
 
     async def fake_link(access_token: str, org_id: str, alert_id: str, task_id: str) -> None:
         linked.append((org_id, alert_id, task_id))
@@ -98,6 +117,7 @@ def test_processor_creates_task_links_controls_and_evidence(monkeypatch) -> None
     monkeypatch.setattr(alert_task_processor, "ensure_alert_task_rules", fake_ensure)
     monkeypatch.setattr(alert_task_processor, "get_alert_task_rules", fake_get_rules)
     monkeypatch.setattr(alert_task_processor, "select_finding_by_id", fake_select_finding)
+    monkeypatch.setattr(alert_task_processor, "rpc_compute_task_due_at", fake_compute_due_at)
     monkeypatch.setattr(alert_task_processor, "insert_task_service", fake_insert_task)
     monkeypatch.setattr(alert_task_processor, "update_alert_task_id", fake_link)
     monkeypatch.setattr(alert_task_processor, "resolve_control_ids_for_alert", fake_resolve_controls)
@@ -153,10 +173,14 @@ def test_processor_skips_when_min_severity_not_met(monkeypatch) -> None:
         created_tasks += 1
         return TASK_ID
 
+    async def fake_compute_due_at(*args, **kwargs) -> str:
+        return "2026-02-14T00:00:00Z"
+
     monkeypatch.setattr(alert_task_processor, "select_alerts_needing_tasks_service", fake_select_alerts)
     monkeypatch.setattr(alert_task_processor, "ensure_alert_task_rules", fake_ensure)
     monkeypatch.setattr(alert_task_processor, "get_alert_task_rules", fake_get_rules)
     monkeypatch.setattr(alert_task_processor, "select_finding_by_id", fake_select_finding)
+    monkeypatch.setattr(alert_task_processor, "rpc_compute_task_due_at", fake_compute_due_at)
     monkeypatch.setattr(alert_task_processor, "insert_task_service", fake_insert_task)
 
     processor = alert_task_processor.AlertTaskProcessor(access_token="service-role-token")

@@ -44,7 +44,7 @@ def test_tasks_list_returns_rows_when_supabase_ok(monkeypatch) -> None:
         async def get(self, url: str, params: dict[str, str], headers: dict[str, str]) -> FakeResponse:
             assert url == "https://example.supabase.co/rest/v1/tasks"
             assert params == {
-                "select": "id,org_id,title,description,status,assignee_user_id,alert_id,finding_id,due_at,created_at,updated_at",
+                "select": "id,org_id,title,description,status,assignee_user_id,alert_id,finding_id,due_at,severity,sla_state,created_at,updated_at",
                 "org_id": f"eq.{ORG_ID}",
                 "order": "created_at.desc",
             }
@@ -62,6 +62,8 @@ def test_tasks_list_returns_rows_when_supabase_ok(monkeypatch) -> None:
                         "alert_id": ALERT_ID,
                         "finding_id": FINDING_ID,
                         "due_at": None,
+                        "severity": "high",
+                        "sla_state": "on_track",
                         "created_at": "2026-02-09T00:00:00Z",
                         "updated_at": "2026-02-09T00:00:00Z",
                     }
@@ -96,6 +98,8 @@ def test_tasks_list_returns_rows_when_supabase_ok(monkeypatch) -> None:
                 "alert_id": ALERT_ID,
                 "finding_id": FINDING_ID,
                 "due_at": None,
+                "severity": "high",
+                "sla_state": "on_track",
                 "created_at": "2026-02-09T00:00:00Z",
                 "updated_at": "2026-02-09T00:00:00Z",
             }

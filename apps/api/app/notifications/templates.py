@@ -108,3 +108,85 @@ def immediate_alert_email(
         "</body></html>"
     )
     return {"subject": subject, "html": html, "text": text}
+
+
+def sla_due_soon_email(
+    org_name: str,
+    task: dict[str, Any],
+    dashboard_url: str,
+) -> dict[str, str]:
+    org_label = org_name.strip() or "your workspace"
+    title = str(task.get("title") or "Untitled remediation task")
+    severity = str(task.get("severity") or "medium").upper()
+    due_at = str(task.get("due_at") or "Unknown")
+    dashboard_link = dashboard_url.strip()
+
+    subject = f"Action required: Task due soon - {title}"
+    text = "\n".join(
+        [
+            f"SLA reminder for {org_label}",
+            "",
+            f"Task: {title}",
+            f"Severity: {severity}",
+            f"Due at: {due_at}",
+            "",
+            f"Task list: {dashboard_link}" if dashboard_link else "Task list: /dashboard/tasks",
+            "",
+            "Please complete this remediation task before the deadline.",
+        ]
+    )
+    dashboard_html = (
+        f'<p>Task list: <a href="{dashboard_link}">{dashboard_link}</a></p>'
+        if dashboard_link
+        else "<p>Task list: /dashboard/tasks</p>"
+    )
+    html = (
+        "<html><body>"
+        f"<p>SLA reminder for <strong>{org_label}</strong></p>"
+        f"<p>Task: <strong>{title}</strong><br/>Severity: {severity}<br/>Due at: {due_at}</p>"
+        f"{dashboard_html}"
+        "<p>Please complete this remediation task before the deadline.</p>"
+        "</body></html>"
+    )
+    return {"subject": subject, "html": html, "text": text}
+
+
+def sla_overdue_email(
+    org_name: str,
+    task: dict[str, Any],
+    dashboard_url: str,
+) -> dict[str, str]:
+    org_label = org_name.strip() or "your workspace"
+    title = str(task.get("title") or "Untitled remediation task")
+    severity = str(task.get("severity") or "medium").upper()
+    due_at = str(task.get("due_at") or "Unknown")
+    dashboard_link = dashboard_url.strip()
+
+    subject = f"Overdue: Remediation task past due - {title}"
+    text = "\n".join(
+        [
+            f"SLA overdue notice for {org_label}",
+            "",
+            f"Task: {title}",
+            f"Severity: {severity}",
+            f"Due at: {due_at}",
+            "",
+            f"Task list: {dashboard_link}" if dashboard_link else "Task list: /dashboard/tasks",
+            "",
+            "This remediation task is overdue and requires immediate action.",
+        ]
+    )
+    dashboard_html = (
+        f'<p>Task list: <a href="{dashboard_link}">{dashboard_link}</a></p>'
+        if dashboard_link
+        else "<p>Task list: /dashboard/tasks</p>"
+    )
+    html = (
+        "<html><body>"
+        f"<p>SLA overdue notice for <strong>{org_label}</strong></p>"
+        f"<p>Task: <strong>{title}</strong><br/>Severity: {severity}<br/>Due at: {due_at}</p>"
+        f"{dashboard_html}"
+        "<p>This remediation task is overdue and requires immediate action.</p>"
+        "</body></html>"
+    )
+    return {"subject": subject, "html": html, "text": text}

@@ -1826,7 +1826,7 @@ async def select_tasks(access_token: str, org_id: str) -> list[dict[str, Any]]:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/tasks"
     params = {
-        "select": "id,org_id,title,description,status,assignee_user_id,alert_id,finding_id,due_at,created_at,updated_at",
+        "select": "id,org_id,title,description,status,assignee_user_id,alert_id,finding_id,due_at,severity,sla_state,created_at,updated_at",
         "org_id": f"eq.{org_id}",
         "order": "created_at.desc",
     }
@@ -2112,6 +2112,9 @@ async def insert_task_service(
     description: str | None,
     alert_id: str | None,
     finding_id: str | None,
+    due_at: str | None = None,
+    severity: str | None = None,
+    sla_state: str = "none",
 ) -> str:
     settings = get_settings()
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/tasks"
@@ -2125,7 +2128,9 @@ async def insert_task_service(
         "assignee_user_id": None,
         "alert_id": alert_id,
         "finding_id": finding_id,
-        "due_at": None,
+        "due_at": due_at,
+        "severity": severity,
+        "sla_state": sla_state,
     }
 
     try:
@@ -2147,6 +2152,17 @@ async def insert_task_service(
             detail="Invalid create task response from Supabase.",
         )
     return task_id
+
+
+async def update_task_service(task_id: str, patch: dict[str, Any]) -> None:
+    if not patch:
+        return
+    await _service_role_patch(
+        "tasks",
+        task_id,
+        patch,
+        error_detail="Failed to update task in Supabase.",
+    )
 
 
 async def bulk_insert_task_controls(
@@ -2576,6 +2592,232 @@ async def update_alert_task_rules(
 
     rows = _validated_list_payload(response.json(), "Invalid automation rules response from Supabase.")
     return rows[0] if rows else None
+
+
+async def ensure_org_sla_rules(access_token: str, org_id: str) -> None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/ensure_org_sla_rules"
+    payload = {"p_org_id": org_id}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail = _supabase_error_detail(exc.response) or "Failed to initialize SLA rules."
+        normalized_detail = error_detail.lower()
+        if "not authenticated" in normalized_detail:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        if "not a member of org" in normalized_detail:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_detail) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to initialize SLA rules.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to initialize SLA rules.",
+        ) from exc
+
+
+async def get_org_sla_rules(access_token: str, org_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_sla_rules"
+    params = {
+        "select": "org_id,enabled,due_hours_low,due_hours_medium,due_hours_high,due_soon_threshold_hours,overdue_remind_every_hours,created_at,updated_at",
+        "org_id": f"eq.{org_id}",
+        "limit": "1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch SLA rules from Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid SLA rules response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def update_org_sla_rules(
+    access_token: str, org_id: str, patch: dict[str, Any]
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_sla_rules"
+    params = {
+        "org_id": f"eq.{org_id}",
+        "select": "org_id,enabled,due_hours_low,due_hours_medium,due_hours_high,due_soon_threshold_hours,overdue_remind_every_hours,created_at,updated_at",
+    }
+    headers = supabase_rest_headers(access_token)
+    headers["Prefer"] = "return=representation"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.patch(url, params=params, json=patch, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to update SLA rules in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid SLA rules response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def rpc_compute_task_due_at(
+    access_token: str,
+    *,
+    org_id: str,
+    severity: str,
+    created_at: str | None,
+) -> str:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/compute_task_due_at"
+    payload: dict[str, Any] = {
+        "p_org_id": org_id,
+        "p_severity": severity,
+        "p_created_at": created_at,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=supabase_rest_headers(access_token))
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to compute task due date in Supabase.",
+        ) from exc
+
+    value = response.json()
+    if not isinstance(value, str) or not value.strip():
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid task due date response from Supabase.",
+        )
+    return value.strip()
+
+
+async def list_enabled_sla_rules_service(limit: int = 500) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/org_sla_rules"
+    params = {
+        "select": "org_id,enabled,due_hours_low,due_hours_medium,due_hours_high,due_soon_threshold_hours,overdue_remind_every_hours,created_at,updated_at",
+        "enabled": "eq.true",
+        "order": "updated_at.asc",
+        "limit": str(max(1, limit)),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch SLA rules from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid SLA rules response from Supabase.")
+
+
+async def select_open_tasks_for_sla_service(org_id: str, *, limit: int = 1000) -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/tasks"
+    params = {
+        "select": "id,org_id,title,status,due_at,severity,sla_state,created_at,updated_at",
+        "org_id": f"eq.{org_id}",
+        "status": "not.eq.done",
+        "due_at": "not.is.null",
+        "order": "due_at.asc",
+        "limit": str(max(1, limit)),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=supabase_service_role_headers())
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch open SLA tasks from Supabase.",
+        ) from exc
+
+    return _validated_list_payload(response.json(), "Invalid open SLA tasks response from Supabase.")
+
+
+async def update_task_sla_state_service(task_id: str, sla_state: str) -> None:
+    await _service_role_patch(
+        "tasks",
+        task_id,
+        {"sla_state": sla_state},
+        error_detail="Failed to update task SLA state in Supabase.",
+    )
+
+
+async def create_task_escalation_service(
+    *,
+    org_id: str,
+    task_id: str,
+    kind: str,
+    window_start: str,
+    channel: str,
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/task_escalations"
+    headers = supabase_service_role_headers()
+    headers["Prefer"] = "resolution=ignore-duplicates,return=representation"
+    payload = {
+        "org_id": org_id,
+        "task_id": task_id,
+        "kind": kind,
+        "window_start": window_start,
+        "channel": channel,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                url,
+                params={"on_conflict": "task_id,kind,window_start"},
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to record task escalation in Supabase.",
+        ) from exc
+
+    rows = _validated_list_payload(response.json(), "Invalid task escalation response from Supabase.")
+    return rows[0] if rows else None
+
+
+async def mark_task_escalation_notified_service(
+    escalation_id: str,
+    *,
+    notification_job_id: str | None,
+) -> None:
+    payload: dict[str, Any] = {"notified_at": datetime.now(UTC).isoformat().replace("+00:00", "Z")}
+    if notification_job_id:
+        payload["notification_job_id"] = notification_job_id
+    await _service_role_patch(
+        "task_escalations",
+        escalation_id,
+        payload,
+        error_detail="Failed to update task escalation in Supabase.",
+    )
 
 
 async def ensure_org_notification_rules(access_token: str, org_id: str) -> None:

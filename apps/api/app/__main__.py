@@ -16,6 +16,7 @@ from app.worker.notification_sender import NotificationSender
 from app.worker.readiness_processor import ReadinessProcessor
 from app.worker.retry import sanitize_error
 from app.worker.run_processor import MonitorRunProcessor
+from app.worker.sla_processor import SLAProcessor
 
 logger = get_logger("worker.supervisor")
 
@@ -30,6 +31,7 @@ async def run_worker_tick(
     alert_task_processor: AlertTaskProcessor,
     readiness_processor: ReadinessProcessor,
     digest_processor: DigestProcessor,
+    sla_processor: SLAProcessor,
     notification_sender: NotificationSender,
     *,
     run_batch_limit: int,
@@ -44,6 +46,7 @@ async def run_worker_tick(
     alert_tasks_processed = 0
     readiness_computed = 0
     digests_sent = 0
+    sla_escalations_queued = 0
     notification_emails_sent = 0
 
     try:
@@ -110,6 +113,15 @@ async def run_worker_tick(
         )
 
     try:
+        sla_escalations_queued = await sla_processor.process_if_due()
+    except Exception as exc:  # pragma: no cover - defensive guard
+        errors += 1
+        logger.error(
+            "worker.tick_process_sla_error",
+            extra={"component": "worker", "error": sanitize_error(exc, default_message="worker error")},
+        )
+
+    try:
         notification_emails_sent = await notification_sender.process_queued_jobs_once()
     except Exception as exc:  # pragma: no cover - defensive guard
         errors += 1
@@ -130,6 +142,7 @@ async def run_worker_tick(
         "due_sources": due_sources,
         "readiness_computed": readiness_computed,
         "digests_sent": digests_sent,
+        "sla_escalations_queued": sla_escalations_queued,
         "notification_emails_sent": notification_emails_sent,
         "errors": errors,
     }
@@ -186,6 +199,10 @@ async def run_worker_supervisor_loop() -> None:
         batch_limit=settings.DIGEST_BATCH_LIMIT,
         interval_seconds=settings.DIGEST_PROCESSOR_INTERVAL_SECONDS,
     )
+    sla_processor = SLAProcessor(
+        access_token=write_access_token,
+        interval_seconds=settings.SLA_CHECK_INTERVAL_SECONDS,
+    )
     notification_sender = NotificationSender(
         access_token=write_access_token,
         batch_limit=settings.NOTIFY_JOB_BATCH_LIMIT,
@@ -199,6 +216,7 @@ async def run_worker_supervisor_loop() -> None:
             alert_task_processor,
             readiness_processor,
             digest_processor,
+            sla_processor,
             notification_sender,
             run_batch_limit=settings.WORKER_BATCH_LIMIT,
             heartbeat_enabled=heartbeat_enabled,
@@ -211,6 +229,7 @@ async def run_worker_supervisor_loop() -> None:
             and int(payload.get("runs_queued") or 0) == 0
             and int(payload.get("readiness_computed") or 0) == 0
             and int(payload.get("digests_sent") or 0) == 0
+            and int(payload.get("sla_escalations_queued") or 0) == 0
             and int(payload.get("notification_emails_sent") or 0) == 0
         ):
             await asyncio.sleep(max(1, settings.WORKER_POLL_INTERVAL_SECONDS))

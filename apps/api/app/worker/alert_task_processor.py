@@ -10,6 +10,7 @@ from app.core.supabase_rest import (
     get_alert_task_rules,
     insert_task_service,
     list_control_evidence_items,
+    rpc_compute_task_due_at,
     select_alerts_needing_tasks_service,
     select_finding_by_id,
     update_alert_task_id,
@@ -77,12 +78,33 @@ class AlertTaskProcessor:
         ):
             return False
 
+        raw_severity = str(finding_row.get("severity") or "medium").strip().lower()
+        if raw_severity == "critical":
+            severity = "high"
+        elif raw_severity in {"low", "medium", "high"}:
+            severity = raw_severity
+        else:
+            severity = "medium"
+        due_at = await rpc_compute_task_due_at(
+            self.access_token,
+            org_id=org_id,
+            severity=severity,
+            created_at=(
+                str(alert_row.get("created_at")).strip()
+                if isinstance(alert_row.get("created_at"), str) and str(alert_row.get("created_at")).strip()
+                else None
+            ),
+        )
+
         task_id = await insert_task_service(
             org_id,
             title=build_task_title(finding_row),
             description=build_task_description(finding_row),
             alert_id=alert_id,
             finding_id=finding_id,
+            due_at=due_at,
+            severity=severity,
+            sla_state="on_track",
         )
         await update_alert_task_id(self.access_token, org_id, alert_id, task_id)
 

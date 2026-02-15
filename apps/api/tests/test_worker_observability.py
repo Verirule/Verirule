@@ -270,6 +270,10 @@ def test_worker_heartbeat_upsert_called(monkeypatch) -> None:
         async def process_if_due(self) -> int:
             return 1
 
+    class FakeSlaProcessor:
+        async def process_if_due(self) -> int:
+            return 4
+
     class FakeNotificationSender:
         async def process_queued_jobs_once(self) -> int:
             return 2
@@ -286,6 +290,7 @@ def test_worker_heartbeat_upsert_called(monkeypatch) -> None:
             FakeAlertTaskProcessor(),  # type: ignore[arg-type]
             FakeReadinessProcessor(),  # type: ignore[arg-type]
             FakeDigestProcessor(),  # type: ignore[arg-type]
+            FakeSlaProcessor(),  # type: ignore[arg-type]
             FakeNotificationSender(),  # type: ignore[arg-type]
             run_batch_limit=5,
             heartbeat_enabled=True,
@@ -298,6 +303,7 @@ def test_worker_heartbeat_upsert_called(monkeypatch) -> None:
     assert payload["alert_tasks_processed"] == 2
     assert payload["readiness_computed"] == 3
     assert payload["digests_sent"] == 1
+    assert payload["sla_escalations_queued"] == 4
     assert payload["notification_emails_sent"] == 2
     assert payload["runs_queued"] == 2
     assert payload["due_sources"] == 4
