@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   Bell,
+  Clock3,
   CircleDollarSign,
   FileText,
   Palette,
@@ -37,6 +38,12 @@ export default function DashboardSettingsPage() {
       title: "Automation",
       description: "Alert-to-task rules, severity thresholds, and evidence checklist defaults.",
       icon: Zap,
+    },
+    {
+      href: "/dashboard/settings/sla",
+      title: "SLA",
+      description: "Due date policy by severity, due-soon thresholds, and overdue reminder cadence.",
+      icon: Clock3,
     },
     {
       href: "/dashboard/settings/integrations",

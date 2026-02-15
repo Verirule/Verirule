@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import {
   Bell,
+  Clock3,
   CircleDollarSign,
   Home,
   Settings,
@@ -25,6 +26,7 @@ const settingsLinks: SettingsLink[] = [
   { href: "/dashboard/settings/billing", label: "Billing", icon: CircleDollarSign },
   { href: "/dashboard/settings/members", label: "Members", icon: Users },
   { href: "/dashboard/settings/notifications", label: "Notifications", icon: Bell },
+  { href: "/dashboard/settings/sla", label: "SLA", icon: Clock3 },
   { href: "/dashboard/settings/integrations", label: "Integrations", icon: Workflow },
   { href: "/dashboard/settings/automation", label: "Automation", icon: Zap },
 ] as const;

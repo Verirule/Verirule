@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
 type TaskStatus = "open" | "in_progress" | "blocked" | "done";
+type TaskSlaState = "none" | "on_track" | "due_soon" | "overdue";
 const MAX_EVIDENCE_UPLOAD_BYTES = 25_000_000;
 const ALLOWED_EVIDENCE_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg", ".txt", ".log"];
 
@@ -27,6 +28,8 @@ type TaskRecord = {
   alert_id: string | null;
   finding_id: string | null;
   due_at: string | null;
+  severity: string | null;
+  sla_state: TaskSlaState;
   created_at: string;
   updated_at: string;
 };
@@ -90,6 +93,32 @@ function formatFileSize(byteSize: number | null): string {
     return `${(byteSize / kb).toFixed(1)} KB`;
   }
   return `${byteSize} B`;
+}
+
+function slaLabel(state: TaskSlaState): string {
+  if (state === "due_soon") {
+    return "Due soon";
+  }
+  if (state === "overdue") {
+    return "Overdue";
+  }
+  if (state === "on_track") {
+    return "On track";
+  }
+  return "No SLA";
+}
+
+function slaPillClass(state: TaskSlaState): string {
+  if (state === "overdue") {
+    return "bg-red-100 text-red-800";
+  }
+  if (state === "due_soon") {
+    return "bg-amber-100 text-amber-800";
+  }
+  if (state === "on_track") {
+    return "bg-emerald-100 text-emerald-800";
+  }
+  return "bg-slate-100 text-slate-700";
 }
 
 function isAllowedEvidenceFile(file: File): boolean {
@@ -159,6 +188,7 @@ export default function DashboardTasksPage() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<"all" | TaskStatus>("all");
+  const [slaFilter, setSlaFilter] = useState<"all" | "overdue">("all");
   const [search, setSearch] = useState("");
 
   const [comments, setComments] = useState<TaskCommentRecord[]>([]);
@@ -184,13 +214,16 @@ export default function DashboardTasksPage() {
       if (statusFilter !== "all" && task.status !== statusFilter) {
         return false;
       }
+      if (slaFilter === "overdue" && task.sla_state !== "overdue") {
+        return false;
+      }
       if (!query) {
         return true;
       }
       const haystack = `${task.title} ${task.description ?? ""}`.toLowerCase();
       return haystack.includes(query);
     });
-  }, [search, statusFilter, tasks]);
+  }, [search, slaFilter, statusFilter, tasks]);
 
   const loadOrgs = useCallback(async () => {
     setIsLoadingOrgs(true);
@@ -608,7 +641,7 @@ export default function DashboardTasksPage() {
           <CardDescription>Filter by status and search title/description.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
+          <div className="grid gap-3 sm:grid-cols-[180px_180px_1fr]">
             <div className="space-y-2">
               <Label htmlFor="task-status-filter">Status</Label>
               <select
@@ -622,6 +655,18 @@ export default function DashboardTasksPage() {
                 <option value="in_progress">in_progress</option>
                 <option value="blocked">blocked</option>
                 <option value="done">done</option>
+                </select>
+              </div>
+            <div className="space-y-2">
+              <Label htmlFor="task-sla-filter">SLA</Label>
+              <select
+                id="task-sla-filter"
+                value={slaFilter}
+                onChange={(event) => setSlaFilter(event.target.value as "all" | "overdue")}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="all">all</option>
+                <option value="overdue">overdue only</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -648,8 +693,14 @@ export default function DashboardTasksPage() {
                     <div>
                       <p className="font-medium">{task.title}</p>
                       <p className="text-xs text-muted-foreground">Status: {task.status}</p>
+                      <p className="text-xs text-muted-foreground">Due: {formatTime(task.due_at)}</p>
                       <p className="text-xs text-muted-foreground">Updated: {formatTime(task.updated_at)}</p>
                     </div>
+                    <span
+                      className={`rounded px-2 py-1 text-xs font-medium ${slaPillClass(task.sla_state)}`}
+                    >
+                      {slaLabel(task.sla_state)}
+                    </span>
                     <Button type="button" size="sm" onClick={() => void loadTaskDetails(task)}>
                       Open
                     </Button>
@@ -683,6 +734,17 @@ export default function DashboardTasksPage() {
                   <p className="text-xs text-muted-foreground">Alert: {selectedTask.alert_id ?? "none"}</p>
                   <p className="text-xs text-muted-foreground">Finding: {selectedTask.finding_id ?? "none"}</p>
                   <p className="text-xs text-muted-foreground">Assignee: {selectedTask.assignee_user_id ?? "none"}</p>
+                  <p className="text-xs text-muted-foreground">Due: {formatTime(selectedTask.due_at)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    SLA:
+                    <span
+                      className={`ml-2 rounded px-2 py-1 text-xs font-medium ${slaPillClass(
+                        selectedTask.sla_state,
+                      )}`}
+                    >
+                      {slaLabel(selectedTask.sla_state)}
+                    </span>
+                  </p>
                   <div className="pt-1">
                     <Label htmlFor="task-status" className="text-xs">
                       Status
