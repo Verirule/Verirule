@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
 
-import { LogoMark } from "@/src/components/brand/LogoMark";
 import { SocialIcons } from "@/src/components/SocialIcons";
 
 export function Footer() {
@@ -10,9 +9,6 @@ export function Footer() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-[#2C7B56] bg-[#145636] p-1.5">
-              <LogoMark className="h-full w-full" />
-            </span>
             <Image
               src="/brand/logo.svg"
               alt="Verirule logo"

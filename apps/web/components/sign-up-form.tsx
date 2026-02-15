@@ -13,7 +13,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OAuthButtons, getEnabledOAuthProviders } from "@/src/components/auth/OAuthButtons";
-import { LogoMark } from "@/src/components/brand/LogoMark";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -135,7 +134,6 @@ export function SignUpForm({
             href="/"
             className="inline-flex w-fit items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b7a3f]"
           >
-            <LogoMark className="h-6 w-6" />
             <Image
               src="/brand/logo.svg"
               alt="Verirule logo"
