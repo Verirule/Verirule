@@ -30,9 +30,7 @@ export function Pricing() {
                   {displayPrice}
                   <span className="ml-1 text-sm font-medium text-slate-500">/mo</span>
                 </p>
-              ) : (
-                <p className="mt-3 text-sm font-medium text-slate-600">Price shown at checkout</p>
-              )}
+              ) : null}
               <ul className="mt-4 space-y-2 text-sm text-slate-600">
                 {included.map((feature) => (
                   <li key={feature} className="flex items-start gap-2">

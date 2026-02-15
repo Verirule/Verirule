@@ -383,9 +383,7 @@ export default function DashboardBillingPage() {
                       {card.displayPrice}
                       <span className="ml-1 text-xs font-medium text-muted-foreground">/mo</span>
                     </p>
-                  ) : (
-                    <p className="text-xs font-medium text-muted-foreground">Price shown at checkout</p>
-                  )}
+                  ) : null}
                   <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
                     {card.included.map((line) => (
                       <li key={line}>{line}</li>
