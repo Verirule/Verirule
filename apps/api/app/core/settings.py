@@ -9,6 +9,7 @@ class Settings(BaseSettings):
 
     VERIRULE_ENV: str = "development"
     VERIRULE_MODE: str = "api"
+    APP_VERSION: str = "dev"
     API_HOST: str = "127.0.0.1"
     API_PORT: int = 8000
     LOG_LEVEL: str = "INFO"

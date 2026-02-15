@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useState } from "react";
 
 const sectionLinks = [
-  { href: "#platform", label: "Platform" },
-  { href: "#workflow", label: "Workflow" },
+  { href: "#capabilities", label: "Capabilities" },
+  { href: "#implementation", label: "Implementation" },
+  { href: "#outcomes", label: "Outcomes" },
   { href: "#pricing", label: "Pricing" },
 ];
 
@@ -17,10 +18,10 @@ export function Nav() {
     <nav className="sticky top-0 z-50 border-b border-gray-200 bg-white">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-3 text-slate-900">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-slate-50 p-2">
+          <span className="inline-flex h-14 w-14 items-center justify-center rounded-lg border border-gray-200 bg-white p-2">
             <img src="/logo.svg" alt="Verirule" className="h-full w-full object-contain" />
           </span>
-          <span className="text-lg font-semibold">Verirule</span>
+          <span className="text-xl font-semibold">Verirule</span>
         </Link>
 
         <div className="hidden items-center gap-6 text-sm md:flex">

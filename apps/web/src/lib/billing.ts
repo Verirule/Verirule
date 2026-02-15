@@ -64,8 +64,8 @@ export type PlanFeatures = {
   maxMembers: number | null;
 };
 
-const DEFAULT_PRO_DISPLAY_PRICE = "£19";
-const DEFAULT_BUSINESS_DISPLAY_PRICE = "£49";
+const DEFAULT_PRO_DISPLAY_PRICE = "$29";
+const DEFAULT_BUSINESS_DISPLAY_PRICE = "$99";
 
 function readDisplayPrice(raw: string | undefined): string | null {
   const value = raw?.trim();
@@ -74,7 +74,7 @@ function readDisplayPrice(raw: string | undefined): string | null {
 
 export function getPlanDisplayPrice(plan: BillingPlan): string | null {
   if (plan === "free") {
-    return "£0";
+    return "$0";
   }
 
   if (plan === "pro") {

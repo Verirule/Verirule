@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     template: "%s | Verirule",
   },
   description:
-    "Compliance operations workspace for controls, findings, readiness, alerts, tasks, and audit evidence.",
+    "Operational software for compliance teams to run controls, findings, remediation, evidence, and audit readiness.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     type: "website",
     title: "Verirule",
     description:
-      "Compliance operations workspace for controls, findings, readiness, alerts, tasks, and audit evidence.",
+      "Operational software for compliance teams to run controls, findings, remediation, evidence, and audit readiness.",
     url: siteUrl,
     siteName: "Verirule",
     images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Verirule logo" }],
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Verirule",
     description:
-      "Compliance operations workspace for controls, findings, readiness, alerts, tasks, and audit evidence.",
+      "Operational software for compliance teams to run controls, findings, remediation, evidence, and audit readiness.",
     images: ["/twitter-image"],
   },
 };

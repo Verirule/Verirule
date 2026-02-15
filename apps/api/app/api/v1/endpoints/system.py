@@ -56,7 +56,7 @@ async def system_health(
     )
     return SystemHealthOut(
         ok=True,
-        version="v1",
+        version=settings.APP_VERSION.strip() or "dev",
         time_utc=datetime.now(UTC),
         supabase_ok=supabase_ok,
     )

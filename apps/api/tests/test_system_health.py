@@ -11,6 +11,7 @@ def _settings():
         {
             "SUPABASE_URL": "https://example.supabase.co",
             "SUPABASE_ANON_KEY": "anon-key",
+            "APP_VERSION": "2026.02.15",
         },
     )()
 
@@ -30,7 +31,7 @@ def test_system_health_public_and_ok(monkeypatch) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is True
-    assert body["version"] == "v1"
+    assert body["version"] == "2026.02.15"
     assert isinstance(body["time_utc"], str)
     assert body["time_utc"].endswith("Z")
     assert body["supabase_ok"] is True
@@ -49,5 +50,5 @@ def test_system_health_returns_200_when_supabase_probe_fails(monkeypatch) -> Non
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is True
-    assert body["version"] == "v1"
+    assert body["version"] == "2026.02.15"
     assert body["supabase_ok"] is False

@@ -8,13 +8,13 @@ export function Footer() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-slate-50 p-2">
+            <span className="inline-flex h-14 w-14 items-center justify-center rounded-lg border border-gray-200 bg-white p-2">
               <img src="/logo.svg" alt="Verirule" className="h-full w-full object-contain" />
             </span>
-            <span className="text-lg font-semibold text-slate-900">Verirule</span>
+            <span className="text-xl font-semibold text-slate-900">Verirule</span>
           </div>
           <p className="max-w-md text-sm text-slate-600">
-            Compliance operations for controls, findings, evidence collection, and audit preparation.
+            Verirule is built for teams running accountable compliance operations across controls, evidence, and audit.
           </p>
           <SocialIcons />
         </div>
