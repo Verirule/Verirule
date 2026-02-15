@@ -40,6 +40,16 @@ def _user_id_from_claims(auth: VerifiedSupabaseAuth) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
 
 
+def _exception_message(detail: object, fallback: str) -> str:
+    if isinstance(detail, str) and detail.strip():
+        return detail
+    if isinstance(detail, dict):
+        value = detail.get("message")
+        if isinstance(value, str) and value.strip():
+            return value
+    return fallback
+
+
 async def _create_org_idempotent(access_token: str, normalized_name: str) -> str:
     rows = await supabase_select_orgs(access_token)
     existing_org_id = _find_existing_org_id(rows, normalized_name)
@@ -92,12 +102,12 @@ async def create_org(
                 "status_code": status.HTTP_504_GATEWAY_TIMEOUT,
             },
         )
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Workspace creation timed out. Please try again.",
-        ) from exc
+        detail: dict[str, str] = {"message": "Workspace creation timed out. Please try again."}
+        if request_id:
+            detail["request_id"] = request_id
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=detail) from exc
     except HTTPException as exc:
-        message = exc.detail if isinstance(exc.detail, str) else "Workspace creation failed."
+        message = _exception_message(exc.detail, "Workspace creation failed.")
         logger.warning(
             message,
             extra={

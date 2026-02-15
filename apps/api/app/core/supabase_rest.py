@@ -4,9 +4,11 @@ from typing import Any
 import httpx
 from fastapi import HTTPException, status
 
+from app.core.logging import get_request_id
 from app.core.settings import get_settings
 
 AUDIT_PACKET_MAX_ROWS = 2_000
+SUPABASE_HTTP_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
 
 def supabase_rest_headers(access_token: str) -> dict[str, str]:
@@ -62,6 +64,14 @@ def _supabase_error_detail(response: httpx.Response) -> str | None:
     return None
 
 
+def _supabase_gateway_error(message: str) -> HTTPException:
+    request_id = get_request_id()
+    detail: dict[str, str] = {"message": message}
+    if request_id:
+        detail["request_id"] = request_id
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
+
+
 async def _service_role_patch(
     table: str,
     row_id: str,
@@ -114,28 +124,19 @@ async def supabase_select_orgs(access_token: str) -> list[dict[str, Any]]:
     params = {"select": "id,name,created_at"}
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=SUPABASE_HTTP_TIMEOUT) as client:
             response = await client.get(url, params=params, headers=supabase_rest_headers(access_token))
             response.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch organizations from Supabase.",
-        ) from exc
+    except (httpx.TimeoutException, httpx.HTTPError) as exc:
+        raise _supabase_gateway_error("Failed to fetch organizations from Supabase.") from exc
 
     payload = response.json()
     if not isinstance(payload, list):
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Invalid organizations response from Supabase.",
-        )
+        raise _supabase_gateway_error("Invalid organizations response from Supabase.")
 
     for item in payload:
         if not isinstance(item, dict):
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Invalid organizations response from Supabase.",
-            )
+            raise _supabase_gateway_error("Invalid organizations response from Supabase.")
 
     return payload
 
@@ -466,26 +467,20 @@ async def supabase_rpc_create_org(access_token: str, name: str) -> str:
     url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/create_org"
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=SUPABASE_HTTP_TIMEOUT) as client:
             response = await client.post(
                 url,
                 json={"p_name": name},
                 headers=supabase_rest_headers(access_token),
             )
             response.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to create organization in Supabase.",
-        ) from exc
+    except (httpx.TimeoutException, httpx.HTTPError) as exc:
+        raise _supabase_gateway_error("Failed to create organization in Supabase.") from exc
 
     payload = response.json()
     org_id = _extract_create_org_id(payload)
     if not org_id:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Invalid create organization response from Supabase.",
-        )
+        raise _supabase_gateway_error("Invalid create organization response from Supabase.")
 
     return org_id
 

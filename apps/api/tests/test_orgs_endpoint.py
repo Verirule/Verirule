@@ -1,5 +1,6 @@
 import asyncio
 
+import httpx
 from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints import orgs as orgs_endpoint
@@ -275,4 +276,41 @@ def test_create_org_timeout_returns_504(monkeypatch) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 504
-    assert response.json() == {"detail": "Workspace creation timed out. Please try again."}
+    payload = response.json()
+    assert payload["detail"]["message"] == "Workspace creation timed out. Please try again."
+    assert isinstance(payload["detail"]["request_id"], str)
+    assert payload["detail"]["request_id"]
+
+
+def test_create_org_supabase_timeout_returns_502_with_safe_message(monkeypatch) -> None:
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, url: str, params: dict[str, str], headers: dict[str, str]):
+            raise httpx.ReadTimeout("timed out")
+
+    app.dependency_overrides[verify_supabase_auth] = lambda: VerifiedSupabaseAuth(
+        access_token="token-123",
+        claims={"sub": "user-1"},
+    )
+    monkeypatch.setattr(supabase_rest.httpx, "AsyncClient", FakeAsyncClient)
+
+    try:
+        client = TestClient(app)
+        response = client.post("/api/v1/orgs", json={"name": "Acme"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 502
+    payload = response.json()
+    assert payload["detail"]["message"] == "Failed to fetch organizations from Supabase."
+    assert isinstance(payload["detail"]["request_id"], str)
+    assert payload["detail"]["request_id"]

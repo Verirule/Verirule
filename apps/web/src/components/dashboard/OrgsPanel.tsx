@@ -22,10 +22,16 @@ type OrgCreateResponse = {
 
 type ApiErrorResponse = {
   message?: unknown;
+  error?: unknown;
   detail?: unknown;
   code?: unknown;
   missing?: unknown;
   request_id?: unknown;
+};
+
+type SystemHealthResponse = {
+  api?: unknown;
+  worker?: unknown;
 };
 
 function formatCreatedAt(value: string): string {
@@ -34,6 +40,25 @@ function formatCreatedAt(value: string): string {
     return "Unknown date";
   }
   return parsed.toLocaleDateString();
+}
+
+function extractErrorMessage(payload: ApiErrorResponse): string | null {
+  if (typeof payload.message === "string" && payload.message.trim().length > 0) {
+    return payload.message;
+  }
+  if (typeof payload.error === "string" && payload.error.trim().length > 0) {
+    return payload.error;
+  }
+  if (typeof payload.detail === "string" && payload.detail.trim().length > 0) {
+    return payload.detail;
+  }
+  if (payload.detail && typeof payload.detail === "object") {
+    const nestedMessage = (payload.detail as { message?: unknown }).message;
+    if (typeof nestedMessage === "string" && nestedMessage.trim().length > 0) {
+      return nestedMessage;
+    }
+  }
+  return null;
 }
 
 function formatOrgLoadError(status: number, payload: ApiErrorResponse, requestId: string | null): string {
@@ -58,12 +83,7 @@ function formatOrgLoadError(status: number, payload: ApiErrorResponse, requestId
     return `Unable to load workspace: missing required environment variables.${requestIdSuffix}`;
   }
 
-  const message =
-    typeof payload.message === "string" && payload.message.trim().length > 0
-      ? payload.message
-      : typeof payload.detail === "string" && payload.detail.trim().length > 0
-        ? payload.detail
-        : null;
+  const message = extractErrorMessage(payload);
   if (message) {
     return `Unable to load workspace: ${message}${requestIdSuffix}`;
   }
@@ -81,12 +101,7 @@ function formatCreateFailureMessage(requestId: string | null): string {
 function formatCreateOrgError(status: number, payload: ApiErrorResponse, requestId: string | null): string {
   const code = typeof payload.code === "string" ? payload.code : "";
   const requestIdSuffix = requestId ? ` (Request ID: ${requestId})` : "";
-  const message =
-    typeof payload.message === "string" && payload.message.trim().length > 0
-      ? payload.message
-      : typeof payload.detail === "string" && payload.detail.trim().length > 0
-        ? payload.detail
-        : null;
+  const message = extractErrorMessage(payload);
 
   if (status === 401 || code === "unauthorized") {
     return `Workspace creation failed: Sign in again.${requestIdSuffix}`;
@@ -113,12 +128,16 @@ export function OrgsPanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isCreateError, setIsCreateError] = useState(false);
+  const [retryCreateName, setRetryCreateName] = useState<string | null>(null);
 
   const trimmedName = useMemo(() => name.trim(), [name]);
 
   const loadOrgs = async () => {
     setIsLoading(true);
     setError(null);
+    setIsCreateError(false);
+    setRetryCreateName(null);
 
     try {
       const result = await fetchWithTimeout<Partial<OrgsResponse> & ApiErrorResponse>("/api/orgs", {
@@ -150,22 +169,51 @@ export function OrgsPanel() {
     void loadOrgs();
   }, []);
 
-  const createOrg = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const createWorkspace = async (workspaceName: string) => {
     setError(null);
+    setIsCreateError(false);
+    setRetryCreateName(null);
 
-    if (trimmedName.length < 2 || trimmedName.length > 64) {
+    if (workspaceName.length < 2 || workspaceName.length > 64) {
       setError("Workspace name must be between 2 and 64 characters.");
       return;
     }
 
     setIsSubmitting(true);
     try {
+      let healthResult: {
+        ok: boolean;
+        status: number;
+        json: (SystemHealthResponse & ApiErrorResponse) | null;
+        requestId: string | null;
+      };
+      try {
+        healthResult = await fetchWithTimeout<SystemHealthResponse & ApiErrorResponse>("/api/system/health", {
+          method: "GET",
+          cache: "no-store",
+          timeoutMs: 5_000,
+        });
+      } catch {
+        setError("Service unavailable");
+        setIsCreateError(true);
+        setRetryCreateName(workspaceName);
+        return;
+      }
+      const healthPayload = healthResult.json ?? {};
+      const healthOk = healthResult.ok && healthPayload.api === "ok" && healthPayload.worker === "ok";
+      if (!healthOk) {
+        const requestIdSuffix = healthResult.requestId ? ` (Request ID: ${healthResult.requestId})` : "";
+        setError(`Service unavailable${requestIdSuffix}`);
+        setIsCreateError(true);
+        setRetryCreateName(workspaceName);
+        return;
+      }
+
       const createRequest = async () =>
         fetchWithTimeout<ApiErrorResponse & OrgCreateResponse>("/api/orgs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: trimmedName }),
+          body: JSON.stringify({ name: workspaceName }),
           timeoutMs: 15_000,
         });
 
@@ -181,7 +229,12 @@ export function OrgsPanel() {
       }
 
       if (!result.ok) {
-        setError(formatCreateOrgError(result.status, result.json ?? {}, result.requestId));
+        const payload = result.json ?? {};
+        const isValidationError =
+          result.status === 400 || (typeof payload.code === "string" && payload.code === "invalid_payload");
+        setError(formatCreateOrgError(result.status, payload, result.requestId));
+        setIsCreateError(true);
+        setRetryCreateName(isValidationError ? null : workspaceName);
         return;
       }
 
@@ -198,6 +251,8 @@ export function OrgsPanel() {
       }
 
       setName("");
+      setIsCreateError(false);
+      setRetryCreateName(null);
       await loadOrgs();
     } catch (error: unknown) {
       if (error instanceof FetchTimeoutError) {
@@ -205,9 +260,16 @@ export function OrgsPanel() {
       } else {
         setError("Unable to create workspace right now.");
       }
+      setIsCreateError(true);
+      setRetryCreateName(workspaceName);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const createOrg = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await createWorkspace(trimmedName);
   };
 
   return (
@@ -262,9 +324,27 @@ export function OrgsPanel() {
             {error ? (
               <div className="space-y-2">
                 <p className="text-sm text-destructive">{error}</p>
-                <Button type="button" variant="outline" size="sm" onClick={() => void loadOrgs()} disabled={isLoading}>
-                  Reload workspaces
-                </Button>
+                {isCreateError && retryCreateName ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void createWorkspace(retryCreateName)}
+                    disabled={isSubmitting}
+                  >
+                    Retry
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void loadOrgs()}
+                    disabled={isLoading}
+                  >
+                    Reload workspaces
+                  </Button>
+                )}
               </div>
             ) : null}
             <Button type="submit" disabled={isSubmitting}>
